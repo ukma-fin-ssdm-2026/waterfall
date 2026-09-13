@@ -1,31 +1,48 @@
 # Waterfall
+
 [![CI](https://github.com/ukma-fin-ssdm-2026/waterfall/actions/workflows/ci.yml/badge.svg)](https://github.com/ukma-fin-ssdm-2026/waterfall/actions/workflows/ci.yml)
 
 Цей проєкт - парсер сайтів для пошуку вакансій. Метою додатку є спрощення знаходження роботи за допомогою агрегації різних ресурсів, зручного пошуку між ними, та ШІ-агента; також зручна аналітика для роботодавців.
 
-## Можливості
+## Основні можливості
 
-* Агрегація вакансій
-* Гнучкий пошук та фільтрація
-* Персональні рекомендації
-* Аналітика та статистика
-* ШІ-консультант
+* **Агрегація вакансій** — автоматизований збір і нормалізація даних із найпопулярніших платформ працевлаштування.
+* **Гнучкий пошук та фільтрація** — зручний відбір за ключовими словами, технологічним стеком, заробітною платою та форматом роботи.
+* **Персоналізовані рекомендації** — підбір релевантних пропозицій на основі вподобань та історії взаємодії користувача.
+* **Аналітика та статистика** — огляд трендів ринку праці, порівняння зарплатних вилок і затребуваності навичок.
+* **ШІ-консультант** — діалоговий помічник для підбору пропозицій під запит природною мовою та аналізу вимог роботодавців.
+
+---
+
+## Стек технологій
+
+* **Backend**: C# (.NET), Python (модуль парсингу даних)
+* **Frontend**: C#, HTML5, TypeScript
+* **База даних та кешування**: Microsoft SQL Server, Redis
+* **ШІ-інтеграція**: LLM API (Google Gemini, OpenAI API, Anthropic Claude)
+* **CI/CD & Інструменти**: GitHub Actions, GitHub Flow
+
+---
 
 ## Команда проєкту
 
-| Учасник | Роль у команді | GitHub | E-mail |
+| Учасник | Роль у команді | GitHub | Контакт (НаУКМА) |
 | :--- | :--- | :--- | :--- |
-| **Саєнко Данило** | Repo Maintainer | [@Danylo202](https://github.com/Danylo202) | `d.saienko@ukma.edu.ua` |
-| **Мельник Дмитро** | CI Maintainer | [@deffin05](https://github.com/deffin05) | `dm.melnyk@ukma.edu.ua` |
-| **Садиков Константін** | Documentation & Project Brief Lead | [@int3rrobang](https://github.com/int3rrobang) | `k.sadykov@ukma.edu.ua` |
-| **Сидоренко Денис** | Issue Tracker Lead | [@s1ngleo](https://github.com/s1ngleo) | `d.sydorenko@ukma.edu.ua` |
+| **Саєнко Данило** | Repo Maintainer | [@Danylo202](https://github.com/Danylo202) | [d.saienko@ukma.edu.ua](mailto:d.saienko@ukma.edu.ua) |
+| **Мельник Дмитро** | CI Maintainer | [@deffin05](https://github.com/deffin05) | [dm.melnyk@ukma.edu.ua](mailto:dm.melnyk@ukma.edu.ua) |
+| **Садиков Константін** | Documentation & Project Brief Lead | [@int3rrobang](https://github.com/int3rrobang) | [k.sadykov@ukma.edu.ua](mailto:k.sadykov@ukma.edu.ua) |
+| **Сидоренко Денис** | Issue Tracker Lead | [@s1ngleo](https://github.com/s1ngleo) | [d.sydorenko@ukma.edu.ua](mailto:d.sydorenko@ukma.edu.ua) |
+
+---
 
 ## Документація
 
-* [**TeamCharter.md**](./TeamCharter.md) — командний статут
-* [**Project-Description.md**](./Project-Description.md) — детальний опис проєкту
-  
-## Запуск проекту 
-Ну, поки що ніякий
+* [**TeamCharter.md**](./TeamCharter.md) — командний статут (ролі, принципи комунікації, Git-процеси, етика та політика використання ШІ)
+* [**Project-Description.md**](./Project-Description.md) — детальний опис проєкту, рамки розробки (Scope), припущення та Міні-ТЗ
 
-`todo`
+---
+
+## Статус та запуск проєкту
+
+> [!NOTE]
+> Наразі проєкт перебуває на етапі проектування архітектури.
