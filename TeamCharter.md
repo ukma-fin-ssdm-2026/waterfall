@@ -46,6 +46,6 @@
 
 ## 9. Підписи
 - [ ] Саєнко Данило (Github: Danylo202)
-- [ ] Садиков Константін (Github: int3rrobang)
+- [x] Садиков Константін (Github: int3rrobang)
 - [ ] Сидоренко Денис (Github: s1ngleo)
 - [ ] Мельник Дмитро (Github: deffin05)
