@@ -63,3 +63,8 @@
 - [x] Садиков Константін ([@int3rrobang](https://github.com/int3rrobang))
 - [x] Сидоренко Денис ([@s1ngleo](https://github.com/s1ngleo))
 - [x] Мельник Дмитро ([@deffin05](https://github.com/deffin05))
+
+
+    ## Використання ШІ
+
+- Документ було відредаговано з ШІ стилістично і орфографічно
