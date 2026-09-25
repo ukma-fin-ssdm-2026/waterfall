@@ -1,3 +1,4 @@
+' AI: генерація структури та коду діаграми компонентів; перевірено: ручне проєктування, рев'ю в PR
 @startuml
 !theme plain
 skinparam componentStyle rectangle
@@ -5,7 +6,7 @@ skinparam nodesep 55
 skinparam ranksep 65
 skinparam packagePadding 16
 
-package "Web Client" {
+package "Client Application (.NET MAUI)" {
     [UI Components\n(Catalog, Dashboards, AI Chat)] as UI
     [HTTP Gateway Service\n(API Client & Auth Header)] as HTTPGateway
     UI -down-> HTTPGateway
@@ -33,16 +34,14 @@ package "Backend Services (C# .NET)" {
     }
 
     package "Repository Layer (Data Access)" {
+        [Job Parser Service\n(HTML Scraping & Fetcher)] as ParserService
         [Job Ingestion &\nNormalization Service] as IngestionService
         [Data Repositories\n(EF Core)] as Repo
         
+        ParserService -right-> IngestionService : Raw Data
         IngestionService -right-> Repo : Normalized Entities
         IngestionService -up-> CacheService : Invalidate
     }
-}
-
-package "Parser Worker (Python)" {
-    [Data Parser Service] as Parser
 }
 
 database "Data Storage" {
@@ -54,7 +53,7 @@ cloud "External Services" {
     [Сайти пошуку роботи\n(Work.ua, Robota.ua, Djinni)] as JobSites
 }
 
-' Web to Core
+' Client to Core
 HTTPGateway -down-> AuthService : HTTPS
 HTTPGateway -down-> StorageService : HTTPS
 HTTPGateway -down-> AnalyticsService : HTTPS
@@ -64,9 +63,8 @@ HTTPGateway -down-> AIService : HTTPS
 StorageService -down-> Repo
 Repo -down-> DB : SQL / EF Core
 
-' Parser & External
-Parser -left-> JobSites : HTTP GET (Scrape)
-Parser -down-> IngestionService : Internal REST API
+' Data Ingestion & External
+ParserService -right-> JobSites : HTTP GET (Scrape)
 AIService -right-> AI : HTTPS (Prompts)
 
 @enduml

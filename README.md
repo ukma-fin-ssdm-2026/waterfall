@@ -16,9 +16,9 @@
 
 ## Стек технологій
 
-* **Backend**: C# (.NET), Python (модуль парсингу даних)
-* **Frontend**: C#, HTML5, TypeScript
-* **База даних та кешування**: Microsoft SQL Server
+* **Backend**: C# (.NET)
+* **Frontend**: .NET MAUI (C#), HTML5, TypeScript
+* **База даних та кешування**: Microsoft SQL Server (продакшн), SQLite (локальна розробка та офлайн-режим)
 * **ШІ-інтеграція**: LLM API (Google Gemini, OpenAI API, Anthropic Claude)
 * **CI/CD & Інструменти**: GitHub Actions, GitHub Flow
 
