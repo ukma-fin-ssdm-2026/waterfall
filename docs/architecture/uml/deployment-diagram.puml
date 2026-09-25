@@ -1,0 +1,53 @@
+@startuml
+!theme plain
+skinparam nodesep 55
+skinparam ranksep 65
+
+node "User Device" <<Device>> {
+    node "Web Browser" <<Execution Environment>> {
+        artifact "Web Client (SPA)" <<Artifact>> {
+            component "UI Components" as ClientUI
+            component "HTTP Gateway Service" as ClientGateway
+            ClientUI -down-> ClientGateway
+        }
+    }
+}
+
+node "Application Server" <<Server>> {
+    node "Docker Container: Backend Application" <<Execution Environment>> {
+        component "Core Services Layer\n(Auth, Storage, Cache, Analytics, AI, Security)" as CoreServices
+        component "Repository Layer\n(EF Core & Job Ingestion)" as RepoLayer
+        artifact "In-Memory Cache (RAM)" as MemoryCache
+        
+        CoreServices -down-> RepoLayer
+        CoreServices -right-> MemoryCache
+    }
+}
+
+node "Worker Server" <<Server>> {
+    node "Docker Container: Parser Worker" <<Execution Environment>> {
+        component "Python Parser Service" as ParserService
+    }
+}
+
+node "Database Server" <<Server>> {
+    database "Microsoft SQL Server (Production)\n[SQLite for Local Dev]" as DB {
+        artifact "Waterfall DB"
+    }
+}
+
+cloud "External AI Provider" {
+    component "LLM API Endpoint\n(Gemini / OpenAI)" as AIEndpoint
+}
+
+cloud "Public Internet" {
+    component "Сайти пошуку роботи\n(Work.ua, Robota.ua, Djinni)" as JobSites
+}
+
+ClientGateway -down-> CoreServices : HTTPS / REST API
+RepoLayer -down-> DB : TCP/IP (TDS) / Local File
+ParserService -left-> RepoLayer : HTTPS (Internal Ingestion)
+ParserService -right-> JobSites : HTTPS (Scraping)
+CoreServices -right-> AIEndpoint : HTTPS (REST API)
+
+@enduml

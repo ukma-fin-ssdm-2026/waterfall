@@ -18,7 +18,7 @@
 
 * **Backend**: C# (.NET), Python (модуль парсингу даних)
 * **Frontend**: C#, HTML5, TypeScript
-* **База даних та кешування**: Microsoft SQL Server, Redis
+* **База даних та кешування**: Microsoft SQL Server
 * **ШІ-інтеграція**: LLM API (Google Gemini, OpenAI API, Anthropic Claude)
 * **CI/CD & Інструменти**: GitHub Actions, GitHub Flow
 
