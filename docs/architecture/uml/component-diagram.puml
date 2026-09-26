@@ -1,0 +1,70 @@
+' AI: генерація структури та коду діаграми компонентів; перевірено: ручне проєктування, рев'ю в PR
+@startuml
+!theme plain
+skinparam componentStyle rectangle
+skinparam nodesep 55
+skinparam ranksep 65
+skinparam packagePadding 16
+
+package "Client Application (.NET MAUI)" {
+    [UI Components\n(Catalog, Dashboards, AI Chat)] as UI
+    [HTTP Gateway Service\n(API Client & Auth Header)] as HTTPGateway
+    UI -down-> HTTPGateway
+}
+
+package "Backend Services (C# .NET)" {
+    package "Core Services Layer" {
+        [Authentication Service] as AuthService
+        [Storage Service] as StorageService
+        [Analytics & Statistics Service] as AnalyticsService
+        [AI Consultant Service] as AIService
+        
+        [Security Service] as SecurityService
+        [Cache Service\n(In-Memory)] as CacheService
+        
+        AuthService -down-> SecurityService : Hash / Verify
+        AuthService -right-> StorageService : User Profiles
+        
+        StorageService -down-> CacheService : Cache Read/Write
+        
+        AnalyticsService -left-> StorageService : Read Data
+        AnalyticsService -down-> CacheService : Save Reports
+        
+        AIService -left-> StorageService : Context & History
+    }
+
+    package "Repository Layer (Data Access)" {
+        [Job Parser Service\n(HTML Scraping & Fetcher)] as ParserService
+        [Job Ingestion &\nNormalization Service] as IngestionService
+        [Data Repositories\n(EF Core)] as Repo
+        
+        ParserService -right-> IngestionService : Raw Data
+        IngestionService -right-> Repo : Normalized Entities
+        IngestionService -up-> CacheService : Invalidate
+    }
+}
+
+database "Data Storage" {
+    [Relational Database\n(MSSQL / SQLite)] as DB
+}
+
+cloud "External Services" {
+    [LLM API\n(Google Gemini / OpenAI)] as AI
+    [Сайти пошуку роботи\n(Work.ua, Robota.ua, Djinni)] as JobSites
+}
+
+' Client to Core
+HTTPGateway -down-> AuthService : HTTPS
+HTTPGateway -down-> StorageService : HTTPS
+HTTPGateway -down-> AnalyticsService : HTTPS
+HTTPGateway -down-> AIService : HTTPS
+
+' Core to Repo & DB
+StorageService -down-> Repo
+Repo -down-> DB : SQL / EF Core
+
+' Data Ingestion & External
+ParserService -right-> JobSites : HTTP GET (Scrape)
+AIService -right-> AI : HTTPS (Prompts)
+
+@enduml
