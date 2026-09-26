@@ -12,7 +12,7 @@
 ## 2. Діаграма компонентів
 Діаграма компонентів відображає основні логічні блоки нашої системи та їх взаємодію. Відповідний код діаграми знаходиться в [component-diagram.puml](./uml/component-diagram.puml).
 
-![Component Diagram](./uml/component-diagram.puml)
+![Component Diagram](./uml/component-diagram.svg)
 
 ## 3. Опис інтерфейсів
 
@@ -97,7 +97,7 @@
 ## 4. Діаграма розгортання
 Діаграма розгортання відображає фізичне розташування компонентів на пристроях користувачів та серверах, середовища виконання (.NET MAUI, .NET Runtime) та мережеві межі. Відповідний код діаграми знаходиться в [deployment-diagram.puml](./uml/deployment-diagram.puml).
 
-![Deployment Diagram](./uml/deployment-diagram.puml)
+![Deployment Diagram](./uml/deployment-diagram.svg)
 
 ## Використання ШІ та внесок
 
