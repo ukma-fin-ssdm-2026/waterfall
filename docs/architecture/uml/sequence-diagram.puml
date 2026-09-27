@@ -1,0 +1,53 @@
+' AI: генерація структури та коду діаграми послідовності (USE-001: пошук → фільтрація → збереження); перевірено: ручне проєктування, рев'ю в PR
+@startuml
+!theme plain
+autonumber
+skinparam maxMessageSize 90
+
+actor "Шукач роботи" as User
+participant "UI Components\n(Catalog)" as UI
+participant "HTTP Gateway Service\n(API Client & Auth Header)" as GW
+participant "Storage Service" as Storage
+participant "Cache Service\n(In-Memory)" as Cache
+participant "Data Repositories\n(EF Core)" as Repo
+database "Relational Database\n(MSSQL / SQLite)" as DB
+
+User -> UI : відкрити каталог (стор. 1)
+UI -> GW : GET /vacancies?page=1\nAuthorization: Bearer <JWT>
+GW -> Storage : forward + user context
+Storage -> Cache : lookup key(page=1, filters)
+alt cache hit
+    Cache --> Storage : 20 vacancies
+else cache miss [PERF-001 <1с, p95]
+    Storage -> Repo : find(page=1, filters)
+    Repo -> DB : SELECT ... LIMIT 20 OFFSET 0
+    DB --> Repo : rows
+    Repo --> Storage : entities
+    Storage -> Cache : put(key, TTL)
+end
+Storage --> UI : 200 JSON (20 items)
+
+User -> UI : застосувати фільтри\nstack=Python, format=Remote
+UI -> GW : GET /vacancies?stack=Python&format=Remote
+GW -> Storage : forward
+Storage -> Cache : lookup key(filters)
+alt found
+    Storage --> UI : 200 JSON (filtered)
+else empty [US-002#2]
+    Storage -> Repo : find(filters)
+    Repo -> DB : SELECT ... WHERE ...
+    DB --> Repo : 0 rows
+    Repo --> Storage : []
+    Storage --> UI : 200 [] + "не знайдено"\n+ кнопка скидання
+end
+
+User -> UI : натискає "Зберегти" на vacancy(N)
+UI -> GW : POST /saved {vacancy_id=N}
+GW -> Storage : forward
+Storage -> Repo : insert SavedVacancy(user_id, vacancy_id) [REL-002 sync write]
+Repo -> DB : INSERT (PK=user_id,vacancy_id)
+DB --> Repo : ok
+Repo --> Storage : ok
+Storage --> UI : 201 + saved=true
+UI --> User : картка "Збережено"
+@enduml
