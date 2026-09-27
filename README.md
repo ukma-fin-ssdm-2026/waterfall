@@ -45,6 +45,14 @@
 * [**user-stories.md**](./docs/requirements/user-stories.md) — користувацькі історії з критеріями прийнятності
 * [**rtm.md**](./docs/requirements/rtm.md) — матриця простежуваності вимог (Requirements Traceability Matrix)
 
+### Архітектура
+* [**high-level-design.md**](./docs/architecture/high-level-design.md) — стиль, компоненти, розгортання, послідовність
+* [**traceability-matrix.md**](./docs/architecture/traceability-matrix.md) — простежуваність вимог
+* [**data-model.md**](./docs/architecture/data-model.md) — модель даних
+* [**threat-model.md**](./docs/architecture/threat-model.md) — STRIDE *(після #35)*
+* [**decisions/**](./docs/architecture/decisions/) — ADR-001…003
+* [**uml/**](./docs/architecture/uml/) — `.puml` + `.svg`
+
 ---
 
 ## Статус та запуск проєкту
