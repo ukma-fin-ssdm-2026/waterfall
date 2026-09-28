@@ -49,6 +49,7 @@
 * [**high-level-design.md**](./docs/architecture/high-level-design.md) — стиль, компоненти, розгортання, послідовність
 * [**traceability-matrix.md**](./docs/architecture/traceability-matrix.md) — простежуваність вимог
 * [**data-model.md**](./docs/architecture/data-model.md) — модель даних
+* [**threat-model.md**](./docs/architecture/threat-model.md) — STRIDE (загрози)
 * [**decisions/**](./docs/architecture/decisions/) — ADR-001…003
 * [**uml/**](./docs/architecture/uml/) — `.puml` + `.svg`
 
