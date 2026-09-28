@@ -4,42 +4,59 @@
 skinparam nodesep 55
 skinparam ranksep 65
 
-node "User Device\n(Android / Windows)" <<Device>> {
-    node ".NET MAUI Execution Environment\n(Android OS / Windows)" <<Execution Environment>> {
-        artifact ".NET MAUI Application\n(.apk / .msix)" <<Artifact>> {
-            component "UI Components\n(XAML / MVVM)" as ClientUI
-            component "HTTP Gateway Service\n(HttpClient)" as ClientGateway
-            ClientUI -down-> ClientGateway
+rectangle "Зона 1: пристрій користувача\n(не контролюємо)" as Z1 #line.dashed {
+    node "User Device\n(Android / Windows)" <<Device>> {
+        node ".NET MAUI Execution Environment\n(Android OS / Windows)" <<Execution Environment>> {
+            artifact ".NET MAUI Application\n(.apk / .msix)" <<Artifact>> {
+                component "UI Components\n(XAML / MVVM)" as ClientUI
+                component "HTTP Gateway Service\n(HttpClient)" as ClientGateway
+                ClientUI -down-> ClientGateway
+            }
         }
     }
 }
 
-cloud "External AI Provider" {
-    component "LLM API Endpoint\n(Gemini / OpenAI)" as AIEndpoint
-}
-
-node "Application Server" <<Server>> {
-    node ".NET Runtime (ASP.NET Core)" <<Execution Environment>> {
-        component "Core Services Layer\n(Auth, Storage, Cache, Analytics, AI, Security)" as CoreServices
-        component "Repository Layer\n(EF Core, Ingestion & Parser Service)" as RepoLayer
-        artifact "In-Memory Cache (RAM)" as MemoryCache
-        
-        CoreServices -down-> RepoLayer
-        CoreServices -right-> MemoryCache
+rectangle "Зона 4: постачальник ШІ\n(зовнішній, не контролюємо)" as Z4 #line.dashed {
+    cloud "External AI Provider" {
+        component "LLM API Endpoint\n(Gemini / OpenAI)" as AIEndpoint
     }
 }
 
-node "Database Server" <<Server>> {
-    database "Relational Database\n(MSSQL / SQLite)" as DB
+rectangle "Зона 2: сервер застосунку\n(наш код)" as Z2 #line.dashed {
+    node "Application Server" <<Server>> {
+        node ".NET Runtime (ASP.NET Core)" <<Execution Environment>> {
+            component "Core Services Layer\n(Auth, Storage, Cache, Analytics, AI, Security)" as CoreServices
+            component "Repository Layer\n(EF Core, Ingestion & Parser Service)" as RepoLayer
+            artifact "In-Memory Cache (RAM)" as MemoryCache
+
+            CoreServices -down-> RepoLayer
+            CoreServices -right-> MemoryCache
+        }
+    }
 }
 
-cloud "Public Internet" {
-    component "Сайти пошуку роботи\n(Work.ua, Robota.ua, Djinni)" as JobSites
+rectangle "Зона 3: сервер БД\n(наш, усі чутливі дані)" as Z3 #line.dashed {
+    node "Database Server" <<Server>> {
+        database "Relational Database\n(MSSQL / SQLite)" as DB
+    }
 }
 
-ClientGateway -down-> CoreServices : HTTPS / REST API
-RepoLayer -down-> DB : TCP/IP (TDS) / Local File
-CoreServices -left-> AIEndpoint : HTTPS (REST API)
-RepoLayer -right-> JobSites : HTTPS (Scraping)
+rectangle "Зона 5: сайти-джерела\n(зовнішні, дані не перевірені)" as Z5 #line.dashed {
+    cloud "Public Internet" {
+        component "Сайти пошуку роботи\n(Work.ua, Robota.ua, Djinni)" as JobSites
+    }
+}
+
+ClientGateway -down-> CoreServices : TB-1: HTTPS / REST API
+RepoLayer -down-> DB : TB-2: TCP/IP (TDS) / Local File
+CoreServices -left-> AIEndpoint : TB-3: HTTPS (REST API)
+RepoLayer -right-> JobSites : TB-4: HTTPS (Scraping)
+
+legend right
+  Пунктирні прямокутники — зони довіри.
+  TB-1…TB-4 — межі довіри: зв'язки, де дані
+  переходять між зонами. Опис і загрози —
+  у threat-model.md.
+endlegend
 
 @enduml
