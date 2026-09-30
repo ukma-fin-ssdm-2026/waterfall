@@ -1,5 +1,3 @@
-﻿using Microsoft.Extensions.DependencyInjection;
-
 namespace waterfall.UI
 {
     public partial class App : Application
