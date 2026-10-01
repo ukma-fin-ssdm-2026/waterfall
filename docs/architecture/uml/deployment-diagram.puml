@@ -25,9 +25,9 @@ rectangle "Зона 4: постачальник ШІ\n(зовнішній, не 
 rectangle "Зона 2: сервер застосунку\n(наш код)" as Z2 #line.dashed {
     node "Application Server" <<Server>> {
         node ".NET Runtime (ASP.NET Core)" <<Execution Environment>> {
-            component "Presentation Layer\n(API Controllers: Vacancies, Saved, Auth)" as ApiControllers
-            component "Core Services Layer\n(Auth, Storage, Cache, Analytics, AI, Security)" as CoreServices
-            component "Repository Layer\n(EF Core, Ingestion & Parser Service)" as RepoLayer
+            component "Presentation Layer\n(API Controllers: Vacancies, Saved, Auth, AI)" as ApiControllers
+            component "Core Services Layer\n(Auth, Storage, Analytics, AI, Security)" as CoreServices
+            component "Repository Layer\n(EF Core Repositories, Job Parser & Ingestion Services)" as RepoLayer
             artifact "In-Memory Cache (RAM)" as MemoryCache
 
             ApiControllers -down-> CoreServices
@@ -52,7 +52,7 @@ rectangle "Зона 5: сайти-джерела\n(зовнішні, дані н
 ClientGateway -down-> ApiControllers : TB-1: HTTPS / REST API
 RepoLayer -down-> DB : TB-2: TCP/IP (TDS) / Local File
 CoreServices -left-> AIEndpoint : TB-3: HTTPS (REST API)
-RepoLayer -right-> JobSites : TB-4: HTTPS (Scraping)
+RepoLayer -right-> JobSites : TB-4: HTTPS (Scraping via Job Parser)
 
 legend right
   Пунктирні прямокутники — зони довіри.
