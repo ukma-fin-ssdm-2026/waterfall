@@ -2,6 +2,7 @@
   <Folder Name="/Solution Items/" />
   <Project Path="../waterfall.Repository/waterfall.Repository.csproj" />
   <Project Path="../waterfall.Services/waterfall.Services.csproj" />
+  <Project Path="../src/api/Waterfall.Api.csproj" />
   <Project Path="waterfall.UI.csproj">
     <Deploy Solution="Debug|*" />
   </Project>

@@ -1,0 +1,781 @@
+openapi: 3.0.4
+info:
+  title: Waterfall API
+  description: 'RESTful API для платформи агрегації та підбору вакансій Waterfall '
+  version: v1
+paths:
+  /api/v1/saved-vacancies:
+    get:
+      tags:
+        - SavedVacancies
+      summary: Отримати перелік усіх збережених вакансій користувача.
+      description: 'Повертає перелік вакансій, які користувач зберіг («лайкнув») для подальшого відгуку чи рекомендацій ШІ.'
+      operationId: GetSavedVacancies
+      responses:
+        '200':
+          description: Перелік збережених вакансій успішно отримано.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/SavedVacancyDto'
+    post:
+      tags:
+        - SavedVacancies
+      summary: Додати вакансію до списку збережених («лайкнути»).
+      description: Додає вакансію до списку вподобань.
+      operationId: SaveVacancy
+      requestBody:
+        description: Ідентифікатор вакансії та необов'язкові нотатки користувача.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SaveVacancyRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/SaveVacancyRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/SaveVacancyRequest'
+      responses:
+        '201':
+          description: Вакансію успішно додано до збережених.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedVacancyDto'
+        '400':
+          description: Помилка валідації вхідних даних.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Вакансію з вказаним vacancy_id не знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '409':
+          description: Ця вакансія вже додана до списку збережених.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  '/api/v1/saved-vacancies/{id}':
+    get:
+      tags:
+        - SavedVacancies
+      summary: Отримати детальну інформацію про збережену вакансію за її ID.
+      description: Повертає інформацію про збережену вакансію включно з нотатками шукача роботи.
+      operationId: GetSavedVacancyById
+      parameters:
+        - name: id
+          in: path
+          description: Ідентифікатор запису збереженої вакансії.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Збережену вакансію успішно знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SavedVacancyDto'
+        '404':
+          description: Збережену вакансію не знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+    delete:
+      tags:
+        - SavedVacancies
+      summary: Видалити вакансію зі списку збережених.
+      description: Видаляє вказану вакансію зі списку вподобань користувача.
+      operationId: DeleteSavedVacancy
+      parameters:
+        - name: id
+          in: path
+          description: Унікальний ідентифікатор збереженої вакансії.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Вакансію успішно видалено зі збережених.
+        '404':
+          description: Запис у збережених вакансіях не знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/vacancies:
+    get:
+      tags:
+        - Vacancies
+      summary: Отримати список вакансій із фільтрацією та пагінацією.
+      description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\r\nмінімальної зарплати та джерела агрегації."
+      operationId: GetVacancies
+      parameters:
+        - name: page
+          in: query
+          description: Номер запитуваної сторінки (починається з 1).
+          schema:
+            maximum: 2147483647
+            minimum: 1
+            type: integer
+            format: int32
+            example: 1
+          example: 1
+        - name: page_size
+          in: query
+          description: Кількість елементів на одній сторінці (від 1 до 100).
+          schema:
+            maximum: 100
+            minimum: 1
+            type: integer
+            format: int32
+            example: 10
+          example: 10
+        - name: search
+          in: query
+          description: 'Пошуковий запит (пошук за назвою посади, компанією або навичками).'
+          schema:
+            maxLength: 100
+            minLength: 0
+            type: string
+            example: .NET
+          example: .NET
+        - name: category
+          in: query
+          description: 'Фільтр за категорією/спеціалізацією (наприклад, .NET, QA, DevOps).'
+          schema:
+            maxLength: 50
+            minLength: 0
+            type: string
+            example: .NET
+          example: .NET
+        - name: min_salary
+          in: query
+          description: Фільтр за мінімальною заробітною платою.
+          schema:
+            maximum: 1000000
+            minimum: 0
+            type: number
+            format: double
+            example: 2000
+          example: 2000
+        - name: max_salary
+          in: query
+          description: Фільтр за максимальною заробітною платою.
+          schema:
+            maximum: 1000000
+            minimum: 0
+            type: number
+            format: double
+            example: 5000
+          example: 5000
+        - name: experience
+          in: query
+          description: 'Фільтр за необхідним досвідом (наприклад: 3+ роки, 1-3 роки).'
+          schema:
+            maxLength: 50
+            minLength: 0
+            type: string
+            example: 3+ роки
+          example: 3+ роки
+        - name: source
+          in: query
+          description: 'Фільтр за джерелом агрегації (WorkUa, RobotaUa, Djinni, Dou).'
+          schema:
+            $ref: '#/components/schemas/JobSource'
+          example: Djinni
+      responses:
+        '200':
+          description: Успішне отримання переліку вакансій.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VacancyDtoPagedResult'
+        '400':
+          description: Помилка валідації параметрів пагінації чи фільтрації.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+    post:
+      tags:
+        - Vacancies
+      summary: Створити або імпортувати нову вакансію.
+      description: Додає нову вакансію до єдиного каталогу (ручне розміщення або збереження модулем збору даних).
+      operationId: CreateVacancy
+      requestBody:
+        description: Дані нової вакансії.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVacancyRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/CreateVacancyRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/CreateVacancyRequest'
+      responses:
+        '201':
+          description: Вакансію успішно створено. У заголовку Location міститься посилання на новий ресурс.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VacancyDto'
+        '400':
+          description: Помилка валідації вхідного запиту.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  '/api/v1/vacancies/{id}':
+    get:
+      tags:
+        - Vacancies
+      summary: Отримати детальну інформацію про конкретну вакансію за її ID.
+      description: 'Повертає повний опис, вимоги, рівень зарплати та контактні дані вакансії.'
+      operationId: GetVacancyById
+      parameters:
+        - name: id
+          in: path
+          description: Унікальний глобальний ідентифікатор вакансії (GUID).
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Вакансію успішно знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VacancyDto'
+        '404':
+          description: Вакансію за вказаним ідентифікатором не знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+    put:
+      tags:
+        - Vacancies
+      summary: Оновити дані існуючої вакансії.
+      description: Оновлює інформацію про вакансію за її унікальним ідентифікатором.
+      operationId: UpdateVacancy
+      parameters:
+        - name: id
+          in: path
+          description: 'Унікальний ідентифікатор вакансії, що оновлюється.'
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        description: Оновлені поля вакансії.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVacancyRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateVacancyRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateVacancyRequest'
+      responses:
+        '200':
+          description: Вакансію успішно оновлено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VacancyDto'
+        '400':
+          description: Помилка валідації полів запиту.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Вакансію для оновлення не знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+    delete:
+      tags:
+        - Vacancies
+      summary: Видалити вакансію з каталогу.
+      description: Видаляє вакансію за її ідентифікатором з каталогу системи.
+      operationId: DeleteVacancy
+      parameters:
+        - name: id
+          in: path
+          description: Унікальний ідентифікатор вакансії.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Вакансію успішно видалено.
+        '404':
+          description: Вакансію не знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+components:
+  schemas:
+    ApiErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/ErrorPayload'
+      additionalProperties: false
+      description: Узгоджена структура помилок API
+    CreateVacancyRequest:
+      required:
+        - category
+        - company
+        - description
+        - location
+        - source
+        - source_url
+        - title
+      type: object
+      properties:
+        title:
+          maxLength: 150
+          minLength: 3
+          type: string
+          description: Назва посади / вакансії (від 3 до 150 символів).
+          example: Senior C# / .NET Architect
+        company:
+          maxLength: 100
+          minLength: 2
+          type: string
+          description: Назва компанії-роботодавця (від 2 до 100 символів).
+          example: FinTech Solutions UA
+        description:
+          minLength: 20
+          type: string
+          description: Повний зміст опису та вимог до кандидата (щонайменше 20 символів).
+          example: Розробка надійних фінансових сервісів та інтеграція платіжних систем на .NET.
+        category:
+          maxLength: 50
+          minLength: 2
+          type: string
+          description: Професійна категорія вакансії.
+          example: .NET
+        location:
+          maxLength: 100
+          minLength: 2
+          type: string
+          description: Місце роботи або формат зайнятості.
+          example: Київ / Віддалено
+        full_address:
+          maxLength: 200
+          minLength: 0
+          type: string
+          description: Повна фізична адреса офісу чи локації
+          nullable: true
+          example: 'Київ, проспект Академіка Глушкова, 1'
+        schedule:
+          maxLength: 100
+          minLength: 0
+          type: string
+          description: Графік та тип зайнятості
+          nullable: true
+          example: 'Повна зайнятість · Стандартний графік: 5/2'
+        experience:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: Необхідний досвід роботи
+          nullable: true
+          example: 3+ роки
+        salary_min:
+          maximum: 1000000
+          minimum: 0
+          type: number
+          description: Мінімальна заробітна плата. Повинна бути більшою або рівною 0.
+          format: double
+          nullable: true
+          example: 3000
+        salary_max:
+          maximum: 1000000
+          minimum: 0
+          type: number
+          description: 'Максимальна заробітна плата. Повинна бути в межах від 0 до 1,000,000.'
+          format: double
+          nullable: true
+          example: 5000
+        currency:
+          maxLength: 3
+          minLength: 3
+          type: string
+          description: 'Валюта заробітної плати (3 символи ISO, наприклад USD, EUR, UAH).'
+          nullable: true
+          example: USD
+        source:
+          $ref: '#/components/schemas/JobSource'
+        source_url:
+          minLength: 1
+          type: string
+          description: Пряме посилання на першоджерело публікації.
+          format: uri
+          example: https://example.com/careers/senior-dotnet
+        skills:
+          type: array
+          items:
+            type: string
+          description: Список ключових навичок.
+          nullable: true
+          example:
+            - C#
+            - .NET
+            - Architecture
+            - PostgreSQL
+      additionalProperties: false
+      description: Тіло запиту для створення або імпорту нової вакансії.
+    ErrorPayload:
+      type: object
+      properties:
+        code:
+          type: string
+          nullable: true
+        message:
+          type: string
+          nullable: true
+        details:
+          type: array
+          items:
+            $ref: '#/components/schemas/ValidationErrorDetail'
+          nullable: true
+        request_id:
+          type: string
+          nullable: true
+        documentation:
+          type: string
+          nullable: true
+      additionalProperties: false
+    JobSource:
+      enum:
+        - WorkUa
+        - RobotaUa
+        - Djinni
+        - Dou
+      type: string
+      description: 'Джерело, з якого агреговано або розміщено вакансію.'
+    SaveVacancyRequest:
+      required:
+        - vacancy_id
+      type: object
+      properties:
+        vacancy_id:
+          type: string
+          description: 'Унікальний ідентифікатор вакансії, яку потрібно додати у збережені.'
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        notes:
+          maxLength: 500
+          minLength: 0
+          type: string
+          description: Необов'язкові власні нотатки користувача щодо цієї вакансії (до 500 символів).
+          nullable: true
+          example: 'Цікавий стек технологій, підготувати запитання про процеси тестування.'
+      additionalProperties: false
+      description: Тіло запиту для збереження («лайку») вакансії.
+    SavedVacancyDto:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Ідентифікатор запису збереженої вакансії.
+          format: uuid
+          example: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
+        vacancy_id:
+          type: string
+          description: 'Ідентифікатор вакансії, яку збережено.'
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        vacancy:
+          $ref: '#/components/schemas/VacancyDto'
+        notes:
+          type: string
+          description: Особисті примітки шукача роботи до вакансії.
+          nullable: true
+          example: 'Відправити CV у понеділок, звернути увагу на вимоги до Docker.'
+        saved_at:
+          type: string
+          description: Дата та час збереження вакансії.
+          format: date-time
+          example: '2026-09-29T14:30:00Z'
+      additionalProperties: false
+      description: Представлення збереженої («лайкнутої») вакансії користувача.
+    UpdateVacancyRequest:
+      required:
+        - category
+        - company
+        - description
+        - location
+        - title
+      type: object
+      properties:
+        title:
+          maxLength: 150
+          minLength: 3
+          type: string
+          description: Оновлена назва посади (від 3 до 150 символів).
+          example: Lead C# .NET Solutions Architect
+        company:
+          maxLength: 100
+          minLength: 2
+          type: string
+          description: Оновлена назва компанії (від 2 до 100 символів).
+          example: FinTech Solutions UA
+        description:
+          minLength: 20
+          type: string
+          description: Повний зміст опису та вимог.
+          example: 'Оновлені вимоги: глибокі знання мікросервісної архітектури, .NET 10, Kubernetes.'
+        category:
+          maxLength: 50
+          minLength: 2
+          type: string
+          description: Професійна категорія.
+          example: .NET
+        location:
+          maxLength: 100
+          minLength: 2
+          type: string
+          description: Локація або формат зайнятості.
+          example: Київ (Гібрид)
+        full_address:
+          maxLength: 200
+          minLength: 0
+          type: string
+          description: Повна фізична адреса офісу чи локаціїІ
+          nullable: true
+          example: 'Київ, проспект Академіка Глушкова, 1'
+        schedule:
+          maxLength: 100
+          minLength: 0
+          type: string
+          description: Графік та тип зайнятості
+          nullable: true
+          example: 'Повна зайнятість · Стандартний графік: 5/2'
+        experience:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: Необхідний досвід роботи
+          nullable: true
+          example: 3+ роки
+        salary_min:
+          maximum: 1000000
+          minimum: 0
+          type: number
+          description: Мінімальна заробітна плата.
+          format: double
+          nullable: true
+          example: 3500
+        salary_max:
+          maximum: 1000000
+          minimum: 0
+          type: number
+          description: Максимальна заробітна плата.
+          format: double
+          nullable: true
+          example: 5500
+        currency:
+          maxLength: 3
+          minLength: 3
+          type: string
+          description: Валюта заробітної плати (3 символи ISO).
+          nullable: true
+          example: USD
+        skills:
+          type: array
+          items:
+            type: string
+          description: Список оновлених навичок.
+          nullable: true
+          example:
+            - C#
+            - .NET 10
+            - Architecture
+            - Microservices
+        is_active:
+          type: boolean
+          description: Статус активності вакансії.
+          example: true
+      additionalProperties: false
+      description: Тіло запиту для оновлення існуючої вакансії.
+    VacancyDto:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Унікальний ідентифікатор вакансії.
+          format: uuid
+          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+        title:
+          type: string
+          description: Назва вакансії / посади.
+          nullable: true
+          example: .NET Core Backend Developer
+        company:
+          type: string
+          description: Назва компанії або роботодавця.
+          nullable: true
+          example: GlobalTech Innovations
+        description:
+          type: string
+          description: Детальний опис вакансії та обов'язків.
+          nullable: true
+          example: Шукаємо досвідченого C# розробника для створення високонавантажених REST API на базі .NET 10.
+        category:
+          type: string
+          description: 'Категорія чи напрямок (наприклад, .NET, QA, DevOps, Mobile).'
+          nullable: true
+          example: .NET
+        location:
+          type: string
+          description: 'Локація або формат роботи (Київ, Віддалено, Гібрид).'
+          nullable: true
+          example: Київ (Віддалено)
+        full_address:
+          type: string
+          description: Повна фізична адреса офісу або локації
+          nullable: true
+          example: 'Київ, проспект Академіка Глушкова, 1'
+        schedule:
+          type: string
+          description: Графік та тип зайнятості
+          nullable: true
+          example: 'Повна зайнятість · Стандартний графік: 5/2'
+        experience:
+          type: string
+          description: 'Необхідний досвід роботи (наприклад: "1-3 роки", "3+ роки", "5+ років", "Без досвіду").'
+          nullable: true
+          example: 3+ роки
+        salary_min:
+          type: number
+          description: Мінімальна заробітна плата у валюті currency (якщо вказана).
+          format: double
+          nullable: true
+          example: 2500
+        salary_max:
+          type: number
+          description: Максимальна заробітна плата у валюті currency (якщо вказана).
+          format: double
+          nullable: true
+          example: 4000
+        currency:
+          type: string
+          description: Валюта виплати заробітної плати.
+          nullable: true
+          example: USD
+        source:
+          $ref: '#/components/schemas/JobSource'
+        source_url:
+          type: string
+          description: Пряме посилання на оригінал вакансії на ресурсі-джерелі.
+          nullable: true
+          example: https://djinni.co/jobs/12345-dotnet-developer/
+        skills:
+          type: array
+          items:
+            type: string
+          description: Список ключових технологій та навичок (тегів).
+          nullable: true
+          example:
+            - C#
+            - .NET 10
+            - PostgreSQL
+            - Docker
+            - REST API
+        published_at:
+          type: string
+          description: Дата первинної публікації на джерелі.
+          format: date-time
+          example: '2026-09-28T10:00:00Z'
+        is_active:
+          type: boolean
+          description: Чи активна вакансія на даний момент.
+          example: true
+      additionalProperties: false
+      description: Представлення сутності вакансії Waterfall.
+    VacancyDtoPagedResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VacancyDto'
+          description: Список елементів поточної сторінки.
+          nullable: true
+        total_count:
+          type: integer
+          description: 'Загальна кількість елементів, що задовольняють фільтр.'
+          format: int32
+          example: 42
+        page:
+          type: integer
+          description: Поточний номер сторінки (починаючи з 1).
+          format: int32
+          example: 1
+        page_size:
+          type: integer
+          description: Розмір сторінки (кількість елементів на одній сторінці).
+          format: int32
+          example: 20
+        total_pages:
+          type: integer
+          description: Загальна кількість доступних сторінок.
+          format: int32
+          readOnly: true
+          example: 3
+        has_next_page:
+          type: boolean
+          description: Чи існує наступна сторінка.
+          readOnly: true
+          example: true
+        has_previous_page:
+          type: boolean
+          description: Чи існує попередня сторінка.
+          readOnly: true
+          example: false
+      additionalProperties: false
+      description: Універсальна обгортка пагінації зі зсувом (offset pagination).
+    ValidationErrorDetail:
+      type: object
+      properties:
+        field:
+          type: string
+          nullable: true
+        message:
+          type: string
+          nullable: true
+        provided_value:
+          enum:
+            - null
+          nullable: true
+      additionalProperties: false
+tags:
+  - name: SavedVacancies
+    description: Керування вподобаними («лайкнутими») вакансіями для рекомендацій та статистики
+  - name: Vacancies
+    description: Керування агрегованими вакансіями платформи Waterfall (CRUD)

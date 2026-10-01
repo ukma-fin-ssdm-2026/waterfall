@@ -13,6 +13,13 @@ package "Client Application (.NET MAUI)" {
 }
 
 package "Backend Services (C# .NET)" {
+    package "Presentation Layer (ASP.NET Core Web API)" {
+        [Vacancies Controller\n(/api/v1/vacancies)] as VacanciesCtrl
+        [Saved Vacancies Controller\n(/api/v1/saved-vacancies)] as SavedVacanciesCtrl
+        [Auth & Users Controller\n(/api/v1/auth)] as AuthCtrl
+        [AI Consultant Controller\n(/api/v1/ai-consultant)] as AICtrl
+    }
+
     package "Core Services Layer" {
         [Authentication Service] as AuthService
         [Storage Service] as StorageService
@@ -42,6 +49,12 @@ package "Backend Services (C# .NET)" {
         IngestionService -right-> Repo : Normalized Entities
         IngestionService -up-> CacheService : Invalidate
     }
+
+    ' Presentation to Core
+    VacanciesCtrl -down-> StorageService : DI
+    SavedVacanciesCtrl -down-> StorageService : DI
+    AuthCtrl -down-> AuthService : DI
+    AICtrl -down-> AIService : DI
 }
 
 database "Data Storage" {
@@ -53,11 +66,11 @@ cloud "External Services" {
     [Сайти пошуку роботи\n(Work.ua, Robota.ua, Djinni)] as JobSites
 }
 
-' Client to Core
-HTTPGateway -down-> AuthService : HTTPS
-HTTPGateway -down-> StorageService : HTTPS
-HTTPGateway -down-> AnalyticsService : HTTPS
-HTTPGateway -down-> AIService : HTTPS
+' Client to Presentation Layer (API Controllers)
+HTTPGateway -down-> VacanciesCtrl : HTTPS / REST
+HTTPGateway -down-> SavedVacanciesCtrl : HTTPS / REST
+HTTPGateway -down-> AuthCtrl : HTTPS / REST
+HTTPGateway -down-> AICtrl : HTTPS / REST
 
 ' Core to Repo & DB
 StorageService -down-> Repo
