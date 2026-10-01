@@ -53,6 +53,12 @@
 * [**decisions/**](./docs/architecture/decisions/) — ADR-001…003
 * [**uml/**](./docs/architecture/uml/) — `.puml` + `.svg`
 
+### Проєктування та специфікація API (Лаб 4)
+* [**api-design.md**](./docs/api/api-design.md) — документ проєктування REST API (ресурсна модель, ендпоінти, пагінація, обробка помилок)
+* [**openapi-generated.yaml**](./docs/api/openapi-generated.yaml) — згенерована специфікація OpenAPI 3.0
+* [**Swagger UI (Інтерактивна документація)**](./docs/api/index.html) — автономний веб-інтерфейс Swagger UI для тестування API
+* [**Код бекенду Web API**](./src/api/) — реалізація на C# (.NET 10 / ASP.NET Core)
+
 ---
 
 ## Статус та запуск проєкту

@@ -53,6 +53,11 @@ public class SavedVacancyRepository : ISavedVacancyRepository
     {
         if (!_saved.TryGetValue(id, out SavedVacancyDto? item))
         {
+            item = _saved.Values.FirstOrDefault(s => s.VacancyId == id);
+        }
+
+        if (item is null)
+        {
             return null;
         }
 
@@ -87,8 +92,19 @@ public class SavedVacancyRepository : ISavedVacancyRepository
 
     public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        bool removed = _saved.TryRemove(id, out _);
-        return Task.FromResult(removed);
+        if (_saved.TryRemove(id, out _))
+        {
+            return Task.FromResult(true);
+        }
+
+      
+        SavedVacancyDto? byVacancy = _saved.Values.FirstOrDefault(s => s.VacancyId == id);
+        if (byVacancy != null && _saved.TryRemove(byVacancy.Id, out _))
+        {
+            return Task.FromResult(true);
+        }
+
+        return Task.FromResult(false);
     }
 
     public Task<bool> ExistsForVacancyAsync(Guid vacancyId, CancellationToken ct = default)

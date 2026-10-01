@@ -46,7 +46,7 @@ public class VacanciesController : ApiControllerBase
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PagedResult<VacancyDto>>> GetAll([FromQuery] VacancyFilterParameters filter, CancellationToken ct)
     {
-        _logger.LogInformation($"Отримання вакансій: сторінка {filter.Page}, розмір {filter.PageSize}, фільтр search='{filter.Search}'",
+        _logger.LogInformation("Отримання вакансій: сторінка {Page}, розмір {PageSize}, фільтр search='{Search}'",
             filter.Page, filter.PageSize, filter.Search);
 
         PagedResult<VacancyDto> result = await _repository.GetAllAsync(filter, ct);

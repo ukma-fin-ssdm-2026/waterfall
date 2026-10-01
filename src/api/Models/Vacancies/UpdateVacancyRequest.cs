@@ -55,7 +55,7 @@ public class UpdateVacancyRequest : IValidatableObject
     public string Location { get; set; } = string.Empty;
 
     /// <summary>
-    /// Повна фізична адреса офісу чи локаціїІ
+    /// Повна фізична адреса офісу чи локації.
     /// </summary>
     /// <example>Київ, проспект Академіка Глушкова, 1</example>
     [StringLength(200, ErrorMessage = "Повна адреса не повинна перевищувати 200 символів.")]
