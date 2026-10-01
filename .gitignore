@@ -1,4 +1,4 @@
-﻿################################################################################
+################################################################################
 # This .gitignore file was automatically created by Microsoft(R) Visual Studio.
 ################################################################################
 
@@ -11,3 +11,10 @@
 /waterfall.UI/obj
 /waterfall.UI/.vs/ProjectEvaluation
 /waterfall.UI/.vs/waterfall.slnx/v18
+
+# Build results
+[Bb]in/
+[Oo]bj/
+
+/waterfall.UI/.vs/waterfall.slnx/FileContentIndex
+/waterfall.UI/.vs/waterfall.slnx/DesignTimeBuild
