@@ -566,7 +566,7 @@ components:
           maxLength: 200
           minLength: 0
           type: string
-          description: Повна фізична адреса офісу чи локаціїІ
+          description: Повна фізична адреса офісу чи локації.
           nullable: true
           example: 'Київ, проспект Академіка Глушкова, 1'
         schedule:
