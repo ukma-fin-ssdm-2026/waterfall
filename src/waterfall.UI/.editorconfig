@@ -1,0 +1,95 @@
+root = true
+
+# ==========================================
+# Загальні налаштування для всіх файлів
+# ==========================================
+[*]
+charset = utf-8
+end_of_line = crlf
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# ==========================================
+# Налаштування для XAML (інтерфейс MAUI)
+# ==========================================
+[*.xaml]
+indent_size = 4
+
+# ==========================================
+# Налаштування для файлів C#
+# ==========================================
+[*.cs]
+
+# --- Перенесення рядків та дужки (стиль Microsoft / Allman) ---
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_new_line_before_members_in_object_initializers = true
+
+dotnet_style_allow_multiple_blank_lines_experimental = false:suggestion
+keep_blank_lines_in_code = 2
+keep_blank_lines_in_declarations = 2
+
+# --- Відступи всередині блоків switch ---
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+
+# --- Пробіли навколо знаків та операторів ---
+csharp_space_after_cast = false
+csharp_space_around_binary_operators = before_and_after
+
+# --- Організація директив using ---
+dotnet_sort_system_directives_first = true:suggestion
+dotnet_separate_import_directive_groups = true:suggestion
+csharp_using_directive_placement = outside_namespace:suggestion
+
+# --- Сучасні стандарти C# (C# 10+) ---
+# Однорядкові простори імен (namespace App; замість зайвих фігурних дужок на весь файл)
+csharp_style_namespace_declarations = file_scoped:suggestion
+
+# Використання var: тільки тоді, коли тип і так очевидний (наприклад, var list = new List<string>())
+csharp_style_var_for_built_in_types = false:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = false:suggestion
+
+# Стрілочні методи та властивості (=>), якщо вони займають один рядок
+csharp_style_expression_bodied_methods = when_on_single_line:suggestion
+csharp_style_expression_bodied_properties = true:suggestion
+
+# Не писати зайвий раз "this." без потреби
+dotnet_style_qualification_for_field = false:suggestion
+dotnet_style_qualification_for_property = false:suggestion
+dotnet_style_qualification_for_method = false:suggestion
+
+# --- ПРАВИЛА ІМЕНУВАННЯ (NAMING CONVENTIONS) ---
+
+# 1. Інтерфейси обов'язково починаються з літери "I" (наприклад, IUserService)
+dotnet_naming_rule.interface_should_be_prefixed_with_i.severity = suggestion
+dotnet_naming_rule.interface_should_be_prefixed_with_i.symbols = interface_symbols
+dotnet_naming_rule.interface_should_be_prefixed_with_i.style = i_prefix_style
+
+dotnet_naming_symbols.interface_symbols.applicable_kinds = interface
+dotnet_naming_style.i_prefix_style.capitalization = pascal_case
+dotnet_naming_style.i_prefix_style.required_prefix = I
+
+# 2. Приватні поля починаються з нижнього підкреслення (наприклад, _httpClient)
+dotnet_naming_rule.private_fields_should_start_with_underscore.severity = suggestion
+dotnet_naming_rule.private_fields_should_start_with_underscore.symbols = private_field_symbols
+dotnet_naming_rule.private_fields_should_start_with_underscore.style = underscore_camel_case
+
+dotnet_naming_symbols.private_field_symbols.applicable_kinds = field
+dotnet_naming_symbols.private_field_symbols.applicable_accessibilities = private
+dotnet_naming_style.underscore_camel_case.capitalization = camel_case
+dotnet_naming_style.underscore_camel_case.required_prefix = _
+
+# 3. Публічні члени (класи, методи, властивості) — суворо в PascalCase
+dotnet_naming_rule.public_members_must_be_pascal_case.severity = suggestion
+dotnet_naming_rule.public_members_must_be_pascal_case.symbols = public_symbols
+dotnet_naming_rule.public_members_must_be_pascal_case.style = pascal_case_style
+
+dotnet_naming_symbols.public_symbols.applicable_kinds = class, struct, enum, property, method, event
+dotnet_naming_symbols.public_symbols.applicable_accessibilities = public, internal
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
