@@ -22,7 +22,9 @@ public static class OpenApiGenerator
             {
                 OpenApiYamlWriter yamlWriter = new OpenApiYamlWriter(textWriter);
                 doc.SerializeAsV3(yamlWriter);
-                File.WriteAllText(yamlPath, textWriter.ToString());
+                string currentDocs = File.Exists(yamlPath) ? File.ReadAllText(yamlPath) : "";
+                string newDocs = textWriter.ToString();
+                if (currentDocs != newDocs) File.WriteAllText(yamlPath, newDocs);
             }
 
             logger.LogInformation("OpenAPI YAML специфікацію успішно збережено у: {Path}", yamlPath);

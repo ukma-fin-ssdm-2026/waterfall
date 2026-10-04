@@ -149,5 +149,6 @@ app.MapControllers();
 // 7. Автоматична генерація OpenAPI YAML специфікації у docs/api/openapi-generated.yaml
 OpenApiGenerator.ExportOpenApiYaml(app.Services, app.Environment, app.Logger);
 
+if (args.Contains("--generate-openapi-and-exit")) return;
 
 app.Run();
