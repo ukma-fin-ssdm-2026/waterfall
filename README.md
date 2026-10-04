@@ -55,9 +55,17 @@
 
 ### Проєктування та специфікація API (Лаб 4)
 * [**api-design.md**](./docs/api/api-design.md) — документ проєктування REST API (ресурсна модель, ендпоінти, пагінація, обробка помилок)
-* [**openapi-generated.yaml**](./docs/api/openapi-generated.yaml) — згенерована специфікація OpenAPI 3.0
-* [**Swagger UI (Інтерактивна документація)**](./docs/api/index.html) — автономний веб-інтерфейс Swagger UI для тестування API
+* [**openapi-generated.yaml**](./docs/api/openapi-generated.yaml) — згенерована специфікація OpenAPI 3.0 (100% Code-First, 0 рядків вручну; не редагувати)
+* [**Swagger UI (інтерактивна документація)**](./docs/api/index.html) — автономний Swagger UI (CDN) поверх `openapi-generated.yaml`
 * [**Код бекенду Web API**](./src/api/) — реалізація на C# (.NET 10 / ASP.NET Core)
+
+#### API: запуск, Swagger UI та регенерація специфікації
+1. Запуск API: `dotnet run --project src/api` — слухає `http://localhost:3000` (див. `src/api/Properties/launchSettings.json`).
+2. Жива документація: `http://localhost:3000/api-docs` (Swagger UI), корінь `/` редіректить туди ж.
+3. Статична документація без бекенда: `npx serve docs/api` → відкрити надрукований URL + `/index.html` (та сама сторінка, що й на GitHub Pages).
+4. Онлайн (після merge в `main`): `https://ukma-fin-ssdm-2026.github.io/waterfall/` — збірка через `.github/workflows/api-docs.yml`.
+5. Регенерація специфікації з коду (Code-First): `dotnet run --project src/api -- --generate-openapi-and-exit` — перезаписує `docs/api/openapi-generated.yaml` лише за наявності змін.
+6. Перевірка повноти схеми: усі операції мають summary/description, усі моделі — описи та приклади, усі `$ref` вказують на визначені схеми, помилки — через `ApiErrorResponse`.
 
 ---
 
@@ -99,3 +107,4 @@ TypeScript MCP-сервер в [`src/mcp/`](./src/mcp/), згенеровани�
 | посилання на артефакти вимог | Денис | так, додавання посилань | самоперевірка автора (§8) |
 | розділ `### Архітектура` (навігація) | Садиков Константін | структурування посилань | самоперевірка автора (§8); рев'ю в PR |
 | розділ `### MCP-сервер` | Дмитро | структурування інструкцій | самоперевірка автора (§8) |
+| розділ `#### API: запуск, Swagger UI та регенерація специфікації` | текст інструкцій | так | самоперевірка автора (§8): скрипт `$ref`/описів/прикладів, HEAD-перевірка CDN, рев'ю в PR |
