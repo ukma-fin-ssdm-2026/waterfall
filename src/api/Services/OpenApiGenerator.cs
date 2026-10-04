@@ -32,6 +32,7 @@ public static class OpenApiGenerator
         catch (Exception ex)
         {
             logger.LogError(ex, "Помилка під час автоматичної генерації OpenAPI YAML специфікації");
+            throw;
         }
     }
 }
