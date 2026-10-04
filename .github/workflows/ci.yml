@@ -11,7 +11,9 @@ permissions:
 
 jobs:
   build:
-    timeout-minutes: 10
+    # Timeout 5 minutes in accordance with MAINT-001
+    # Check: /docs/requirements/requirements.md
+    timeout-minutes: 5
     runs-on: ubuntu-latest
 
     steps:
