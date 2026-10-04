@@ -1,10 +1,36 @@
 name: CI
-on: [push]
+
+on: 
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+permissions: 
+  contents: read
 
 jobs:
   build:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v7
-      - name: Run Hello world 
-        run: echo Hello, world
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+          cache: true
+
+      # Only API for now to not bundle excess packages (MAUI)
+      - name: Restore dependencies
+        run: dotnet restore src/api/Waterfall.Api.csproj
+
+      - name: Build
+        run: dotnet build src/api/Waterfall.Api.csproj -c Release --no-restore --nologo
+      
+      # No dotnet test yet, since we have no tests
+      
+
