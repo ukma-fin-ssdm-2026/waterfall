@@ -2,46 +2,61 @@
 @startuml
 !theme plain
 skinparam componentStyle rectangle
-skinparam nodesep 55
-skinparam ranksep 65
-skinparam packagePadding 16
+skinparam nodesep 50
+skinparam ranksep 60
+skinparam packagePadding 14
 
 package "Client Application (.NET MAUI)" {
     [UI Components\n(Catalog, Dashboards, AI Chat)] as UI
-    [HTTP Gateway Service\n(API Client & Auth Header)] as HTTPGateway
-    UI -down-> HTTPGateway
+    [HTTP Gateway Service\n(HttpClient & Bearer Auth)] as HTTPGateway
+    UI -down-> HTTPGateway : SendRequestAsync()
 }
 
 package "Backend Services (C# .NET)" {
-    package "Core Services Layer" {
-        [Authentication Service] as AuthService
-        [Storage Service] as StorageService
-        [Analytics & Statistics Service] as AnalyticsService
-        [AI Consultant Service] as AIService
-        
-        [Security Service] as SecurityService
-        [Cache Service\n(In-Memory)] as CacheService
-        
-        AuthService -down-> SecurityService : Hash / Verify
-        AuthService -right-> StorageService : User Profiles
-        
-        StorageService -down-> CacheService : Cache Read/Write
-        
-        AnalyticsService -left-> StorageService : Read Data
-        AnalyticsService -down-> CacheService : Save Reports
-        
-        AIService -left-> StorageService : Context & History
+    package "Presentation Layer (ASP.NET Core Web API)" {
+        [Vacancies Controller\n(/api/v1/vacancies)] as VacanciesCtrl
+        [Saved Vacancies Controller\n(/api/v1/saved-vacancies)] as SavedVacanciesCtrl
+        [Auth & Users Controller\n(/api/v1/auth)] as AuthCtrl
+        [AI Consultant Controller\n(/api/v1/ai-consultant)] as AICtrl
     }
 
-    package "Repository Layer (Data Access)" {
-        [Job Parser Service\n(HTML Scraping & Fetcher)] as ParserService
-        [Job Ingestion &\nNormalization Service] as IngestionService
-        [Data Repositories\n(EF Core)] as Repo
+    package "Core Services Layer" {
+        [Authentication Service] as AuthService
+        [Storage Service\n(Vacancy & User Orchestration)] as StorageService
+        [Analytics & Statistics Service] as AnalyticsService
+        [AI Consultant Service\n(Prompt & Context Engine)] as AIService
+        [Security Service\n(Crypto & Hashing)] as SecurityService
+        [Cache Service\n(In-Memory / Cache-Aside)] as CacheService
+
+        AuthService -down-> SecurityService : HashPassword()\nVerifyPassword()
+        AuthService -right-> StorageService : GetUserByEmailAsync()\nCreateUserAsync()
         
-        ParserService -right-> IngestionService : Raw Data
-        IngestionService -right-> Repo : Normalized Entities
-        IngestionService -up-> CacheService : Invalidate
+        StorageService -down-> CacheService : GetAsync<T>()\nSetAsync<T>()\nRemoveByPrefixAsync()
+        
+        AnalyticsService -left-> StorageService : GetAggregatedDataAsync()
+        AnalyticsService -down-> CacheService : SetAsync("analytics:report", ttl)
+        
+        AIService -left-> StorageService : GetUserContextAsync()\nSaveChatHistoryAsync()
     }
+
+    package "Repository Layer (Data Access & External Ingestion)" {
+        [Job Parser Service\n(HTML Scraper BackgroundService)] as ParserService
+        [Job Ingestion &\nNormalization Service] as IngestionService
+        [Data Repositories\n(EF Core DbContext)] as Repo
+
+        ParserService -right-> IngestionService : ProcessRawVacanciesAsync(rawList)
+        IngestionService -right-> Repo : BulkUpsertAsync(normalizedEntities)
+    }
+
+    ' Presentation to Core (Dependency Injection)
+    VacanciesCtrl -down-> StorageService : GetVacanciesAsync(filter)\nGetVacancyByIdAsync(id)
+    SavedVacanciesCtrl -down-> StorageService : GetSavedAsync(userId)\nSaveVacancyAsync(userId, id)\nDeleteSavedAsync(userId, id)
+    AuthCtrl -down-> AuthService : LoginAsync(dto)\nRegisterAsync(dto)
+    AICtrl -down-> AIService : AskConsultantAsync(userId, prompt)
+    
+    ' Core to Repository Layer
+    StorageService -down-> Repo : GetPagedAsync(filter, page)\nAddSavedAsync(item)
+    StorageService -down-> IngestionService : TriggerIngestionAsync()
 }
 
 database "Data Storage" {
@@ -53,18 +68,17 @@ cloud "External Services" {
     [Сайти пошуку роботи\n(Work.ua, Robota.ua, Djinni)] as JobSites
 }
 
-' Client to Core
-HTTPGateway -down-> AuthService : HTTPS
-HTTPGateway -down-> StorageService : HTTPS
-HTTPGateway -down-> AnalyticsService : HTTPS
-HTTPGateway -down-> AIService : HTTPS
+' Client to Presentation Layer (HTTPS / REST)
+HTTPGateway -down-> VacanciesCtrl : GET /api/v1/vacancies\nGET /api/v1/vacancies/{id}
+HTTPGateway -down-> SavedVacanciesCtrl : GET, POST, DELETE\n/api/v1/saved-vacancies
+HTTPGateway -down-> AuthCtrl : POST /api/v1/auth/login\nPOST /api/v1/auth/register
+HTTPGateway -down-> AICtrl : POST /api/v1/ai-consultant/ask
 
-' Core to Repo & DB
-StorageService -down-> Repo
-Repo -down-> DB : SQL / EF Core
+' Repository to DB
+Repo -down-> DB : TDS / TCP (MSSQL) or\nLocal SQLite (EF Core)
 
-' Data Ingestion & External
-ParserService -right-> JobSites : HTTP GET (Scrape)
-AIService -right-> AI : HTTPS (Prompts)
+' External Interactions
+ParserService -right-> JobSites : HTTPS GET (HTML Scraping\nRate-limited per-source)
+AIService -right-> AI : HTTPS POST /v1beta/models\n(Timeout 30s + Fallback)
 
 @enduml

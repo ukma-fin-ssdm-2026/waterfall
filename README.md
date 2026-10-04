@@ -45,6 +45,20 @@
 * [**user-stories.md**](./docs/requirements/user-stories.md) — користувацькі історії з критеріями прийнятності
 * [**rtm.md**](./docs/requirements/rtm.md) — матриця простежуваності вимог (Requirements Traceability Matrix)
 
+### Архітектура
+* [**high-level-design.md**](./docs/architecture/high-level-design.md) — стиль, компоненти, розгортання, послідовність
+* [**traceability-matrix.md**](./docs/architecture/traceability-matrix.md) — простежуваність вимог
+* [**data-model.md**](./docs/architecture/data-model.md) — модель даних
+* [**threat-model.md**](./docs/architecture/threat-model.md) — STRIDE (загрози)
+* [**decisions/**](./docs/architecture/decisions/) — ADR-001…003
+* [**uml/**](./docs/architecture/uml/) — `.puml` + `.svg`
+
+### Проєктування та специфікація API (Лаб 4)
+* [**api-design.md**](./docs/api/api-design.md) — документ проєктування REST API (ресурсна модель, ендпоінти, пагінація, обробка помилок)
+* [**openapi-generated.yaml**](./docs/api/openapi-generated.yaml) — згенерована специфікація OpenAPI 3.0
+* [**Swagger UI (Інтерактивна документація)**](./docs/api/index.html) — автономний веб-інтерфейс Swagger UI для тестування API
+* [**Код бекенду Web API**](./src/api/) — реалізація на C# (.NET 10 / ASP.NET Core)
+
 ---
 
 ## Статус та запуск проєкту
@@ -58,3 +72,4 @@
 |--------|--------|----|---------------|
 | весь документ | Денис — початкова версія, редагування | так (коміт a0ba4d6) | обговорено командою на дзвінку; перевірено викладачем (issue #10, README 5/5) |
 | посилання на артефакти вимог | Денис | так, додавання посилань | самоперевірка автора (§8) |
+| розділ `### Архітектура` (навігація) | Садиков Константін | структурування посилань | самоперевірка автора (§8); рев'ю в PR |

@@ -1,0 +1,190 @@
+' AI: генерація структури ER-моделі та коду діаграми; перевірено: самоперевірка автора (§8), рев'ю в PR
+@startuml data-model
+!theme plain
+hide circle
+skinparam nodesep 50
+skinparam ranksep 60
+skinparam packagePadding 14
+
+title ER-модель даних проєкту Waterfall
+
+package "Користувачі та доступ" {
+    entity "User\nКористувач" as user {
+        * id : uuid <<PK>>
+        --
+        * email : string <<unique>> <<ПД>>
+        * password_hash : string <<чутливі>>
+        display_name : string <<ПД>>
+        * role : enum (JobSeeker, Analyst)
+        * created_at : datetime
+        last_login_at : datetime
+    }
+
+    entity "UserSession\nСесія входу" as session {
+        * id : uuid <<PK>>
+        --
+        * user_id : uuid <<FK>>
+        * refresh_token_hash : string <<unique>> <<чутливі>>
+        * created_at : datetime
+        * expires_at : datetime
+        revoked_at : datetime
+    }
+}
+
+package "Каталог вакансій" {
+    entity "Source\nДжерело" as source {
+        * id : int <<PK>>
+        --
+        * name : string <<unique>>
+        * base_url : string
+        * is_active : bool
+        last_success_at : datetime
+    }
+
+    entity "Vacancy\nВакансія" as vacancy {
+        * id : bigint <<PK>>
+        --
+        * source_id : int <<FK>>
+        * external_id : string
+        * url : string
+        * title : string
+        * company_name : string
+        description : text <<ПД третіх осіб>>
+        category : string
+        city : string
+        * work_format : enum (Remote, Office, Hybrid, Unknown)
+        salary_min_usd : decimal
+        salary_max_usd : decimal
+        salary_raw : string
+        * dedup_hash : string
+        published_at : datetime
+        * first_seen_at : datetime
+        * last_seen_at : datetime
+        * is_active : bool
+    }
+
+    entity "Technology\nТехнологія" as tech {
+        * id : int <<PK>>
+        --
+        * name : string <<unique>>
+    }
+}
+
+package "Активність шукача" {
+    entity "FilterState\nАктивні фільтри" as filters <<поведінкові ПД>> {
+        * user_id : uuid <<PK>> <<FK>>
+        --
+        keywords : string
+        category : string
+        salary_min_usd : decimal
+        work_format : enum
+        technologies : json
+        * updated_at : datetime
+    }
+
+    entity "SavedVacancy\nЗбережена вакансія" as saved <<поведінкові ПД>> {
+        * user_id : uuid <<PK>> <<FK>>
+        * vacancy_id : bigint <<PK>> <<FK>>
+        --
+        * saved_at : datetime
+    }
+
+    entity "VacancyView\nПерегляд вакансії" as view <<поведінкові ПД>> {
+        * id : bigint <<PK>>
+        --
+        * user_id : uuid <<FK>>
+        * vacancy_id : bigint <<FK>>
+        * viewed_at : datetime
+    }
+
+    entity "SearchQuery\nПошуковий запит" as search <<поведінкові ПД>> {
+        * id : bigint <<PK>>
+        --
+        * user_id : uuid <<FK>>
+        query_text : string
+        filters_json : json
+        * results_count : int
+        * created_at : datetime
+    }
+}
+
+package "ШІ-консультант" {
+    entity "ChatSession\nДіалог з ШІ" as chat <<поведінкові ПД>> {
+        * id : uuid <<PK>>
+        --
+        * user_id : uuid <<FK>>
+        context_filter_json : json
+        * started_at : datetime
+        * last_activity_at : datetime
+    }
+
+    entity "ChatMessage\nПовідомлення" as msg <<поведінкові ПД>> {
+        * id : bigint <<PK>>
+        --
+        * session_id : uuid <<FK>>
+        * author : enum (User, Assistant)
+        * content : text <<передається до LLM>>
+        * created_at : datetime
+    }
+}
+
+' --- Користувачі та доступ ---
+user "1" -- "m" session : входить через
+user "1" -- "1" filters : має активні
+
+' --- Каталог ---
+source "1" -- "m" vacancy : постачає
+vacancy "m" -- "n" tech : має стек
+
+' --- Активність шукача ---
+user "1" -- "m" saved : зберігає
+vacancy "1" -- "m" saved
+user "1" -- "m" view : переглядає
+vacancy "1" -- "m" view
+user "1" -- "m" search : виконує
+
+' --- ШІ-консультант ---
+user "1" -- "m" chat : веде
+chat "1" -- "m" msg : містить
+msg "m" -- "n" vacancy : посилається на
+
+note bottom of vacancy
+  Одна вакансія — один запис.
+  Якщо парсер знову бачить ту саму вакансію
+  (той самий сайт + той самий номер на сайті,
+  тобто source_id + external_id), він оновлює
+  старий запис, а не створює копію.
+
+  Закриту вакансію не видаляємо, а ставимо
+  is_active = false: інакше вона зникла б
+  у користувачів зі збережених.
+end note
+
+note right of tech
+  Ринкова аналітика для роботодавця
+  (FR-003, US-006) не має власних таблиць:
+  її обчислюють з Vacancy і Technology
+  для користувачів з role = Analyst.
+  Готові звіти тримає Cache Service у пам'яті.
+end note
+
+note right of msg
+  Зв'язок m:n з Vacancy у БД — таблиця
+  ChatMessageVacancy із FK на Vacancy,
+  тож ШІ не може послатися на вакансію,
+  якої немає в базі (FUNC-001).
+end note
+
+legend right
+  |= Позначка |= Значення |
+  | 1 | рівно один |
+  | m, n | багато |
+  | m — n | багато до багатьох; у БД — окрема таблиця зв'язку |
+  | «ПД» | персональні дані, прямо ідентифікують особу |
+  | «чутливі» | секрети: витік дає змогу увійти від імені користувача |
+  | «поведінкові ПД» | активність конкретної людини, зокрема сам факт пошуку роботи |
+  | «ПД третіх осіб» | можуть містити контакти рекрутерів з відкритих джерел |
+  | «передається до LLM» | залишає межу довіри нашої системи |
+endlegend
+
+@enduml
