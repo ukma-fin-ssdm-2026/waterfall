@@ -1,4 +1,4 @@
-name: Deploy API docs
+name: Generate and deploy API docs
 
 on:
   push:
@@ -19,16 +19,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  generate-and-deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+          # cache: true # Commented out because we need a lock file
+
+      - name: Restore dependencies
+        run: dotnet restore src/api/Waterfall.Api.csproj
+
+      - name: Build
+        run: dotnet build src/api/Waterfall.Api.csproj -c Release --no-restore --nologo
+
+      - name: Generate docs
+        run: dotnet run --project src/api --no-build -c Release -- --generate-openapi-and-exit
+      
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
