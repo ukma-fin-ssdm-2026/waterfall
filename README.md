@@ -63,17 +63,20 @@
 1. Запуск API: `dotnet run --project src/api` — слухає `http://localhost:3000` (див. `src/api/Properties/launchSettings.json`).
 2. Жива документація: `http://localhost:3000/api-docs` (Swagger UI), корінь `/` редіректить туди ж.
 3. Статична документація без бекенда: `npx serve docs/api` → відкрити надрукований URL + `/index.html` (та сама сторінка, що й на GitHub Pages).
-4. Онлайн (після merge в `main`): `https://ukma-fin-ssdm-2026.github.io/waterfall/` — збірка через `.github/workflows/api-docs.yml`.
-5. Регенерація специфікації з коду (Code-First): `dotnet run --project src/api -- --generate-openapi-and-exit` — перезаписує `docs/api/openapi-generated.yaml` лише за наявності змін.
+4. Онлайн на GitHub Pages: https://ukma-fin-ssdm-2026.github.io/waterfall/ — збірка через `.github/workflows/api-docs.yml`.
+5. Регенерація специфікації з коду (Code-First): `dotnet run --project src/api -- --generate-openapi-and-exit` (або просто запуск сервера) — перезаписує `docs/api/openapi-generated.yaml` лише за наявності змін.
 6. Перевірка повноти схеми: усі операції мають summary/description, усі моделі — описи та приклади, усі `$ref` вказують на визначені схеми, помилки — через `ApiErrorResponse`.
 
 ---
 
 ## Статус та запуск проєкту
 
-> [!NOTE]
-> Наразі проєкт перебуває на етапі проектування архітектури.
+### Запуск
 
+1. Необхідно мати .NET 10.
+2. Скачати залежності: `dotnet restore src/api/Waterfall.Api.csproj`
+3. Забілдити: `dotnet build src/api/Waterfall.Api.csproj`
+4. Запустити: `dotnet run --project src/api`
 
 ### MCP-сервер
 TypeScript MCP-сервер в [`src/mcp/`](./src/mcp/), згенерований зі специфікації
