@@ -6,7 +6,6 @@ using Waterfall.Api.Models.Common;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Common;
 using Waterfall.Services.Models.Vacancies;
-using VacancyFilterParameters = Waterfall.Api.Models.Vacancies.VacancyFilterParameters;
 
 namespace Waterfall.Api.Controllers;
 /// <summary>

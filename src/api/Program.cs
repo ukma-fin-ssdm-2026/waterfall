@@ -103,7 +103,7 @@ builder.Services.AddSwaggerGen(c =>
 
     c.EnableAnnotations();
 
-    // Підключення XML-документації для автогенерації описів (Waterfall.Api та Waterfall.Repository)
+    // Підключення XML-документації для автогенерації описів (Waterfall.Api, Waterfall.Repository, Waterfall.Services)
     string apiXmlPath = Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml");
     if (File.Exists(apiXmlPath))
     {
@@ -114,6 +114,12 @@ builder.Services.AddSwaggerGen(c =>
     if (File.Exists(repoXmlPath))
     {
         c.IncludeXmlComments(repoXmlPath);
+    }
+
+    string servicesXmlPath = Path.Combine(AppContext.BaseDirectory, $"{typeof(VacancyService).Assembly.GetName().Name}.xml");
+    if (File.Exists(servicesXmlPath))
+    {
+        c.IncludeXmlComments(servicesXmlPath);
     }
 });
 
