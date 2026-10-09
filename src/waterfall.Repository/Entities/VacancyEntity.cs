@@ -2,6 +2,7 @@
 
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
 namespace Waterfall.Repository.Entities;
 
@@ -9,6 +10,10 @@ namespace Waterfall.Repository.Entities;
 /// Сутність вакансії для збереження в реляційній базі даних (SQLite / MSSQL) через EF Core.
 /// </summary>
 [Table("Vacancies")]
+[Index(nameof(Category))]
+[Index(nameof(PublishedAt))]
+[Index(nameof(IsActive))]
+[Index(nameof(Source))]
 public class VacancyEntity
 {
     [Key]
