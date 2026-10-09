@@ -40,8 +40,7 @@ public static class WaterfallDbSeeder
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-2),
                     FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-2),
                     LastSeenAt = DateTimeOffset.UtcNow,
-                    IsActive = true,
-                    IsSaved = true
+                    IsActive = true
                 },
                 new VacancyEntity
                 {
@@ -63,8 +62,7 @@ public static class WaterfallDbSeeder
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-1),
                     FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-1),
                     LastSeenAt = DateTimeOffset.UtcNow,
-                    IsActive = true,
-                    IsSaved = true
+                    IsActive = true
                 },
                 new VacancyEntity
                 {

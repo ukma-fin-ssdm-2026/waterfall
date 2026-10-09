@@ -76,6 +76,4 @@ public class VacancyEntity
     public string? ExternalId { get; set; }
 
     public bool IsActive { get; set; } = true;
-
-    public bool IsSaved { get; set; } = false;
 }
