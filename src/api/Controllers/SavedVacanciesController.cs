@@ -3,11 +3,12 @@
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using Waterfall.Api.Models.Common;
-using Waterfall.Api.Models.SavedVacancies;
-using Waterfall.Api.Models.Vacancies;
-using Waterfall.Api.Services;
+using Waterfall.Services.Interfaces;
+using Waterfall.Services.Models.SavedVacancies;
+using Waterfall.Services.Models.Vacancies;
 
 namespace Waterfall.Api.Controllers;
+
 /// <summary>
 /// Керування збереженими вакансіями (лайками / закладками) шукача роботи.
 /// </summary>
@@ -17,23 +18,24 @@ namespace Waterfall.Api.Controllers;
 [SwaggerTag("Керування вподобаними («лайкнутими») вакансіями для рекомендацій та статистики")]
 public class SavedVacanciesController : ApiControllerBase
 {
-    private readonly ISavedVacancyRepository _savedRepository;
-    private readonly IVacancyRepository _vacancyRepository;
+    private readonly ISavedVacancyService _savedVacancyService;
+    private readonly IVacancyService _vacancyService;
     private readonly ILogger<SavedVacanciesController> _logger;
 
     public SavedVacanciesController(
-        ISavedVacancyRepository savedRepository,
-        IVacancyRepository vacancyRepository,
+        ISavedVacancyService savedVacancyService,
+        IVacancyService vacancyService,
         ILogger<SavedVacanciesController> logger)
     {
-        _savedRepository = savedRepository;
-        _vacancyRepository = vacancyRepository;
+        _savedVacancyService = savedVacancyService;
+        _vacancyService = vacancyService;
         _logger = logger;
     }
 
     /// <summary>
     /// Отримати перелік усіх збережених вакансій користувача.
     /// </summary>
+    /// <param name="onlyActive">Фільтр: повертати лише активні збережені вакансії (за замовчуванням true).</param>
     /// <param name="ct">Токен скасування операції.</param>
     /// <response code="200">Перелік збережених вакансій успішно отримано.</response>
     [HttpGet]
@@ -43,10 +45,12 @@ public class SavedVacanciesController : ApiControllerBase
         OperationId = "GetSavedVacancies",
         Tags = ["SavedVacancies"])]
     [ProducesResponseType(typeof(List<SavedVacancyDto>), StatusCodes.Status200OK)]
-    public async Task<ActionResult<List<SavedVacancyDto>>> GetAll(CancellationToken ct)
+    public async Task<ActionResult<List<SavedVacancyDto>>> GetAll(
+        [FromQuery(Name = "only_active")] bool onlyActive = true,
+        CancellationToken ct = default)
     {
-        _logger.LogInformation("Запит списку збережених вакансій");
-        IReadOnlyList<SavedVacancyDto> items = await _savedRepository.GetAllAsync(ct);
+        _logger.LogInformation("Запит списку збережених вакансій (onlyActive={OnlyActive})", onlyActive);
+        IReadOnlyList<SavedVacancyDto> items = await _savedVacancyService.GetAllAsync(onlyActive, ct);
         return Ok(items);
     }
 
@@ -67,7 +71,7 @@ public class SavedVacanciesController : ApiControllerBase
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SavedVacancyDto>> GetById([FromRoute] Guid id, CancellationToken ct)
     {
-        SavedVacancyDto? item = await _savedRepository.GetByIdAsync(id, ct);
+        SavedVacancyDto? item = await _savedVacancyService.GetByIdAsync(id, ct);
 
         if (item is null)
         {
@@ -103,19 +107,19 @@ public class SavedVacanciesController : ApiControllerBase
             return ErrorBadRequest("Невалідний запит збереження вакансії.");
         }
 
-        VacancyDto? vacancy = await _vacancyRepository.GetByIdAsync(request.VacancyId, ct);
+        VacancyDto? vacancy = await _vacancyService.GetByIdAsync(request.VacancyId, ct);
 
         if (vacancy is null)
         {
             return ErrorNotFound($"Неможливо зберегти вакансію: вакансію з ID '{request.VacancyId}' не знайдено.");
         }
 
-        if (await _savedRepository.ExistsForVacancyAsync(request.VacancyId, ct))
+        if (vacancy.IsSaved)
         {
             return ErrorConflict($"Вакансію з ID '{request.VacancyId}' уже було додано до списку збережених раніше.");
         }
 
-        SavedVacancyDto saved = await _savedRepository.SaveAsync(request, ct);
+        SavedVacancyDto saved = await _savedVacancyService.SaveAsync(request, ct);
 
         return CreatedAtAction(
             nameof(GetById),
@@ -140,7 +144,7 @@ public class SavedVacanciesController : ApiControllerBase
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete([FromRoute] Guid id, CancellationToken ct)
     {
-        bool deleted = await _savedRepository.DeleteAsync(id, ct);
+        bool deleted = await _savedVacancyService.DeleteAsync(id, ct);
 
         if (!deleted)
         {

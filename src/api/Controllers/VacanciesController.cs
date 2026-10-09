@@ -3,8 +3,10 @@
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using Waterfall.Api.Models.Common;
-using Waterfall.Api.Models.Vacancies;
-using Waterfall.Api.Services;
+using Waterfall.Services.Interfaces;
+using Waterfall.Services.Models.Common;
+using Waterfall.Services.Models.Vacancies;
+using VacancyFilterParameters = Waterfall.Api.Models.Vacancies.VacancyFilterParameters;
 
 namespace Waterfall.Api.Controllers;
 /// <summary>
@@ -16,12 +18,12 @@ namespace Waterfall.Api.Controllers;
 [SwaggerTag("Керування агрегованими вакансіями платформи Waterfall (CRUD)")]
 public class VacanciesController : ApiControllerBase
 {
-    private readonly IVacancyRepository _repository;
+    private readonly IVacancyService _vacancyService;
     private readonly ILogger<VacanciesController> _logger;
 
-    public VacanciesController(IVacancyRepository repository, ILogger<VacanciesController> logger)
+    public VacanciesController(IVacancyService vacancyService, ILogger<VacanciesController> logger)
     {
-        _repository = repository;
+        _vacancyService = vacancyService;
         _logger = logger;
     }
 
@@ -49,7 +51,7 @@ public class VacanciesController : ApiControllerBase
         _logger.LogInformation("Отримання вакансій: сторінка {Page}, розмір {PageSize}, фільтр search='{Search}'",
             filter.Page, filter.PageSize, filter.Search);
 
-        PagedResult<VacancyDto> result = await _repository.GetAllAsync(filter, ct);
+        PagedResult<VacancyDto> result = await _vacancyService.GetAllAsync(filter, ct);
         return Ok(result);
     }
 
@@ -70,7 +72,7 @@ public class VacanciesController : ApiControllerBase
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<VacancyDto>> GetById([FromRoute] Guid id, CancellationToken ct)
     {
-        VacancyDto? vacancy = await _repository.GetByIdAsync(id, ct);
+        VacancyDto? vacancy = await _vacancyService.GetByIdAsync(id, ct);
         if (vacancy is null)
         {
             return ErrorNotFound($"Вакансію з ID '{id}' не знайдено в каталозі.");
@@ -101,7 +103,7 @@ public class VacanciesController : ApiControllerBase
             return ErrorBadRequest("Невалідні дані запиту створення вакансії.");
         }
 
-        VacancyDto created = await _repository.CreateAsync(request, ct);
+        VacancyDto created = await _vacancyService.CreateAsync(request, ct);
 
         return CreatedAtAction(
             nameof(GetById),
@@ -134,7 +136,7 @@ public class VacanciesController : ApiControllerBase
             return ErrorBadRequest("Невалідні дані запиту оновлення вакансії.");
         }
 
-        VacancyDto? updated = await _repository.UpdateAsync(id, request, ct);
+        VacancyDto? updated = await _vacancyService.UpdateAsync(id, request, ct);
 
         if (updated is null)
         {
@@ -161,7 +163,7 @@ public class VacanciesController : ApiControllerBase
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Delete([FromRoute] Guid id, CancellationToken ct)
     {
-        bool deleted = await _repository.DeleteAsync(id, ct);
+        bool deleted = await _vacancyService.DeleteAsync(id, ct);
 
         if (!deleted)
         {

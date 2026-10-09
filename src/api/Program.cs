@@ -1,5 +1,3 @@
-// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
-
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Primitives;
@@ -7,6 +5,10 @@ using Microsoft.OpenApi;
 using System.Reflection;
 using Waterfall.Api.Models.Common;
 using Waterfall.Api.Services;
+using Waterfall.Repository.Data;
+using Waterfall.Repository.Interfaces;
+using Waterfall.Services;
+using Waterfall.Services.Extensions;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
@@ -73,9 +75,8 @@ builder.Services.AddControllers()
         };
     });
 
-// 2. Реєстрація сервісів сховища
-builder.Services.AddSingleton<IVacancyRepository, VacancyRepository>();
-builder.Services.AddSingleton<ISavedVacancyRepository, SavedVacancyRepository>();
+// 2. Реєстрація інфраструктури (EF Core SQLite/MSSQL) та сервісів кешування (In-Memory Cache-Aside)
+builder.Services.AddWaterfallServices(builder.Configuration);
 
 // 3. Налаштування CORS для браузерних клієнтів та Swagger UI
 builder.Services.AddCors(options =>
@@ -102,16 +103,28 @@ builder.Services.AddSwaggerGen(c =>
 
     c.EnableAnnotations();
 
-    // Підключення XML-документації для автогенерації описів
-    string xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    string xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
+    // Підключення XML-документації для автогенерації описів (Waterfall.Api та Waterfall.Repository)
+    string apiXmlPath = Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml");
+    if (File.Exists(apiXmlPath))
     {
-        c.IncludeXmlComments(xmlPath);
+        c.IncludeXmlComments(apiXmlPath);
+    }
+
+    string repoXmlPath = Path.Combine(AppContext.BaseDirectory, $"{typeof(WaterfallDbContext).Assembly.GetName().Name}.xml");
+    if (File.Exists(repoXmlPath))
+    {
+        c.IncludeXmlComments(repoXmlPath);
     }
 });
 
 WebApplication app = builder.Build();
+
+// Ініціалізація структури бази даних (SQLite / MSSQL) та сідування початкових мок-даних
+using (IServiceScope scope = app.Services.CreateScope())
+{
+    WaterfallDbContext db = scope.ServiceProvider.GetRequiredService<WaterfallDbContext>();
+    await WaterfallDbSeeder.SeedAsync(db);
+}
 
 // 5. Middleware для підтримки кореляційного Request ID (Structured Logging & Error Contract)
 app.Use(async (context, next) =>
