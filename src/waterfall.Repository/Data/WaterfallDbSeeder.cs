@@ -3,7 +3,6 @@
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using Waterfall.Repository.Entities;
-using Waterfall.Repository.Models.Vacancies;
 
 namespace Waterfall.Repository.Data;
 
@@ -18,9 +17,9 @@ public static class WaterfallDbSeeder
 
         if (!await context.Vacancies.AnyAsync())
         {
-            List<VacancyEntity> vacancies = new List<VacancyEntity>
+            List<VacancyDB> vacancies = new List<VacancyDB>
             {
-                new VacancyEntity
+                new VacancyDB
                 {
                     Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
                     Title = "Senior C# .NET Backend Developer",
@@ -34,7 +33,7 @@ public static class WaterfallDbSeeder
                     SalaryMin = 4000,
                     SalaryMax = 5500,
                     Currency = "USD",
-                    Source = JobSource.Djinni.ToString(),
+                    Source = "Djinni",
                     SourceUrl = "https://djinni.co/jobs/example-senior-dotnet/",
                     SkillsJson = JsonSerializer.Serialize(new[] { ".NET 10", "C#", "Kafka", "PostgreSQL", "Docker", "Kubernetes" }),
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-2),
@@ -42,7 +41,7 @@ public static class WaterfallDbSeeder
                     LastSeenAt = DateTimeOffset.UtcNow,
                     IsActive = true
                 },
-                new VacancyEntity
+                new VacancyDB
                 {
                     Id = Guid.Parse("22222222-2222-2222-2222-222222222222"),
                     Title = "Middle .NET MAUI / Mobile Developer",
@@ -56,7 +55,7 @@ public static class WaterfallDbSeeder
                     SalaryMin = 2200,
                     SalaryMax = 3200,
                     Currency = "USD",
-                    Source = JobSource.Dou.ToString(),
+                    Source = "Dou",
                     SourceUrl = "https://jobs.dou.ua/vacancies/example-middle-maui/",
                     SkillsJson = JsonSerializer.Serialize(new[] { ".NET MAUI", "C#", "MVVM", "XAML", "REST API", "SQLite" }),
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-1),
@@ -64,7 +63,7 @@ public static class WaterfallDbSeeder
                     LastSeenAt = DateTimeOffset.UtcNow,
                     IsActive = true
                 },
-                new VacancyEntity
+                new VacancyDB
                 {
                     Id = Guid.Parse("33333333-3333-3333-3333-333333333333"),
                     Title = "Full Stack C# / Angular Developer",
@@ -78,7 +77,7 @@ public static class WaterfallDbSeeder
                     SalaryMin = 3000,
                     SalaryMax = 4500,
                     Currency = "USD",
-                    Source = JobSource.WorkUa.ToString(),
+                    Source = "WorkUa",
                     SourceUrl = "https://www.work.ua/jobs/example-fullstack-csharp/",
                     SkillsJson = JsonSerializer.Serialize(new[] { "ASP.NET Core", "C#", "Angular", "TypeScript", "EF Core", "Azure" }),
                     PublishedAt = DateTimeOffset.UtcNow.AddHours(-12),
@@ -86,7 +85,7 @@ public static class WaterfallDbSeeder
                     LastSeenAt = DateTimeOffset.UtcNow,
                     IsActive = true
                 },
-                new VacancyEntity
+                new VacancyDB
                 {
                     Id = Guid.Parse("44444444-4444-4444-4444-444444444444"),
                     Title = "QA Automation (.NET / Playwright)",
@@ -100,7 +99,7 @@ public static class WaterfallDbSeeder
                     SalaryMin = 2800,
                     SalaryMax = 3800,
                     Currency = "USD",
-                    Source = JobSource.RobotaUa.ToString(),
+                    Source = "RobotaUa",
                     SourceUrl = "https://robota.ua/company123/vacancy-qa-dotnet",
                     SkillsJson = JsonSerializer.Serialize(new[] { "C#", "Playwright", "NUnit", "CI/CD", "REST API" }),
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-3),
@@ -108,7 +107,7 @@ public static class WaterfallDbSeeder
                     LastSeenAt = DateTimeOffset.UtcNow,
                     IsActive = true
                 },
-                new VacancyEntity
+                new VacancyDB
                 {
                     Id = Guid.Parse("55555555-5555-5555-5555-555555555555"),
                     Title = "Lead AI / ML Solutions Engineer",
@@ -122,7 +121,7 @@ public static class WaterfallDbSeeder
                     SalaryMin = 5000,
                     SalaryMax = 7000,
                     Currency = "USD",
-                    Source = JobSource.Dou.ToString(),
+                    Source = "Dou",
                     SourceUrl = "https://jobs.dou.ua/vacancies/example-lead-ai-ml/",
                     SkillsJson = JsonSerializer.Serialize(new[] { "Python", "C#", "PyTorch", "LLM", "Docker", "ONNX" }),
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-4),
@@ -138,16 +137,16 @@ public static class WaterfallDbSeeder
 
         if (!await context.SavedVacancies.AnyAsync())
         {
-            List<SavedVacancyEntity> sampleBookmarks = new List<SavedVacancyEntity>
+            List<SavedVacancyDB> sampleBookmarks = new List<SavedVacancyDB>
             {
-                new SavedVacancyEntity
+                new SavedVacancyDB
                 {
                     Id = Guid.Parse("aaaaaaa1-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
                     VacancyId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
                     Notes = "Пріоритет №1: підготувати сертифікати та стек мікросервісів.",
                     SavedAt = DateTimeOffset.UtcNow.AddHours(-5)
                 },
-                new SavedVacancyEntity
+                new SavedVacancyDB
                 {
                     Id = Guid.Parse("aaaaaaa2-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
                     VacancyId = Guid.Parse("22222222-2222-2222-2222-222222222222"),

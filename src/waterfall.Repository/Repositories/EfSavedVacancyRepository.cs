@@ -4,13 +4,12 @@ using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Data;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
-using Waterfall.Repository.Models.SavedVacancies;
-using Waterfall.Repository.Models.Vacancies;
 
 namespace Waterfall.Repository.Repositories;
 
 /// <summary>
-/// Повноцінний репозиторій збережених вакансій на базі Entity Framework Core.
+/// Репозиторій доступу до збережених вакансій («лайків» / закладок) на базі EF Core.
+/// Працює виключно із сутностями SavedVacancyDB згідно з Clean Architecture.
 /// </summary>
 public class EfSavedVacancyRepository : ISavedVacancyRepository
 {
@@ -21,22 +20,21 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
         _context = context;
     }
 
-    public async Task<IReadOnlyList<SavedVacancyDto>> GetAllAsync(bool onlyActive = true, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SavedVacancyDB>> GetAllAsync(bool onlyActive = true, CancellationToken ct = default)
     {
-        IQueryable<SavedVacancyEntity> baseQuery = _context.SavedVacancies
+        IQueryable<SavedVacancyDB> baseQuery = _context.SavedVacancies
             .AsNoTracking()
             .Include(s => s.Vacancy);
 
-        IQueryable<SavedVacancyEntity> query;
+        IQueryable<SavedVacancyDB> query;
         if (onlyActive)
         {
             query = baseQuery.Where(s => s.Vacancy != null && s.Vacancy.IsActive);
         }
         else
         {
-            // Усі активні + не більше 1000 найновіших архівних збережених вакансій за один запит
-            IQueryable<SavedVacancyEntity> activeQuery = baseQuery.Where(s => s.Vacancy != null && s.Vacancy.IsActive);
-            IQueryable<SavedVacancyEntity> archiveQuery = baseQuery
+            IQueryable<SavedVacancyDB> activeQuery = baseQuery.Where(s => s.Vacancy != null && s.Vacancy.IsActive);
+            IQueryable<SavedVacancyDB> archiveQuery = baseQuery
                 .Where(s => s.Vacancy == null || !s.Vacancy.IsActive)
                 .OrderByDescending(s => s.SavedAt)
                 .Take(1000);
@@ -44,39 +42,36 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
             query = activeQuery.Concat(archiveQuery);
         }
 
-        List<SavedVacancyEntity> entities = await query
+        return await query
             .OrderByDescending(s => s.SavedAt)
             .ToListAsync(ct);
-
-        return entities.Select(MapToDto).ToList();
     }
 
-    public async Task<SavedVacancyDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<SavedVacancyDB?> GetByIdAsync(Guid id, CancellationToken ct = default)
     {
-        SavedVacancyEntity? entity = await _context.SavedVacancies
+        return await _context.SavedVacancies
             .AsNoTracking()
             .Include(s => s.Vacancy)
             .FirstOrDefaultAsync(s => s.Id == id || s.VacancyId == id, ct);
-
-        return entity is null ? null : MapToDto(entity);
     }
 
-    public async Task<SavedVacancyDto> SaveAsync(SaveVacancyRequest request, CancellationToken ct = default)
+    public async Task<SavedVacancyDB> SaveAsync(SavedVacancyDB entity, CancellationToken ct = default)
     {
-        Guid id = Guid.NewGuid();
-        SavedVacancyEntity entity = new SavedVacancyEntity
+        if (entity.Id == Guid.Empty)
         {
-            Id = id,
-            VacancyId = request.VacancyId,
-            Notes = request.Notes?.Trim(),
-            SavedAt = DateTimeOffset.UtcNow
-        };
+            entity.Id = Guid.NewGuid();
+        }
+
+        if (entity.SavedAt == default)
+        {
+            entity.SavedAt = DateTimeOffset.UtcNow;
+        }
 
         _context.SavedVacancies.Add(entity);
 
-        VacancyEntity? vacancy = await _context.Vacancies
+        VacancyDB? vacancy = await _context.Vacancies
             .AsNoTracking()
-            .FirstOrDefaultAsync(v => v.Id == request.VacancyId, ct);
+            .FirstOrDefaultAsync(v => v.Id == entity.VacancyId, ct);
 
         if (vacancy != null)
         {
@@ -84,13 +79,12 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
         }
 
         await _context.SaveChangesAsync(ct);
-
-        return MapToDto(entity);
+        return entity;
     }
 
     public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
     {
-        SavedVacancyEntity? entity = await _context.SavedVacancies
+        SavedVacancyDB? entity = await _context.SavedVacancies
             .FirstOrDefaultAsync(s => s.Id == id || s.VacancyId == id, ct);
 
         if (entity is null)
@@ -108,17 +102,20 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
         return await _context.SavedVacancies.AnyAsync(s => s.VacancyId == vacancyId, ct);
     }
 
-    private static SavedVacancyDto MapToDto(SavedVacancyEntity entity)
+    public async Task<HashSet<Guid>> GetSavedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, CancellationToken ct = default)
     {
-        VacancyDto? vacancyDto = entity.Vacancy != null ? EfVacancyRepository.MapToDto(entity.Vacancy, isSaved: true) : null;
-
-        return new SavedVacancyDto
+        List<Guid> ids = vacancyIds.ToList();
+        if (ids.Count == 0)
         {
-            Id = entity.Id,
-            VacancyId = entity.VacancyId,
-            Vacancy = vacancyDto,
-            Notes = entity.Notes,
-            SavedAt = entity.SavedAt
-        };
+            return new HashSet<Guid>();
+        }
+
+        List<Guid> found = await _context.SavedVacancies
+            .AsNoTracking()
+            .Where(s => ids.Contains(s.VacancyId))
+            .Select(s => s.VacancyId)
+            .ToListAsync(ct);
+
+        return found.ToHashSet();
     }
 }

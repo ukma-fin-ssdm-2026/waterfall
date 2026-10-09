@@ -16,8 +16,8 @@ public class WaterfallDbContext : DbContext
     {
     }
 
-    public DbSet<VacancyEntity> Vacancies => Set<VacancyEntity>();
-    public DbSet<SavedVacancyEntity> SavedVacancies => Set<SavedVacancyEntity>();
+    public DbSet<VacancyDB> Vacancies => Set<VacancyDB>();
+    public DbSet<SavedVacancyDB> SavedVacancies => Set<SavedVacancyDB>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

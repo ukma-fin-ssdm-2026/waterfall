@@ -14,7 +14,7 @@ namespace Waterfall.Repository.Entities;
 [Index(nameof(PublishedAt))]
 [Index(nameof(IsActive))]
 [Index(nameof(Source))]
-public class VacancyEntity
+public class VacancyDB
 {
     [Key]
     public Guid Id { get; set; }
@@ -64,6 +64,7 @@ public class VacancyEntity
     [Required]
     [MaxLength(1000)]
     public string SourceUrl { get; set; } = string.Empty;
+
     public string SkillsJson { get; set; } = "[]";
 
     public DateTimeOffset PublishedAt { get; set; } = DateTimeOffset.UtcNow;

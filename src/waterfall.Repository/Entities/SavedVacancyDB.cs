@@ -6,10 +6,10 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace Waterfall.Repository.Entities;
 
 /// <summary>
-/// Сутність збереженої вакансії (обране / закладка) шукача роботи.
+/// Сутність збереженої вакансії (обране / закладка) шукача роботи в базі даних.
 /// </summary>
 [Table("SavedVacancies")]
-public class SavedVacancyEntity
+public class SavedVacancyDB
 {
     [Key]
     public Guid Id { get; set; }
@@ -24,5 +24,5 @@ public class SavedVacancyEntity
     public DateTimeOffset SavedAt { get; set; } = DateTimeOffset.UtcNow;
 
     [ForeignKey(nameof(VacancyId))]
-    public VacancyEntity Vacancy { get; set; } = null!;
+    public VacancyDB Vacancy { get; set; } = null!;
 }
