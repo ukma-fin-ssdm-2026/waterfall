@@ -126,7 +126,7 @@ paths:
           in: query
           description: Номер запитуваної сторінки (починається з 1).
           schema:
-            maximum: 2147483647
+            maximum: 100000
             minimum: 1
             type: integer
             format: int32
@@ -348,6 +348,7 @@ components:
       required:
         - category
         - company
+        - currency
         - description
         - location
         - source
@@ -368,6 +369,7 @@ components:
           description: Назва компанії-роботодавця (від 2 до 100 символів).
           example: FinTech Solutions UA
         description:
+          maxLength: 10000
           minLength: 20
           type: string
           description: Повний зміст опису та вимог до кандидата (щонайменше 20 символів).
@@ -424,19 +426,21 @@ components:
         currency:
           maxLength: 3
           minLength: 3
+          pattern: '^[A-Za-z]{3}$'
           type: string
           description: 'Валюта заробітної плати (3 символи ISO, наприклад USD, EUR, UAH).'
-          nullable: true
           example: USD
         source:
           $ref: '#/components/schemas/JobSource'
         source_url:
+          maxLength: 2048
           minLength: 1
           type: string
           description: Пряме посилання на першоджерело публікації.
           format: uri
           example: https://example.com/careers/senior-dotnet
         skills:
+          maxItems: 30
           type: array
           items:
             type: string
@@ -528,6 +532,7 @@ components:
       required:
         - category
         - company
+        - currency
         - description
         - location
         - title
@@ -546,6 +551,7 @@ components:
           description: Оновлена назва компанії (від 2 до 100 символів).
           example: FinTech Solutions UA
         description:
+          maxLength: 10000
           minLength: 20
           type: string
           description: Повний зміст опису та вимог.
@@ -602,11 +608,12 @@ components:
         currency:
           maxLength: 3
           minLength: 3
+          pattern: '^[A-Za-z]{3}$'
           type: string
           description: Валюта заробітної плати (3 символи ISO).
-          nullable: true
           example: USD
         skills:
+          maxItems: 30
           type: array
           items:
             type: string

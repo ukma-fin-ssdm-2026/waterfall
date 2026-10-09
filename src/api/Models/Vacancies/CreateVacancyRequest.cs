@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// Посилено валідацію вхідних даних (issue #49); перевірено: прогін негативних тест-кейсів через Swagger UI (docs/api/quality-attributes.md, розділ 6)
 
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
@@ -33,6 +34,7 @@ public class CreateVacancyRequest : IValidatableObject
     /// <example>Розробка надійних фінансових сервісів та інтеграція платіжних систем на .NET.</example>
     [Required(ErrorMessage = "Поле description є обов'язковим.")]
     [MinLength(20, ErrorMessage = "Опис вакансії повинен містити щонайменше 20 символів.")]
+    [MaxLength(10_000, ErrorMessage = "Опис вакансії не може перевищувати 10 000 символів.")]
     [JsonPropertyName("description")]
     public string Description { get; set; } = string.Empty;
 
@@ -98,7 +100,9 @@ public class CreateVacancyRequest : IValidatableObject
     /// Валюта заробітної плати (3 символи ISO, наприклад USD, EUR, UAH).
     /// </summary>
     /// <example>USD</example>
+    [Required(ErrorMessage = "Поле currency не може бути null.")]
     [StringLength(3, MinimumLength = 3, ErrorMessage = "Валюта повинна містити рівно 3 літери ISO коду (наприклад: USD, UAH).")]
+    [RegularExpression("^[A-Za-z]{3}$", ErrorMessage = "Валюта має складатися лише з трьох латинських літер (USD, EUR, UAH).")]
     [JsonPropertyName("currency")]
     public string Currency { get; set; } = "USD";
 
@@ -106,9 +110,11 @@ public class CreateVacancyRequest : IValidatableObject
     /// Первинне джерело агрегації даних.
     /// </summary>
     /// <example>Djinni</example>
+    // Значення enum починаються з 1, тож пропущене поле дає 0 і не проходить EnumDataType
     [Required(ErrorMessage = "Поле source є обов'язковим.")]
+    [EnumDataType(typeof(JobSource), ErrorMessage = "Поле source має бути одним із значень: WorkUa, RobotaUa, Djinni, Dou.")]
     [JsonPropertyName("source")]
-    public JobSource Source { get; set; } = JobSource.Djinni;
+    public JobSource Source { get; set; }
 
     /// <summary>
     /// Пряме посилання на першоджерело публікації.
@@ -116,6 +122,7 @@ public class CreateVacancyRequest : IValidatableObject
     /// <example>https://example.com/careers/senior-dotnet</example>
     [Required(ErrorMessage = "Поле source_url є обов'язковим.")]
     [Url(ErrorMessage = "Посилання source_url повинно мати дійсний формат URL.")]
+    [StringLength(2048, MinimumLength = 1, ErrorMessage = "Посилання source_url не може перевищувати 2048 символів.")]
     [JsonPropertyName("source_url")]
     public string SourceUrl { get; set; } = string.Empty;
 
@@ -123,6 +130,7 @@ public class CreateVacancyRequest : IValidatableObject
     /// Список ключових навичок.
     /// </summary>
     /// <example>["C#", ".NET", "Architecture", "PostgreSQL"]</example>
+    [MaxLength(30, ErrorMessage = "Список skills не може містити більше 30 навичок.")]
     [JsonPropertyName("skills")]
     public List<string> Skills { get; set; } = [];
 
@@ -132,7 +140,15 @@ public class CreateVacancyRequest : IValidatableObject
         {
             yield return new ValidationResult(
                 "Мінімальна заробітна плата (salary_min) не може перевищувати максимальну (salary_max).",
-                [nameof(SalaryMin), nameof(SalaryMax)]);
+                ["salary_min", "salary_max"]);
+        }
+
+        // Порожня навичка ламала б пошук за skills для всіх користувачів
+        if (Skills is not null && Skills.Any(skill => string.IsNullOrWhiteSpace(skill) || skill.Length > 50))
+        {
+            yield return new ValidationResult(
+                "Кожна навичка у skills має бути непорожнім рядком до 50 символів.",
+                ["skills"]);
         }
     }
 }

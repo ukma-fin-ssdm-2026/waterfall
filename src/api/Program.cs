@@ -1,17 +1,31 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// Посилено валідацію вхідних даних (issue #49); перевірено: прогін негативних тест-кейсів через Swagger UI (docs/api/quality-attributes.md, розділ 6)
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using Microsoft.Extensions.Primitives;
 using Microsoft.OpenApi;
 using System.Reflection;
+using System.Text.Json;
 using Waterfall.Api.Models.Common;
 using Waterfall.Api.Services;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // 1. Реєстрація контролерів у DI-контейнері та налаштування стандартизованої обробки помилок валідації
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        // Без snake_case ключ валідації розходився з ключем біндингу, і валідний запит ?page_size=1 отримував 400.
+        options.ModelMetadataDetailsProviders.Add(
+            new SystemTextJsonValidationMetadataProvider(JsonNamingPolicy.SnakeCaseLower));
+
+        // Обов'язкові поля DTO позначені [Required] явно; без цього рядка до кожної помилки тіла
+        // додавався зайвий запис "The request field is required."
+        options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+    })
+    // Не віддаємо клієнту тексти внутрішніх винятків десеріалізатора (типи .NET, номери рядків)
+    .AddJsonOptions(options => options.AllowInputFormatterExceptionMessages = false)
     .ConfigureApiBehaviorOptions(options =>
     {
         // Перевизначаємо стандартну фабрику відповідей на помилки валідації від Microsoft
@@ -40,8 +54,9 @@ builder.Services.AddControllers()
                         // Додаємо інформацію про помилку у наш список деталей:
                         details.Add(new ValidationErrorDetail
                         {
-                            // char.ToLowerInvariant(key[0]) + key[1..] перетворює першу літеру на малу: "Title" -> "title" (вимога camelCase для JSON)
-                            Field = char.ToLowerInvariant(key[0]) + key[1..],
+                            // Порожній ключ або "$" — помилка всього тіла (наприклад, порожнє тіло чи зламаний JSON);
+                            // "$.salary_min" — помилка десеріалізації конкретного поля
+                            Field = ToFieldName(key),
 
                             // Текст помилки, який ми вказали в анотації моделі (ErrorMessage)
                             Message = error.ErrorMessage,
@@ -152,3 +167,20 @@ OpenApiGenerator.ExportOpenApiYaml(app.Services, app.Environment, app.Logger);
 if (args.Contains("--generate-openapi-and-exit")) return;
 
 app.Run();
+
+// Перетворює ключ ModelState на назву поля для відповіді. Без перевірки на порожній ключ
+// запит з порожнім тілом падає з IndexOutOfRangeException і повертає 500 замість 400.
+static string ToFieldName(string? key)
+{
+    if (string.IsNullOrEmpty(key) || key == "$")
+    {
+        return "body";
+    }
+
+    if (key.StartsWith("$.", StringComparison.Ordinal))
+    {
+        return key[2..];
+    }
+
+    return char.ToLowerInvariant(key[0]) + key[1..];
+}

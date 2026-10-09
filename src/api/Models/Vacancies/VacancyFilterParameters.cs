@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// Посилено валідацію вхідних даних (issue #49); перевірено: прогін негативних тест-кейсів через Swagger UI (docs/api/quality-attributes.md, розділ 6)
 
 using Microsoft.AspNetCore.Mvc;
 using System.ComponentModel.DataAnnotations;
@@ -14,7 +15,8 @@ public class VacancyFilterParameters : IValidatableObject
     /// </summary>
     /// <example>1</example>
     [FromQuery(Name = "page")]
-    [Range(1, int.MaxValue, ErrorMessage = "Номер сторінки 'page' повинен бути щонайменше 1.")]
+    // Верхня межа не дає (page - 1) * page_size переповнити int під час пагінації
+    [Range(1, 100_000, ErrorMessage = "Номер сторінки 'page' повинен бути в межах від 1 до 100 000.")]
     public int Page { get; set; } = 1;
 
     /// <summary>
@@ -78,7 +80,7 @@ public class VacancyFilterParameters : IValidatableObject
         {
             yield return new ValidationResult(
                 "Параметр 'min_salary' не може перевищувати 'max_salary'.",
-                [nameof(MinSalary), nameof(MaxSalary)]);
+                ["min_salary", "max_salary"]);
         }
     }
 }
