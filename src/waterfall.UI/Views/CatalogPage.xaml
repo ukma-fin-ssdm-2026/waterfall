@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
+             xmlns:controls="clr-namespace:waterfall.UI.Controls"
+             x:Class="waterfall.UI.Views.CatalogPage"
+             x:DataType="vm:CatalogViewModel"
+             Title="Каталог">
+
+    <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+        <SearchBar Text="{Binding SearchText}"
+                   SearchCommand="{Binding SearchCommand}"
+                   Placeholder="Посада, компанія або навичка"
+                   Margin="8,8,8,0" />
+
+        <Border Grid.Row="1"
+                IsVisible="{Binding HasError}"
+                Style="{StaticResource ErrorBanner}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <Label Text="{Binding ErrorMessage}"
+                       VerticalOptions="Center"
+                       Style="{StaticResource ErrorLabel}" />
+                <Button Grid.Column="1"
+                        Text="Повторити"
+                        Command="{Binding RetryCommand}"
+                        Style="{StaticResource CardAction}" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2" Padding="16,8" ColumnDefinitions="*,Auto">
+            <Label Text="{Binding TotalText}"
+                   IsVisible="{Binding ShowTotal}"
+                   Style="{StaticResource MutedLabel}" />
+            <ActivityIndicator Grid.Column="1"
+                               IsRunning="{Binding IsLoading}"
+                               IsVisible="{Binding IsLoading}"
+                               HeightRequest="20"
+                               WidthRequest="20" />
+        </Grid>
+
+        <RefreshView Grid.Row="3"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+            <CollectionView ItemsSource="{Binding Vacancies}"
+                            SelectionMode="None"
+                            RemainingItemsThreshold="5"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:VacancyItemViewModel">
+                        <controls:VacancyCard />
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout Padding="32"
+                                         Spacing="4"
+                                         IsVisible="{Binding IsEmpty}">
+                        <Label Text="Нічого не знайдено"
+                               HorizontalOptions="Center"
+                               Style="{StaticResource CardTitle}" />
+                        <Label Text="Спробуйте інший запит"
+                               HorizontalOptions="Center"
+                               Style="{StaticResource MutedLabel}" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+
+                <CollectionView.Footer>
+                    <ActivityIndicator IsRunning="{Binding IsLoadingMore}"
+                                       IsVisible="{Binding IsLoadingMore}"
+                                       Margin="0,8,0,16" />
+                </CollectionView.Footer>
+            </CollectionView>
+        </RefreshView>
+    </Grid>
+</ContentPage>

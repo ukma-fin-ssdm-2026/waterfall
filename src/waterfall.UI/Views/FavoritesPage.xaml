@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
+             xmlns:controls="clr-namespace:waterfall.UI.Controls"
+             x:Class="waterfall.UI.Views.FavoritesPage"
+             x:DataType="vm:FavoritesViewModel"
+             Title="Обране">
+
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <Border IsVisible="{Binding HasError}"
+                Style="{StaticResource ErrorBanner}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <Label Text="{Binding ErrorMessage}"
+                       VerticalOptions="Center"
+                       Style="{StaticResource ErrorLabel}" />
+                <Button Grid.Column="1"
+                        Text="Повторити"
+                        Command="{Binding LoadCommand}"
+                        Style="{StaticResource CardAction}" />
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="1" Padding="16,8" ColumnDefinitions="*,Auto">
+            <Label Text="{Binding TotalText}"
+                   IsVisible="{Binding ShowTotal}"
+                   Style="{StaticResource MutedLabel}" />
+            <ActivityIndicator Grid.Column="1"
+                               IsRunning="{Binding IsLoading}"
+                               IsVisible="{Binding IsLoading}"
+                               HeightRequest="20"
+                               WidthRequest="20" />
+        </Grid>
+
+        <RefreshView Grid.Row="2"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+            <CollectionView ItemsSource="{Binding Vacancies}"
+                            SelectionMode="None">
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:VacancyItemViewModel">
+                        <controls:VacancyCard />
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout Padding="32"
+                                         Spacing="4"
+                                         IsVisible="{Binding IsEmpty}">
+                        <Label Text="Тут поки порожньо"
+                               HorizontalOptions="Center"
+                               Style="{StaticResource CardTitle}" />
+                        <Label Text="Зберігайте вакансії кнопкою «☆ Зберегти» у каталозі"
+                               HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center"
+                               Style="{StaticResource MutedLabel}" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+            </CollectionView>
+        </RefreshView>
+    </Grid>
+</ContentPage>
