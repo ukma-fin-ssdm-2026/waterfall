@@ -122,10 +122,11 @@ public record UpdateVacancyRequest : IValidatableObject
                 ["source"]);
         }
 
-        if (Skills is not null && Skills.Any(skill => string.IsNullOrWhiteSpace(skill) || skill.Length > 50))
+        // Порожні навички допустимі: вони зберігаються, але не потрапляють під пошук
+        if (Skills is not null && Skills.Any(skill => skill is not null && skill.Length > 50))
         {
             yield return new ValidationResult(
-                "Кожна навичка у skills має бути непорожнім рядком до 50 символів",
+                "Кожна навичка у skills не може перевищувати 50 символів",
                 ["skills"]);
         }
     }
