@@ -15,10 +15,10 @@ public interface ISavedVacancyRepository
     /// </summary>
     /// <param name="onlyActive">Якщо true — повертає тільки збережені вакансії, що залишаються активними. Якщо false — повертає всі, включаючи закриті (архівні, максимум 1000).</param>
     /// <param name="ct">Токен скасування операції.</param>
-    Task<IReadOnlyList<SavedVacancyDB>> GetAllAsync(bool onlyActive = true, CancellationToken ct = default);
-    Task<SavedVacancyDB?> GetByIdAsync(Guid id, CancellationToken ct = default);
+    Task<IReadOnlyList<SavedVacancyDB>> GetAllAsync(Guid userId, bool onlyActive = true, CancellationToken ct = default);
+    Task<SavedVacancyDB?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default);
     Task<SavedVacancyDB> SaveAsync(SavedVacancyDB entity, CancellationToken ct = default);
-    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
-    Task<bool> ExistsForVacancyAsync(Guid vacancyId, CancellationToken ct = default);
-    Task<HashSet<Guid>> GetSavedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default);
+    Task<bool> ExistsForVacancyAsync(Guid vacancyId, Guid? userId, CancellationToken ct = default);
+    Task<HashSet<Guid>> GetSavedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, Guid userId, CancellationToken ct = default);
 }
