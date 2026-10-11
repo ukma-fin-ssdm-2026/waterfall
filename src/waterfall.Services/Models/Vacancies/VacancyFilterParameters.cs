@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: посилено валідацію вхідних даних (issue #49); перевірено: прогін негативних тест-кейсів (docs/api/quality-attributes.md, розділ 6)
 
 using System.ComponentModel.DataAnnotations;
 
@@ -7,7 +8,7 @@ namespace Waterfall.Services.Models.Vacancies;
 /// <summary>
 /// Параметри фільтрації, сортування та пагінації для пошуку вакансій.
 /// </summary>
-public class VacancyFilterParameters
+public class VacancyFilterParameters : IValidatableObject
 {
     private int _page = 1;
     private int _pageSize = 10;
@@ -16,7 +17,8 @@ public class VacancyFilterParameters
     /// Номер запитуваної сторінки (нумерація з 1).
     /// </summary>
     /// <example>1</example>
-    [Range(1, int.MaxValue, ErrorMessage = "Номер сторінки повинен бути більше або дорівнювати 1")]
+    // Верхня межа не дає (page - 1) * pageSize переповнити int: від'ємний OFFSET на SQL Server — це 500
+    [Range(1, 100_000, ErrorMessage = "Номер сторінки повинен бути в межах від 1 до 100 000")]
     public int Page
     {
         get => _page;
@@ -43,12 +45,14 @@ public class VacancyFilterParameters
     /// Пошуковий запит (пошук за назвою посади, компанією або навичками).
     /// </summary>
     /// <example>.NET</example>
+    [StringLength(100, ErrorMessage = "Довжина search не може перевищувати 100 символів")]
     public string? Search { get; set; }
 
     /// <summary>
     /// Фільтр за категорією/спеціалізацією (.NET, QA, Frontend, DevOps).
     /// </summary>
     /// <example>.NET</example>
+    [StringLength(100, ErrorMessage = "Довжина category не може перевищувати 100 символів")]
     public string? Category { get; set; }
 
     /// <summary>
@@ -69,6 +73,7 @@ public class VacancyFilterParameters
     /// Фільтр за необхідним досвідом.
     /// </summary>
     /// <example>3+ роки</example>
+    [StringLength(100, ErrorMessage = "Довжина experience не може перевищувати 100 символів")]
     public string? Experience { get; set; }
 
     /// <summary>
@@ -93,4 +98,14 @@ public class VacancyFilterParameters
     /// Напрямок сортування (asc, desc).
     /// </summary>
     public string? SortOrder { get; set; }
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (MinSalary.HasValue && MaxSalary.HasValue && MinSalary > MaxSalary)
+        {
+            yield return new ValidationResult(
+                "minSalary не може перевищувати maxSalary",
+                ["minSalary", "maxSalary"]);
+        }
+    }
 }

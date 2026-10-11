@@ -212,7 +212,7 @@ paths:
           in: query
           description: Номер запитуваної сторінки (нумерація з 1).
           schema:
-            maximum: 2147483647
+            maximum: 100000
             minimum: 1
             type: integer
             format: int32
@@ -232,6 +232,8 @@ paths:
           in: query
           description: 'Пошуковий запит (пошук за назвою посади, компанією або навичками).'
           schema:
+            maxLength: 100
+            minLength: 0
             type: string
             example: .NET
           example: .NET
@@ -239,6 +241,8 @@ paths:
           in: query
           description: 'Фільтр за категорією/спеціалізацією (.NET, QA, Frontend, DevOps).'
           schema:
+            maxLength: 100
+            minLength: 0
             type: string
             example: .NET
           example: .NET
@@ -266,6 +270,8 @@ paths:
           in: query
           description: Фільтр за необхідним досвідом.
           schema:
+            maxLength: 100
+            minLength: 0
             type: string
             example: 3+ роки
           example: 3+ роки
@@ -491,6 +497,7 @@ components:
           description: Назва компанії-роботодавця.
           example: Genesis Tech
         description:
+          maxLength: 10000
           minLength: 10
           type: string
           description: Повний опис вакансії.
@@ -553,12 +560,14 @@ components:
         source:
           $ref: '#/components/schemas/JobSource'
         sourceUrl:
+          maxLength: 2048
           minLength: 1
           type: string
           description: Посилання на оригінал вакансії.
           format: uri
           example: https://djinni.co/jobs/example/
         skills:
+          maxItems: 30
           type: array
           items:
             type: string
@@ -593,14 +602,13 @@ components:
       additionalProperties: false
     JobSource:
       enum:
-        - 0
-        - 1
-        - 2
-        - 3
-        - 4
-      type: integer
+        - Unknown
+        - WorkUa
+        - RobotaUa
+        - Djinni
+        - Dou
+      type: string
       description: Джерело походження вакансії (платформа агрегації).
-      format: int32
     LoginRequest:
       required:
         - email
@@ -707,6 +715,7 @@ components:
           nullable: true
           example: Genesis Tech
         description:
+          maxLength: 10000
           minLength: 10
           type: string
           description: Повний опис вакансії.
@@ -766,11 +775,14 @@ components:
         source:
           $ref: '#/components/schemas/JobSource'
         sourceUrl:
+          maxLength: 2048
+          minLength: 1
           type: string
           description: Посилання на оригінал вакансії.
           format: uri
           nullable: true
         skills:
+          maxItems: 30
           type: array
           items:
             type: string
@@ -784,11 +796,10 @@ components:
       description: Модель запиту на оновлення існуючої вакансії (PUT/PATCH).
     UserRole:
       enum:
-        - 0
-        - 1
-      type: integer
+        - JobSeeker
+        - Analyst
+      type: string
       description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\n1 = Analyst (доступ до агрегованої аналітики)."
-      format: int32
     VacancyDto:
       type: object
       properties:
