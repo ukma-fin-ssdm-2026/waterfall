@@ -1,5 +1,7 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using Waterfall.Api.Models.Common;
@@ -32,6 +34,20 @@ public abstract class ApiControllerBase : ControllerBase
 
 
             return HttpContext.TraceIdentifier;
+        }
+    }
+
+    /// <summary>
+    /// Ідентифікатор залогіненого користувача з JWT (`sub`, запасний — `userId`).
+    /// Null для анонімних запитів.
+    /// </summary>
+    protected Guid? CurrentUserId
+    {
+        get
+        {
+            string? raw = User.FindFirstValue(JwtRegisteredClaimNames.Sub)
+                ?? User.FindFirstValue("userId");
+            return Guid.TryParse(raw, out Guid id) ? id : null;
         }
     }
 

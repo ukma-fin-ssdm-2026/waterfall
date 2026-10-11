@@ -10,8 +10,8 @@ namespace Waterfall.Services.Interfaces;
 /// </summary>
 public interface ISavedVacancyService
 {
-    Task<IReadOnlyList<SavedVacancyDto>> GetAllAsync(bool onlyActive = true, CancellationToken ct = default);
-    Task<SavedVacancyDto?> GetByIdAsync(Guid id, CancellationToken ct = default);
-    Task<SavedVacancyDto> SaveAsync(SaveVacancyRequest request, CancellationToken ct = default);
-    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+    Task<IReadOnlyList<SavedVacancyDto>> GetAllAsync(Guid userId, bool onlyActive = true, CancellationToken ct = default);
+    Task<SavedVacancyDto?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default);
+    Task<SavedVacancyDto> SaveAsync(SaveVacancyRequest request, Guid userId, CancellationToken ct = default);
+    Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default);
 }

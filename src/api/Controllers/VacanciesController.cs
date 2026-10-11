@@ -50,7 +50,7 @@ public class VacanciesController : ApiControllerBase
         _logger.LogInformation("Отримання вакансій: сторінка {Page}, розмір {PageSize}, фільтр search='{Search}'",
             filter.Page, filter.PageSize, filter.Search);
 
-        PagedResult<VacancyDto> result = await _vacancyService.GetAllAsync(filter, ct);
+        PagedResult<VacancyDto> result = await _vacancyService.GetAllAsync(filter, ct, CurrentUserId);
         return Ok(result);
     }
 
@@ -71,7 +71,7 @@ public class VacanciesController : ApiControllerBase
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
     public async Task<ActionResult<VacancyDto>> GetById([FromRoute] Guid id, CancellationToken ct)
     {
-        VacancyDto? vacancy = await _vacancyService.GetByIdAsync(id, ct);
+        VacancyDto? vacancy = await _vacancyService.GetByIdAsync(id, ct, CurrentUserId);
         if (vacancy is null)
         {
             return ErrorNotFound($"Вакансію з ID '{id}' не знайдено в каталозі.");
