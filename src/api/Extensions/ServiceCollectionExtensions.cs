@@ -1,8 +1,8 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
-using System.Text;
 using Waterfall.Api.Options;
 using Waterfall.Api.Services;
 using Waterfall.Services.Interfaces;
