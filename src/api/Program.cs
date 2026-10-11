@@ -6,6 +6,7 @@ using Microsoft.Extensions.Primitives;
 using Microsoft.OpenApi;
 using System.Reflection;
 using System.Text.Json.Serialization;
+using Waterfall.Api.Extensions;
 using Waterfall.Api.Models.Common;
 using Waterfall.Api.Services;
 using Waterfall.Repository.Data;
@@ -99,6 +100,12 @@ builder.Services.AddControllers(options =>
 // 2. Реєстрація інфраструктури (EF Core SQLite/MSSQL) та сервісів кешування (In-Memory Cache-Aside)
 builder.Services.AddWaterfallServices(builder.Configuration);
 
+// 2b. JWT Bearer, auth-сервіси та перевірка секретів (fail-fast, THR-09).
+// Генерація docs (--generate-openapi-and-exit) свідомо пропускає перевірку ключа:
+// секрет не впливає на форму YAML, а docs не повинні вимагати секретів.
+builder.Services.AddWaterfallAuth(builder.Configuration,
+    validateConfiguration: !args.Contains("--generate-openapi-and-exit"));
+
 // 3. Налаштування CORS для браузерних клієнтів та Swagger UI
 builder.Services.AddCors(options =>
 {
@@ -142,6 +149,29 @@ builder.Services.AddSwaggerGen(c =>
     {
         c.IncludeXmlComments(servicesXmlPath);
     }
+
+    // JWT Bearer в Swagger UI (кнопка Authorize): запити з ендпоінтів шлють Authorization: Bearer <JWT>.
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT у заголовку Authorization. Формат: 'Bearer {token}'.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT"
+    });
+    c.AddSecurityRequirement(document => new OpenApiSecurityRequirement
+    {
+        [new OpenApiSecuritySchemeReference("Bearer", document)] = []
+    });
+
+    // Сервер за замовчуванням для try-it-out зі статичної сторінки docs/api/index.html
+    // (живий Swagger на /api-docs використовує той самий; потрібен запущений API).
+    c.AddServer(new OpenApiServer
+    {
+        Url = "http://localhost:3000",
+        Description = "Локальний сервер розробки"
+    });
 });
 
 WebApplication app = builder.Build();
@@ -183,6 +213,7 @@ app.MapGet("/", () => Results.Redirect("/api-docs"));
 app.UseCors("AllowAll");
 
 
+app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 

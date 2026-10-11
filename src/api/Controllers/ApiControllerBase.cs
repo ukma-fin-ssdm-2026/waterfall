@@ -76,6 +76,25 @@ public abstract class ApiControllerBase : ControllerBase
     }
 
     /// <summary>
+    /// Власний хелпер для повернення помилки 401 Unauthorized.
+    /// Використовується при невдалій автентифікації (невідомий email або невірний пароль —
+    /// навмисно однакове повідомлення, THR-01).
+    /// Формує відповідь з кодом "UNAUTHORIZED" та RequestId.
+    /// </summary>
+    /// <param name="message">Узагальнений опис причини (без розкриття, який саме фактор невірний).</param>
+    protected UnauthorizedObjectResult ErrorUnauthorized(string message)
+    {
+        // Створюємо власну структуру помилки
+        ApiErrorResponse error = ApiErrorResponse.Create(
+            code: "UNAUTHORIZED",
+            message: message,
+            requestId: RequestId);
+
+        // Повертаємо HTTP 401 разом із нашим уніфікованим JSON
+        return Unauthorized(error);
+    }
+
+    /// <summary>
     /// Власний хелпер для повернення помилки 409 Conflict.
     /// Використовується при конфлікті стану ресурсу (наприклад, спроба повторно зберегти вже збережену вакансію).
     /// Формує відповідь з кодом "CONFLICT" та RequestId.

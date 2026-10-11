@@ -158,5 +158,45 @@ public static class WaterfallDbSeeder
             await context.SavedVacancies.AddRangeAsync(sampleBookmarks);
             await context.SaveChangesAsync();
         }
+
+        // Тестові облікові записи лише для локальної розробки.
+        // Гілка закрита за умовою провайдер - sqlite, щоб дані не потрапили в продакшн.
+        if (context.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite"
+            && !await context.Users.AnyAsync())
+        {
+            List<UserDB> devUsers = new List<UserDB>
+            {
+                new UserDB
+                {
+                    Id = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
+                    Email = "seeker1@waterfall.com",
+                    // Пароль: DevSeeker1234
+                    PasswordHash = "AQAAAAIAAYagAAAAELS0tART4w8CokOL0gSzcJAqi4a6nUzSZ1EUrjXd9NCvtkgXpXLMayG5mhBYhvqR3w==",
+                    Role = "JobSeeker",
+                    CreatedAt = DateTimeOffset.UtcNow.AddDays(-32)
+                },
+                new UserDB
+                {
+                    Id = Guid.Parse("66666666-6666-6666-6666-66666666666b"),
+                    Email = "seeker2@waterfall.com",
+                    // Пароль: DevSeeker1234
+                    PasswordHash = "AQAAAAIAAYagAAAAELS0tART4w8CokOL0gSzcJAqi4a6nUzSZ1EUrjXd9NCvtkgXpXLMayG5mhBYhvqR3w==",
+                    Role = "JobSeeker",
+                    CreatedAt = DateTimeOffset.UtcNow.AddDays(-31)
+                },
+                new UserDB
+                {
+                    Id = Guid.Parse("77777777-7777-7777-7777-777777777777"),
+                    Email = "analyst@waterfall.com",
+                    // Пароль: DevAnalyst1234
+                    PasswordHash = "AQAAAAIAAYagAAAAENr1KdZ+sdpNXwmI+lat+FdNpqQHqwYlOmp2NoEA0Y7SCKmzka7ScgPXoZOWxJJ6bA==",
+                    Role = "Analyst",
+                    CreatedAt = DateTimeOffset.UtcNow.AddDays(-30)
+                }
+            };
+
+            await context.Users.AddRangeAsync(devUsers);
+            await context.SaveChangesAsync();
+        }
     }
 }
