@@ -1,0 +1,10 @@
+# Хуки pre-commit (TeamCharter §9.2). Встановлення одноразово:
+#   pip install pre-commit   (або: uv tool install pre-commit / pipx install pre-commit)
+#   pre-commit install
+# Перевірка всього репозиторію вручну: pre-commit run --all-files
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      # Сканує застосовані до коміту зміни і блокує коміт, якщо знайдено секрет.
+      - id: gitleaks
