@@ -77,7 +77,7 @@
 Журнали застосунку записуються у стандартний вивід і зберігаються на сервері. Логування email-адрес перетворює лог-файли на незахищене сховище персональних даних (ПД). У разі компрометації доступу до серверних логів або систем централізованого збору журналів (ELK, Seq, Grafana Loki) зловмисник отримує готову базу адрес користувачів платформи, що порушує вимоги GDPR та принцип конфіденційності. Крім того, наявність email у логах спрощує атаки типу credential stuffing.
 
 ### 4. Як виправлено (код до / після):
-Вразливість повністю виправлено в комміті `e6ede5d`: чутливі дані прибрано з журналів; після успішних операцій фіксується виключно сурогатний ідентифікатор `UserId` (GUID), який не розкриває персональних даних.
+Вразливість повністю виправлено в коміті `e6ede5d`: чутливі дані прибрано з журналів; після успішних операцій фіксується виключно сурогатний ідентифікатор `UserId` (GUID), який не розкриває персональних даних.
 
 #### Код ДО виправлення:
 ```csharp
@@ -103,6 +103,39 @@ _logger.LogWarning("Спроба реєстрації на вже зайняту
 _logger.LogInformation("Користувача зареєстровано: {UserId}", entity.Id);
 _logger.LogWarning("Невдала спроба входу.");
 _logger.LogInformation("Успішний вхід: {UserId}", user.Id);
+```
+
+### 5. Регресійний тест та Pull Request (Remediation PR):
+Вразливість та її запобігання зафіксовано разом із регресійним тестом, який підтверджує захист від повторної появи проблеми в CI:
+
+- **Посилання на Pull Request:** [Pull Request #71: fix(security): resolve CWE-532 sensitive logging with regression test](https://github.com/ukma-fin-ssdm-2026/waterfall/pull/71) (робоча гілка: `fix/security-cwe-532-sensitive-logging`).
+- **Файл регресійного тесту:** [`tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs).
+- **Механізм перевірки:**  
+Тест верифікує виконання тверджень `Assert.DoesNotContain(SensitiveEmail, logEntry)` та `Assert.DoesNotContain(SensitivePassword, logEntry)`.
+
+#### Результат запуску тесту ДО виправлення (Тест ПАДАЄ — Red State):
+При поверненні вихідного логування (`_logger.LogInformation("Запит реєстрації: {Email}", request.Email)`) регресійний тест миттєво падає, сигналізуючи про витік персональних даних:
+```text
+[xUnit.net 00:00:01.83] Waterfall.Security.Tests.SensitiveLoggingRegressionTests.AuthController_ShouldNotLogSensitiveEmail_RegressionTest [FAIL]
+  Не пройдено Waterfall.Security.Tests.SensitiveLoggingRegressionTests.AuthController_ShouldNotLogSensitiveEmail_RegressionTest [109 ms]
+  Повідомлення про помилку:
+   Assert.DoesNotContain() Failure: Sub-string found
+                           ↓ (pos 18)
+String: "Запит реєстрації: victim.user@example.com"
+Found:  "victim.user@example.com"
+  Трасування стека:
+     at Waterfall.Security.Tests.SensitiveLoggingRegressionTests.AuthController_ShouldNotLogSensitiveEmail_RegressionTest() in tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs:line 38
+
+Не пройдено!: не пройдено 1, пройдено 1, пропущено 0, усього 2, тривалість 109 ms. - waterfall.Security.Tests.dll (net10.0)
+```
+
+#### Результат запуску тесту ПІСЛЯ виправлення (Тест ПРОХОДИТЬ — Green State):
+Після виправлення коду (прибрано {Email}, замінено на анонімний GUID `UserId`) регресійні тести безпеки успішно проходять:
+```text
+Тестовий запуск для waterfall.Security.Tests.dll (.NETCoreApp,Version=v10.0)
+Загальна кількість тестових файлів (1), що відповідають указаному шаблону.
+
+Пройдено!  : не пройдено     0, пройдено     2, пропущено     0, усього     2, тривалість 81 ms. - waterfall.Security.Tests.dll (net10.0)
 ```
 
 ---
@@ -152,6 +185,7 @@ _logger.LogInformation("Успішний вхід: {UserId}", user.Id);
 | Об'єкт | Внесок | ШІ | Як перевірено |
 | :--- | :--- | :--- | :--- |
 | `docs/code-quality/static-analysis.md` | Сидоренко Денис | Допомога у структуруванні та форматуванні звіту статичного аналізу SAST | Самоперевірка за вимогами Лекції 5 та Lab05; перевірка виводу `dotnet build` |
+| `tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs` | Сидоренко Денис | Допомога у формулюванні регресійних тестів безпеки | Запуск тестів `dotnet test` (перевірка падіння на вразливому коді та проходження на виправленому) |
 | `src/waterfall.Repository/Repositories/EfVacancyRepository.cs` | Сидоренко Денис | Допомога в оптимізації LINQ-запитів для фільтрації та запобігання SQL-ін'єкціям (THR-04) | Ручне тестування запитів, компіляція та перевірка параметризованих виразів EF Core |
 | `src/waterfall.Repository/Repositories/EfSavedVacancyRepository.cs` | Сидоренко Денис | Допомога у формулюванні методів збереження вакансій та мапінгу даних | Код-рев'ю, перевірка зв'язків між користувачем і збереженими вакансіями |
-| `src/waterfall.Repository/Data/WaterfallDbContext.cs` | Сидоренко Денис | Допомога у налаштуванні Fluent API, індексів та конфігурації сутностей EF Core | Перевірка цілісності схеми БД, компіляція проекту та самоперевірка) |
+| `src/waterfall.Repository/Data/WaterfallDbContext.cs` | Сидоренко Денис | Допомога у налаштуванні Fluent API, індексів та конфігурації сутностей EF Core | Перевірка цілісності схеми БД, компіляція проекту та самоперевірка (§8) |

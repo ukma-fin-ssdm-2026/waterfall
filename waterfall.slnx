@@ -6,4 +6,5 @@
   <Project Path="src/waterfall.UI/waterfall.UI.csproj">
     <Deploy Solution="Debug|*" />
   </Project>
+  <Project Path="tests/waterfall.Security.Tests/waterfall.Security.Tests.csproj" />
 </Solution>
