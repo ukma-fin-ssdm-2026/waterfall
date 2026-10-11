@@ -13,7 +13,7 @@ namespace Waterfall.Api.Services;
 /// Сервіс автентифікації: реєстрація та вхід (Core Services Layer).
 /// Email нормалізується (trim + нижній регістр) до звернення до БД, щоб унікальний індекс
 /// покривав регістрозалежні дублікати. Невідомий email і невірний пароль — однаковий виняток (THR-01).
-/// Логує лише email + результат, ніколи пароль чи токен (THR-08).
+/// Логує лише результат та UserId, ніколи email, пароль чи токен (THR-08).
 /// </summary>
 /// <remarks>
 /// Розміщення: реалізація живе в api, а не в waterfall.Services.
@@ -47,7 +47,7 @@ public sealed class AuthenticationService : IAuthenticationService
 
         if (await _users.GetByEmailAsync(email, ct) is not null)
         {
-            _logger.LogWarning("Спроба реєстрації на зайнятий email: {Email}", email);
+            _logger.LogWarning("Спроба реєстрації на вже зайняту адресу.");
             throw new DuplicateEmailException();
         }
 
@@ -69,14 +69,14 @@ public sealed class AuthenticationService : IAuthenticationService
             // Гонка двох одночасних реєстрацій: унікальний індекс відхилив другу (data-model.md §6.1).
             if (await _users.GetByEmailAsync(email, ct) is not null)
             {
-                _logger.LogWarning("Гонка реєстрацій на email: {Email}", email);
+                _logger.LogWarning("Гонка реєстрацій: другу спробу відхилено унікальним індексом.");
                 throw new DuplicateEmailException(ex);
             }
 
             throw;
         }
 
-        _logger.LogInformation("Користувача зареєстровано: {Email} ({UserId})", email, entity.Id);
+        _logger.LogInformation("Користувача зареєстровано: {UserId}", entity.Id);
         return Map(entity);
     }
 
@@ -94,7 +94,7 @@ public sealed class AuthenticationService : IAuthenticationService
 
         if (user is null || result == PasswordVerifyResult.Failed)
         {
-            _logger.LogWarning("Невдала спроба входу: {Email}", email);
+            _logger.LogWarning("Невдала спроба входу.");
             throw new InvalidCredentialsException();
         }
 
@@ -102,10 +102,10 @@ public sealed class AuthenticationService : IAuthenticationService
         {
             user.PasswordHash = _passwordHasher.Hash(request.Password);
             await _users.UpdateAsync(user, ct);
-            _logger.LogInformation("Пароль перехешовано під час входу: {Email} ({UserId})", email, user.Id);
+            _logger.LogInformation("Пароль перехешовано під час входу: {UserId}", user.Id);
         }
 
-        _logger.LogInformation("Успішний вхід: {Email} ({UserId})", email, user.Id);
+        _logger.LogInformation("Успішний вхід: {UserId}", user.Id);
         return Map(user);
     }
 

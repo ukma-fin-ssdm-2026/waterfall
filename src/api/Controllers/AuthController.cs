@@ -53,7 +53,7 @@ public class AuthController : ApiControllerBase
             return ErrorBadRequest("Невалідні дані запиту реєстрації.");
         }
 
-        _logger.LogInformation("Запит реєстрації: {Email}", request.Email);
+        _logger.LogInformation("Запит реєстрації отримано.");
 
         try
         {
@@ -90,7 +90,7 @@ public class AuthController : ApiControllerBase
             return ErrorBadRequest("Невалідні дані запиту входу.");
         }
 
-        _logger.LogInformation("Запит входу: {Email}", request.Email);
+        _logger.LogInformation("Запит входу отримано.");
 
         try
         {
