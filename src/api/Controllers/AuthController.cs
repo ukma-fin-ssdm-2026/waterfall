@@ -32,7 +32,7 @@ public class AuthController : ApiControllerBase
     /// <summary>
     /// Зареєструвати нового користувача та видати access-JWT.
     /// </summary>
-    /// <param name="request">Email, пароль (мін. 12 символів + цифра) та роль.</param>
+    /// <param name="request">Email, пароль (12–32 символи + цифра) та роль (0 = JobSeeker, 1 = Analyst).</param>
     /// <param name="ct">Токен скасування операції.</param>
     /// <response code="201">Користувача зареєстровано, токен видано.</response>
     /// <response code="400">Помилка валідації вхідного запиту.</response>
@@ -40,7 +40,7 @@ public class AuthController : ApiControllerBase
     [HttpPost("register")]
     [SwaggerOperation(
         Summary = "Зареєструвати користувача",
-        Description = "Створює обліковий запис (роль JobSeeker або Analyst) та повертає access-JWT на 15 хвилин.",
+        Description = "Створює обліковий запис (роль: 0 = JobSeeker, 1 = Analyst) та повертає access-JWT на 15 хвилин.",
         OperationId = "Register",
         Tags = ["Auth"])]
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status201Created)]

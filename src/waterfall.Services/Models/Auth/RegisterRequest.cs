@@ -28,10 +28,10 @@ public record RegisterRequest
     public string Password { get; init; } = string.Empty;
 
     /// <summary>
-    /// Роль користувача (за замовчуванням JobSeeker; Analyst відкриває агреговану аналітику).
+    /// Роль користувача: 0 = JobSeeker (за замовчуванням), 1 = Analyst (агрегована аналітика).
     /// Серверні перевірки доступу завжди виконуються на сервері за role claim JWT (THR-13).
     /// </summary>
-    /// <example>JobSeeker</example>
+    /// <example>0</example>
     [EnumDataType(typeof(UserRole), ErrorMessage = "Поле role повинно бути одним із значень: JobSeeker, Analyst")]
     public UserRole Role { get; init; } = UserRole.JobSeeker;
 }

@@ -3,7 +3,8 @@
 namespace Waterfall.Services.Models.Auth;
 
 /// <summary>
-/// Роль користувача платформи (FR-008).
+/// Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),
+/// 1 = Analyst (доступ до агрегованої аналітики).
 /// </summary>
 public enum UserRole
 {

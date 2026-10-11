@@ -12,10 +12,10 @@ paths:
       tags:
         - Auth
       summary: Зареєструвати нового користувача та видати access-JWT.
-      description: Створює обліковий запис (роль JobSeeker або Analyst) та повертає access-JWT на 15 хвилин.
+      description: 'Створює обліковий запис (роль: 0 = JobSeeker, 1 = Analyst) та повертає access-JWT на 15 хвилин.'
       operationId: Register
       requestBody:
-        description: 'Email, пароль (мін. 12 символів + цифра) та роль.'
+        description: 'Email, пароль (12–32 символи + цифра) та роль (0 = JobSeeker, 1 = Analyst).'
         content:
           application/json:
             schema:
@@ -787,7 +787,7 @@ components:
         - 0
         - 1
       type: integer
-      description: Роль користувача платформи (FR-008).
+      description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\n1 = Analyst (доступ до агрегованої аналітики)."
       format: int32
     VacancyDto:
       type: object
