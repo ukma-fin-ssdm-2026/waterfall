@@ -1,9 +1,9 @@
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Logging;
-using Waterfall.Client.Extensions;
-using Waterfall.Client.ViewModels;
 using waterfall.UI.Services;
 using waterfall.UI.Views;
+using Waterfall.Client.Extensions;
+using Waterfall.Client.ViewModels;
 
 namespace waterfall.UI;
 

@@ -1,8 +1,8 @@
+using System.Reflection;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Primitives;
 using Microsoft.OpenApi;
-using System.Reflection;
 using Waterfall.Api.Models.Common;
 using Waterfall.Api.Services;
 using Waterfall.Repository.Data;
