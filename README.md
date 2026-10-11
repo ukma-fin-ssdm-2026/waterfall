@@ -60,7 +60,7 @@
 * [**Код бекенду Web API**](./src/api/) — реалізація на C# (.NET 10 / ASP.NET Core)
 
 #### API: запуск, Swagger UI та регенерація специфікації
-1. Запуск API: `dotnet run --project src/api` — слухає `http://localhost:3000` (див. `src/api/Properties/launchSettings.json`).
+1. Запуск API (див. ### Запуск нижче): `dotnet run --project src/api` — слухає `http://localhost:3000` (див. `src/api/Properties/launchSettings.json`).
 2. Жива документація: `http://localhost:3000/api-docs` (Swagger UI), корінь `/` редіректить туди ж.
 3. Статична документація без бекенда: `npx serve docs/api` → відкрити надрукований URL + `/index.html` (та сама сторінка, що й на GitHub Pages).
 4. Онлайн на GitHub Pages: https://ukma-fin-ssdm-2026.github.io/waterfall/ — збірка через `.github/workflows/api-docs.yml`.
@@ -74,9 +74,36 @@
 ### Запуск
 
 1. Необхідно мати .NET 10.
-2. Скачати залежності: `dotnet restore src/api/Waterfall.Api.csproj`
-3. Забілдити: `dotnet build src/api/Waterfall.Api.csproj`
-4. Запустити: `dotnet run --project src/api`
+2. Секрети (JWT): `Jwt:Key` (мінімум 32 символи) живе **лише** у змінній середовища `Jwt__Key` або .NET User Secrets. Без ключа сервер падає на старті з `InvalidOperationException`; регенерація docs (`--generate-openapi-and-exit`) перевірку пропускає.
+- Генерація надійного ключа (≥256 біт; свіжий на кожне середовище:
+   ```bash
+   # Linux/macOS:
+   openssl rand -base64 32
+   ```
+   ```powershell
+   # Windows PowerShell (.NET, без openssl):
+   [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+   ```
+   ```bash
+   # Кросплатформно через Python:
+   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+   ```
+- Застосувати ключ — локальна розробка:
+   ```bash
+   dotnet user-secrets set "Jwt:Key" "<вставити згенероване>" --project src/api
+   ```
+- Застосувати ключ — продакшн / CI:
+   ```bash
+   # Linux/macOS:
+   export Jwt__Key="<вставити згенероване>"
+   ```
+   ```powershell
+   # Windows PowerShell:
+   $env:Jwt__Key = "<вставити згенероване>"
+   ```
+3. Скачати залежності: `dotnet restore src/api/Waterfall.Api.csproj`
+4. Забілдити: `dotnet build src/api/Waterfall.Api.csproj`
+5. Запустити: `dotnet run --project src/api`
 
 ### MCP-сервер
 TypeScript MCP-сервер в [`src/mcp/`](./src/mcp/), згенерований зі специфікації
@@ -111,3 +138,4 @@ TypeScript MCP-сервер в [`src/mcp/`](./src/mcp/), згенеровани�
 | розділ `### Архітектура` (навігація) | Садиков Константін | структурування посилань | самоперевірка автора (§8); рев'ю в PR |
 | розділ `### MCP-сервер` | Дмитро | структурування інструкцій | самоперевірка автора (§8) |
 | розділ `#### API: запуск, Swagger UI та регенерація специфікації` | Константін | текст інструкцій | самоперевірка автора (§8): скрипт `$ref`/описів/прикладів, HEAD-перевірка CDN, рев'ю в PR |
+| примітка про секрети JWT, п. 2 (§ Запуск) | Дмитро (запит) + ШІ-агент (текст) | так | перевірено запуском: fail-fast без `Jwt__Key`, успішний старт і регенерація з ключем |
