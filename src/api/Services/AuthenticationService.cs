@@ -76,7 +76,7 @@ public sealed class AuthenticationService : IAuthenticationService
             throw;
         }
 
-        _logger.LogInformation("Користувача зареєстровано: {Email}", email);
+        _logger.LogInformation("Користувача зареєстровано: {Email} ({UserId})", email, entity.Id);
         return Map(entity);
     }
 
@@ -102,10 +102,10 @@ public sealed class AuthenticationService : IAuthenticationService
         {
             user.PasswordHash = _passwordHasher.Hash(request.Password);
             await _users.UpdateAsync(user, ct);
-            _logger.LogInformation("Пароль перехешовано під час входу: {Email}", email);
+            _logger.LogInformation("Пароль перехешовано під час входу: {Email} ({UserId})", email, user.Id);
         }
 
-        _logger.LogInformation("Успішний вхід: {Email}", email);
+        _logger.LogInformation("Успішний вхід: {Email} ({UserId})", email, user.Id);
         return Map(user);
     }
 

@@ -174,7 +174,10 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Correlation-Id"] = correlationId;
     context.Response.Headers["X-Request-Id"] = correlationId;
 
-    await next();
+    using (app.Logger.BeginScope("{RequestId}", correlationId.ToString()))
+    {
+        await next();
+    }
 });
 
 
