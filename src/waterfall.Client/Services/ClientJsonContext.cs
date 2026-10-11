@@ -13,8 +13,9 @@ namespace Waterfall.Client.Services;
 /// Згенерований на етапі компіляції JSON-серіалізатор для всіх типів шлюзу.
 /// Рефлексійний System.Text.Json вимкнено в trimmed/AOT-збірках (iOS, Android Release),
 /// тож кожен новий тип запиту/відповіді треба додати сюди атрибутом.
+/// Сервер віддає перелічення назвою ("Djinni", не 3), тож читаємо/пишемо їх рядками.
 /// </summary>
-[JsonSourceGenerationOptions(JsonSerializerDefaults.Web)]
+[JsonSourceGenerationOptions(JsonSerializerDefaults.Web, Converters = [typeof(JsonStringEnumConverter)])]
 [JsonSerializable(typeof(PagedResult<VacancyDto>))]
 [JsonSerializable(typeof(VacancyDto))]
 [JsonSerializable(typeof(List<SavedVacancyDto>))]

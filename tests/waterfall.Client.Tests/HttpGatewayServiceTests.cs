@@ -161,17 +161,33 @@ public class HttpGatewayServiceTests
     }
 
     [Fact]
-    public async Task Register_SendsRoleAsNumber()
+    public async Task Register_SendsRoleAsName()
     {
-        _server.Respond(HttpStatusCode.Created, """{ "token": "t", "role": 1 }""");
+        // Сервер (JsonStringEnumConverter) приймає й віддає перелічення назвою: "Analyst", "Djinni".
+        _server.Respond(HttpStatusCode.Created, """{ "token": "t", "role": "Analyst" }""");
 
         await _gateway.RegisterAsync(new RegisterRequest { Email = "a@b.c", Password = "longpassword1", Role = UserRole.Analyst });
 
         StubHandler.Recorded request = _server.Requests.Single();
         Assert.Equal(HttpMethod.Post, request.Method);
         Assert.Equal("http://api.test:3000/api/v1/auth/register", request.Uri);
-        Assert.Contains("\"role\":1", request.Body);
+        Assert.Contains("\"role\":\"Analyst\"", request.Body);
         Assert.Contains("\"email\":\"a@b.c\"", request.Body);
+    }
+
+    [Fact]
+    public async Task GetVacancies_ParsesSourceAsName()
+    {
+        _server.Respond(HttpStatusCode.OK, """
+            { "items": [{ "id": "11111111-1111-1111-1111-111111111111",
+              "title": "Senior .NET", "company": "Genesis", "source": "Djinni" }],
+              "totalCount": 1, "page": 1, "pageSize": 10,
+              "totalPages": 1, "hasPreviousPage": false, "hasNextPage": false }
+            """);
+
+        var page = await _gateway.GetVacanciesAsync(null, 1, 10);
+
+        Assert.Equal(JobSource.Djinni, Assert.Single(page.Items).Source);
     }
 
     [Fact]

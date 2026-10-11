@@ -3,7 +3,7 @@
 namespace Waterfall.Client.Models.Vacancies;
 
 /// <summary>
-/// Джерело вакансії. Числові значення мусять збігатися з серверним JobSource (передається числом).
+/// Джерело вакансії. Значення мусять збігатися з серверним JobSource (передається назвою: "Djinni").
 /// </summary>
 public enum JobSource
 {
