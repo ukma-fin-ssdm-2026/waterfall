@@ -194,6 +194,15 @@ public class HttpGatewayServiceTests
         return _server.Requests[^1].Authorization;
     }
 
+    [Fact]
+    public async Task DirtyToken_StillSendsCleanBearer()
+    {
+        // Токен із зайвими пробілами/переносом (SecureStorage, копіпаст): заголовок мусить бути чистим,
+        // інакше Kestrel відхиляє запит порожнім 400 (немає тіла — лише статус).
+        _tokens.Token = "jwt-abc \n";
+        Assert.Equal("Bearer jwt-abc", await LastAuthHeaderAfterCatalogCall());
+    }
+
     /// <summary>
     /// Мережевий обробник-заглушка: записує запити й повертає заздалегідь задану відповідь.
     /// </summary>
