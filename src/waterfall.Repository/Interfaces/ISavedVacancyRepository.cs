@@ -13,6 +13,7 @@ public interface ISavedVacancyRepository
     /// <summary>
     /// Отримати перелік усіх збережених вакансій користувача.
     /// </summary>
+    /// <param name="userId">Ідентифікатор користувача, чиї закладки повернути.</param>
     /// <param name="onlyActive">Якщо true — повертає тільки збережені вакансії, що залишаються активними. Якщо false — повертає всі, включаючи закриті (архівні, максимум 1000).</param>
     /// <param name="ct">Токен скасування операції.</param>
     Task<IReadOnlyList<SavedVacancyDB>> GetAllAsync(Guid userId, bool onlyActive = true, CancellationToken ct = default);
