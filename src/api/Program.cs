@@ -1,4 +1,7 @@
+// AI: посилено обробку помилок валідації (issue #49); перевірено: прогін негативних тест-кейсів (docs/api/quality-attributes.md, розділ 6)
+
 using System.Reflection;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Primitives;
@@ -14,7 +17,21 @@ using Waterfall.Services.Extensions;
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // 1. Реєстрація контролерів у DI-контейнері та налаштування стандартизованої обробки помилок валідації
-builder.Services.AddControllers()
+builder.Services.AddControllers(options =>
+    {
+        // Обов'язкові поля DTO позначені [Required] явно; без цього рядка до кожної помилки тіла
+        // додавався зайвий запис "The request field is required."
+        options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
+    })
+    .AddJsonOptions(options =>
+    {
+        // Не віддаємо клієнту тексти внутрішніх винятків десеріалізатора (типи .NET, номери рядків)
+        options.AllowInputFormatterExceptionMessages = false;
+
+        // Перелічення (source) приймаються й повертаються назвою — "Djinni", а не 3, — як у
+        // прикладах Swagger і api-design.md. Атрибут-конвертер зник з JobSource під час переносу моделей.
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    })
     .ConfigureApiBehaviorOptions(options =>
     {
         // Перевизначаємо стандартну фабрику відповідей на помилки валідації від Microsoft
@@ -43,11 +60,15 @@ builder.Services.AddControllers()
                         // Додаємо інформацію про помилку у наш список деталей:
                         details.Add(new ValidationErrorDetail
                         {
-                            // char.ToLowerInvariant(key[0]) + key[1..] перетворює першу літеру на малу: "Title" -> "title" (вимога camelCase для JSON)
-                            Field = char.ToLowerInvariant(key[0]) + key[1..],
+                            // "Title" -> "title"; порожній ключ або "$" — помилка всього тіла,
+                            // "$.salaryMin" — помилка десеріалізації конкретного поля
+                            Field = ToFieldName(key),
 
-                            // Текст помилки, який ми вказали в анотації моделі (ErrorMessage)
-                            Message = error.ErrorMessage,
+                            // Текст помилки з анотації моделі (ErrorMessage). Для помилок формату JSON
+                            // текст винятку приховано, тож підставляємо загальне повідомлення
+                            Message = string.IsNullOrEmpty(error.ErrorMessage)
+                                ? "Некоректне значення або формат поля"
+                                : error.ErrorMessage,
 
                             // Записуємо введене значення користувача (якщо порожньо - null)
                             ProvidedValue = string.IsNullOrEmpty(providedValue) ? null : providedValue
@@ -202,3 +223,20 @@ OpenApiGenerator.ExportOpenApiYaml(app.Services, app.Environment, app.Logger);
 if (args.Contains("--generate-openapi-and-exit")) return;
 
 app.Run();
+
+// Перетворює ключ ModelState на назву поля у відповіді. Без перевірки на порожній ключ
+// запит з порожнім тілом падав з IndexOutOfRangeException і повертав 500 замість 400.
+static string ToFieldName(string? key)
+{
+    if (string.IsNullOrEmpty(key) || key == "$")
+    {
+        return "body";
+    }
+
+    if (key.StartsWith("$.", StringComparison.Ordinal))
+    {
+        key = key[2..];
+    }
+
+    return char.ToLowerInvariant(key[0]) + key[1..];
+}

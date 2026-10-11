@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: посилено валідацію вхідних даних (issue #49); перевірено: прогін негативних тест-кейсів (docs/api/quality-attributes.md, розділ 6)
 
 using System.ComponentModel.DataAnnotations;
 
@@ -7,7 +8,7 @@ namespace Waterfall.Services.Models.Vacancies;
 /// <summary>
 /// Модель запиту на створення нової вакансії через REST API.
 /// </summary>
-public record CreateVacancyRequest
+public record CreateVacancyRequest : IValidatableObject
 {
     /// <summary>
     /// Назва посади / позиції.
@@ -31,6 +32,7 @@ public record CreateVacancyRequest
     /// <example>Розробка бекенд сервісів на .NET 10.</example>
     [Required(ErrorMessage = "Поле description є обов'язковим")]
     [MinLength(10, ErrorMessage = "Довжина description повинна бути не менше 10 символів")]
+    [MaxLength(10_000, ErrorMessage = "Довжина description не може перевищувати 10 000 символів")]
     public string Description { get; init; } = string.Empty;
 
     /// <summary>
@@ -105,11 +107,39 @@ public record CreateVacancyRequest
     /// <example>https://djinni.co/jobs/example/</example>
     [Required(ErrorMessage = "Поле sourceUrl є обов'язковим")]
     [Url(ErrorMessage = "sourceUrl повинно бути валідним URL посиланням")]
+    [StringLength(2048, MinimumLength = 1, ErrorMessage = "Довжина sourceUrl не може перевищувати 2048 символів")]
     public string SourceUrl { get; init; } = string.Empty;
 
     /// <summary>
     /// Список ключових навичок.
     /// </summary>
     /// <example>[".NET 10", "C#", "PostgreSQL"]</example>
+    [MaxLength(30, ErrorMessage = "Список skills не може містити більше 30 навичок")]
     public IReadOnlyList<string> Skills { get; init; } = Array.Empty<string>();
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (SalaryMin.HasValue && SalaryMax.HasValue && SalaryMin > SalaryMax)
+        {
+            yield return new ValidationResult(
+                "salaryMin не може перевищувати salaryMax",
+                ["salaryMin", "salaryMax"]);
+        }
+
+        // Unknown — резервне значення для розбору даних з БД; через API джерело вказується явно
+        if (Source == JobSource.Unknown)
+        {
+            yield return new ValidationResult(
+                "Поле source є обов'язковим: WorkUa, RobotaUa, Djinni або Dou",
+                ["source"]);
+        }
+
+        // Порожні навички допустимі: вони зберігаються, але не потрапляють під пошук
+        if (Skills is not null && Skills.Any(skill => skill is not null && skill.Length > 50))
+        {
+            yield return new ValidationResult(
+                "Кожна навичка у skills не може перевищувати 50 символів",
+                ["skills"]);
+        }
+    }
 }
