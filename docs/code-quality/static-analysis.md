@@ -108,7 +108,7 @@ _logger.LogInformation("Успішний вхід: {UserId}", user.Id);
 ### 5. Регресійний тест та Pull Request (Remediation PR):
 Вразливість та її запобігання зафіксовано разом із регресійним тестом, який підтверджує захист від повторної появи проблеми в CI:
 
-- **Посилання на Pull Request:** [Pull Request #71: fix(security): resolve CWE-532 sensitive logging with regression test](https://github.com/ukma-fin-ssdm-2026/waterfall/pull/71) (робоча гілка: `fix/security-cwe-532-sensitive-logging`).
+- **Посилання на Pull Request:** [Pull Request: fix(security): resolve CWE-532 sensitive logging with regression test](https://github.com/ukma-fin-ssdm-2026/waterfall/pull/71) (посилання на гілку та перегляд змін: [compare/main...fix/security-cwe-532-sensitive-logging](https://github.com/ukma-fin-ssdm-2026/waterfall/compare/main...fix/security-cwe-532-sensitive-logging)).
 - **Файл регресійного тесту:** [`tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs).
 - **Механізм перевірки:**  
 Тест верифікує виконання тверджень `Assert.DoesNotContain(SensitiveEmail, logEntry)` та `Assert.DoesNotContain(SensitivePassword, logEntry)`.
