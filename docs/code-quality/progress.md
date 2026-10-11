@@ -16,7 +16,7 @@ graph LR
 
 | Модуль | Шлях | Відповідальність |
 | :--- | :--- | :--- |
-| API | `src/api` | контролери `api/v1/vacancies` (CRUD, пошук, пагінація) та `api/v1/saved-vacancies` (список, збереження, видалення), Swagger на `/api-docs` |
+| API | `src/api` | контролери `api/v1/vacancies` (CRUD, пошук, пагінація), `api/v1/saved-vacancies` (список, збереження, видалення) та `api/v1/auth` (реєстрація, вхід, JWT), Swagger на `/api-docs` |
 | Services | `src/waterfall.Services` | бізнес-логіка, DTO, In-Memory Cache-Aside |
 | Repository | `src/waterfall.Repository` | EF Core-сутності, репозиторії, сідування тестових даних |
 | Client | `src/waterfall.Client` | клієнтська бібліотека (`net10.0`): `HttpGatewayService`, копії DTO, viewmodels (CommunityToolkit.Mvvm). Не залежить від EF Core і серверного коду |
@@ -33,12 +33,16 @@ graph LR
 | `HttpGatewayService` | готово: вакансії (список з пошуком і пагінацією, деталі), «Обране» (список, зберегти, прибрати), auth (реєстрація, вхід, вихід). Помилки API → `ApiException` з повідомленням сервера; JWT додається як `Bearer`; JSON через source-generated контекст (безпечно для trimming/AOT на Android/iOS) |
 | «Каталог» | готово: пошук із затримкою 400 мс, догрузка сторінок, pull-to-refresh, стани «завантаження / порожньо / помилка + Повторити» |
 | «Обране» | готово: список, прибирання, синхронізація з «Каталогом» без перезавантаження |
-| «Вхід» | готово в клієнті: вхід / реєстрація з вибором ролі, перевірки пароля як на сервері, сесія відновлюється після перезапуску (токен у `SecureStorage`). Ендпоінти auth з'являться в `main` після злиття PR #67 — до того сервер відповідає 404 |
-| Тести | 59 тестів, усі проходять |
+| «Вхід» | готово: вхід / реєстрація з вибором ролі, перевірки пароля як на сервері, сесія відновлюється після перезапуску (токен у `SecureStorage`). Перевірено наживо проти API: вхід під сід-користувачем (`seeker1@waterfall.com` / `DevSeeker1234`) та реєстрація нового акаунта повертають JWT |
+| Тести | 61 тест, усі проходять |
 | Форматування | `dotnet format --verify-no-changes` проходить для всього рішення |
 
 Відомі обмеження:
 - «Обране» поки спільне для всіх користувачів: сервер не фільтрує збережені вакансії за користувачем (поза межами #60; колонка `UserId` в БД уже є).
+
+Виправлено під час роботи над гілкою:
+- Зайві пробіли/перенос рядка у збереженому токені (`AuthHeaderHandler` тепер робить `Trim()`): інакше Kestrel відхиляє кожен запит порожнім 400. Регресійний тест `DirtyToken_StillSendsCleanBearer`.
+- Сервер після #65 віддає перелічення назвою (`"source": "Djinni"`), а клієнт чекав числа — у `ClientJsonContext` додано `JsonStringEnumConverter`, тест реєстрації оновлено на `"role": "Analyst"`, додано `GetVacancies_ParsesSourceAsName`. Перевірено наживо: каталог, вхід і обране через справжній шлюз проти локального API.
 - CI (`.github/workflows/ci.yml`) збирає лише `src/api`; тести клієнта й `dotnet format` запускаються локально.
 - `src/mcp/src/index.ts` не проходить `prettier --check` (згенерований код, поза межами #60).
 
@@ -48,6 +52,10 @@ graph LR
 
 ```bash
 # 1. API: http://localhost:3000, Swagger UI — http://localhost:3000/api-docs
+# Потрібен Jwt:Key (мінімум 32 символи): dotnet user-secrets set "Jwt:Key" "<ключ>" --project src/api
+# Перший запуск створює src/api/waterfall.db із сід-даними (seeker1@waterfall.com,
+# seeker2@waterfall.com / DevSeeker1234, analyst@waterfall.com / DevAnalyst1234).
+# Старт падає з "no such table: Users" — БД застаріла (створена до #67): видалити src/api/waterfall.db* і перезапустити.
 dotnet run --project src/api
 
 # 2. Застосунок (Windows) — в іншому терміналі
@@ -67,8 +75,8 @@ dotnet format waterfall.slnx --verify-no-changes
 | Перевірка | Результат |
 | :--- | :--- |
 | `dotnet format waterfall.slnx --verify-no-changes` | без змін (exit 0) |
-| `dotnet build waterfall.slnx` (усі платформи) | 0 попереджень, 0 помилок |
-| `dotnet test tests/waterfall.Client.Tests` | 59 / 59 |
+| `dotnet build src/api` + `dotnet test tests/waterfall.Client.Tests` | 0 попереджень, 0 помилок |
+| `dotnet test tests/waterfall.Client.Tests` | 61 / 61 |
 | `gitleaks` по історії гілки | витоків не знайдено |
 
 Перший прогін `dotnet format` після перенесення `.editorconfig` у корінь виправив сортування `using` у 4 файлах і прибрав BOM у 8 шаблонних файлах (окремий коміт `style: apply dotnet format`). Закінчення рядків зафіксовано як LF (`.editorconfig` + `.gitattributes`), тож перевірка дає однаковий результат на Windows і Linux.
