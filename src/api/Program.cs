@@ -1,31 +1,36 @@
-// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
-// Посилено валідацію вхідних даних (issue #49); перевірено: прогін негативних тест-кейсів через Swagger UI (docs/api/quality-attributes.md, розділ 6)
+// AI: посилено обробку помилок валідації (issue #49); перевірено: прогін негативних тест-кейсів (docs/api/quality-attributes.md, розділ 6)
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
-using Microsoft.AspNetCore.Mvc.ModelBinding.Metadata;
 using Microsoft.Extensions.Primitives;
 using Microsoft.OpenApi;
 using System.Reflection;
-using System.Text.Json;
+using System.Text.Json.Serialization;
 using Waterfall.Api.Models.Common;
 using Waterfall.Api.Services;
+using Waterfall.Repository.Data;
+using Waterfall.Repository.Interfaces;
+using Waterfall.Services;
+using Waterfall.Services.Extensions;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 // 1. Реєстрація контролерів у DI-контейнері та налаштування стандартизованої обробки помилок валідації
 builder.Services.AddControllers(options =>
     {
-        // Без snake_case ключ валідації розходився з ключем біндингу, і валідний запит ?page_size=1 отримував 400.
-        options.ModelMetadataDetailsProviders.Add(
-            new SystemTextJsonValidationMetadataProvider(JsonNamingPolicy.SnakeCaseLower));
-
         // Обов'язкові поля DTO позначені [Required] явно; без цього рядка до кожної помилки тіла
         // додавався зайвий запис "The request field is required."
         options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
     })
-    // Не віддаємо клієнту тексти внутрішніх винятків десеріалізатора (типи .NET, номери рядків)
-    .AddJsonOptions(options => options.AllowInputFormatterExceptionMessages = false)
+    .AddJsonOptions(options =>
+    {
+        // Не віддаємо клієнту тексти внутрішніх винятків десеріалізатора (типи .NET, номери рядків)
+        options.AllowInputFormatterExceptionMessages = false;
+
+        // Перелічення (source) приймаються й повертаються назвою — "Djinni", а не 3, — як у
+        // прикладах Swagger і api-design.md. Атрибут-конвертер зник з JobSource під час переносу моделей.
+        options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+    })
     .ConfigureApiBehaviorOptions(options =>
     {
         // Перевизначаємо стандартну фабрику відповідей на помилки валідації від Microsoft
@@ -54,12 +59,15 @@ builder.Services.AddControllers(options =>
                         // Додаємо інформацію про помилку у наш список деталей:
                         details.Add(new ValidationErrorDetail
                         {
-                            // Порожній ключ або "$" — помилка всього тіла (наприклад, порожнє тіло чи зламаний JSON);
-                            // "$.salary_min" — помилка десеріалізації конкретного поля
+                            // "Title" -> "title"; порожній ключ або "$" — помилка всього тіла,
+                            // "$.salaryMin" — помилка десеріалізації конкретного поля
                             Field = ToFieldName(key),
 
-                            // Текст помилки, який ми вказали в анотації моделі (ErrorMessage)
-                            Message = error.ErrorMessage,
+                            // Текст помилки з анотації моделі (ErrorMessage). Для помилок формату JSON
+                            // текст винятку приховано, тож підставляємо загальне повідомлення
+                            Message = string.IsNullOrEmpty(error.ErrorMessage)
+                                ? "Некоректне значення або формат поля"
+                                : error.ErrorMessage,
 
                             // Записуємо введене значення користувача (якщо порожньо - null)
                             ProvidedValue = string.IsNullOrEmpty(providedValue) ? null : providedValue
@@ -88,9 +96,8 @@ builder.Services.AddControllers(options =>
         };
     });
 
-// 2. Реєстрація сервісів сховища
-builder.Services.AddSingleton<IVacancyRepository, VacancyRepository>();
-builder.Services.AddSingleton<ISavedVacancyRepository, SavedVacancyRepository>();
+// 2. Реєстрація інфраструктури (EF Core SQLite/MSSQL) та сервісів кешування (In-Memory Cache-Aside)
+builder.Services.AddWaterfallServices(builder.Configuration);
 
 // 3. Налаштування CORS для браузерних клієнтів та Swagger UI
 builder.Services.AddCors(options =>
@@ -117,16 +124,34 @@ builder.Services.AddSwaggerGen(c =>
 
     c.EnableAnnotations();
 
-    // Підключення XML-документації для автогенерації описів
-    string xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    string xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
+    // Підключення XML-документації для автогенерації описів (Waterfall.Api, Waterfall.Repository, Waterfall.Services)
+    string apiXmlPath = Path.Combine(AppContext.BaseDirectory, $"{Assembly.GetExecutingAssembly().GetName().Name}.xml");
+    if (File.Exists(apiXmlPath))
     {
-        c.IncludeXmlComments(xmlPath);
+        c.IncludeXmlComments(apiXmlPath);
+    }
+
+    string repoXmlPath = Path.Combine(AppContext.BaseDirectory, $"{typeof(WaterfallDbContext).Assembly.GetName().Name}.xml");
+    if (File.Exists(repoXmlPath))
+    {
+        c.IncludeXmlComments(repoXmlPath);
+    }
+
+    string servicesXmlPath = Path.Combine(AppContext.BaseDirectory, $"{typeof(VacancyService).Assembly.GetName().Name}.xml");
+    if (File.Exists(servicesXmlPath))
+    {
+        c.IncludeXmlComments(servicesXmlPath);
     }
 });
 
 WebApplication app = builder.Build();
+
+// Ініціалізація структури бази даних (SQLite / MSSQL) та сідування початкових мок-даних
+using (IServiceScope scope = app.Services.CreateScope())
+{
+    WaterfallDbContext db = scope.ServiceProvider.GetRequiredService<WaterfallDbContext>();
+    await WaterfallDbSeeder.SeedAsync(db);
+}
 
 // 5. Middleware для підтримки кореляційного Request ID (Structured Logging & Error Contract)
 app.Use(async (context, next) =>
@@ -168,8 +193,8 @@ if (args.Contains("--generate-openapi-and-exit")) return;
 
 app.Run();
 
-// Перетворює ключ ModelState на назву поля для відповіді. Без перевірки на порожній ключ
-// запит з порожнім тілом падає з IndexOutOfRangeException і повертає 500 замість 400.
+// Перетворює ключ ModelState на назву поля у відповіді. Без перевірки на порожній ключ
+// запит з порожнім тілом падав з IndexOutOfRangeException і повертав 500 замість 400.
 static string ToFieldName(string? key)
 {
     if (string.IsNullOrEmpty(key) || key == "$")
@@ -179,7 +204,7 @@ static string ToFieldName(string? key)
 
     if (key.StartsWith("$.", StringComparison.Ordinal))
     {
-        return key[2..];
+        key = key[2..];
     }
 
     return char.ToLowerInvariant(key[0]) + key[1..];

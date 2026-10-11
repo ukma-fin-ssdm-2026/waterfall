@@ -11,6 +11,13 @@ paths:
       summary: Отримати перелік усіх збережених вакансій користувача.
       description: 'Повертає перелік вакансій, які користувач зберіг («лайкнув») для подальшого відгуку чи рекомендацій ШІ.'
       operationId: GetSavedVacancies
+      parameters:
+        - name: only_active
+          in: query
+          description: 'Фільтр: повертати лише активні збережені вакансії (за замовчуванням true).'
+          schema:
+            type: boolean
+            default: true
       responses:
         '200':
           description: Перелік збережених вакансій успішно отримано.
@@ -122,9 +129,9 @@ paths:
       description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\r\nмінімальної зарплати та джерела агрегації."
       operationId: GetVacancies
       parameters:
-        - name: page
+        - name: Page
           in: query
-          description: Номер запитуваної сторінки (починається з 1).
+          description: Номер запитуваної сторінки (нумерація з 1).
           schema:
             maximum: 100000
             minimum: 1
@@ -132,7 +139,7 @@ paths:
             format: int32
             example: 1
           example: 1
-        - name: page_size
+        - name: PageSize
           in: query
           description: Кількість елементів на одній сторінці (від 1 до 100).
           schema:
@@ -142,7 +149,7 @@ paths:
             format: int32
             example: 10
           example: 10
-        - name: search
+        - name: Search
           in: query
           description: 'Пошуковий запит (пошук за назвою посади, компанією або навичками).'
           schema:
@@ -151,18 +158,18 @@ paths:
             type: string
             example: .NET
           example: .NET
-        - name: category
+        - name: Category
           in: query
-          description: 'Фільтр за категорією/спеціалізацією (наприклад, .NET, QA, DevOps).'
+          description: 'Фільтр за категорією/спеціалізацією (.NET, QA, Frontend, DevOps).'
           schema:
-            maxLength: 50
+            maxLength: 100
             minLength: 0
             type: string
             example: .NET
           example: .NET
-        - name: min_salary
+        - name: MinSalary
           in: query
-          description: Фільтр за мінімальною заробітною платою.
+          description: Мінімальна заробітна плата.
           schema:
             maximum: 1000000
             minimum: 0
@@ -170,9 +177,9 @@ paths:
             format: double
             example: 2000
           example: 2000
-        - name: max_salary
+        - name: MaxSalary
           in: query
-          description: Фільтр за максимальною заробітною платою.
+          description: Максимальна заробітна плата.
           schema:
             maximum: 1000000
             minimum: 0
@@ -180,21 +187,38 @@ paths:
             format: double
             example: 5000
           example: 5000
-        - name: experience
+        - name: Experience
           in: query
-          description: 'Фільтр за необхідним досвідом (наприклад: 3+ роки, 1-3 роки).'
+          description: Фільтр за необхідним досвідом.
           schema:
-            maxLength: 50
+            maxLength: 100
             minLength: 0
             type: string
             example: 3+ роки
           example: 3+ роки
-        - name: source
+        - name: Source
           in: query
           description: 'Фільтр за джерелом агрегації (WorkUa, RobotaUa, Djinni, Dou).'
           schema:
             $ref: '#/components/schemas/JobSource'
           example: Djinni
+        - name: OnlyActive
+          in: query
+          description: "Ознака вибірки тільки активних вакансій (за замовчуванням true).\r\nЯкщо false — повертає як активні, так і закриті (архівні) вакансії."
+          schema:
+            type: boolean
+            example: true
+          example: true
+        - name: SortBy
+          in: query
+          description: 'Поле для сортування (title, publishedAt, salaryMin, salaryMax).'
+          schema:
+            type: string
+        - name: SortOrder
+          in: query
+          description: 'Напрямок сортування (asc, desc).'
+          schema:
+            type: string
       responses:
         '200':
           description: Успішне отримання переліку вакансій.
@@ -351,94 +375,92 @@ components:
         - currency
         - description
         - location
-        - source
-        - source_url
+        - sourceUrl
         - title
       type: object
       properties:
         title:
-          maxLength: 150
+          maxLength: 200
           minLength: 3
           type: string
-          description: Назва посади / вакансії (від 3 до 150 символів).
-          example: Senior C# / .NET Architect
+          description: Назва посади / позиції.
+          example: Middle .NET Developer
         company:
-          maxLength: 100
+          maxLength: 200
           minLength: 2
           type: string
-          description: Назва компанії-роботодавця (від 2 до 100 символів).
-          example: FinTech Solutions UA
+          description: Назва компанії-роботодавця.
+          example: Genesis Tech
         description:
           maxLength: 10000
-          minLength: 20
+          minLength: 10
           type: string
-          description: Повний зміст опису та вимог до кандидата (щонайменше 20 символів).
-          example: Розробка надійних фінансових сервісів та інтеграція платіжних систем на .NET.
+          description: Повний опис вакансії.
+          example: Розробка бекенд сервісів на .NET 10.
         category:
-          maxLength: 50
-          minLength: 2
+          maxLength: 100
+          minLength: 0
           type: string
-          description: Професійна категорія вакансії.
+          description: Категорія / напрям.
           example: .NET
         location:
-          maxLength: 100
-          minLength: 2
-          type: string
-          description: Місце роботи або формат зайнятості.
-          example: Київ / Віддалено
-        full_address:
           maxLength: 200
           minLength: 0
           type: string
-          description: Повна фізична адреса офісу чи локації
+          description: Локація / місто / формат роботи.
+          example: Київ (Віддалено)
+        fullAddress:
+          maxLength: 300
+          minLength: 0
+          type: string
+          description: Повна адреса офісу (за наявності).
           nullable: true
-          example: 'Київ, проспект Академіка Глушкова, 1'
+          example: 'Київ, вул. Мечникова, 2'
         schedule:
           maxLength: 100
           minLength: 0
           type: string
-          description: Графік та тип зайнятості
+          description: Графік роботи.
           nullable: true
-          example: 'Повна зайнятість · Стандартний графік: 5/2'
+          example: Повна зайнятість
         experience:
-          maxLength: 50
+          maxLength: 100
           minLength: 0
           type: string
-          description: Необхідний досвід роботи
+          description: Необхідний досвід.
           nullable: true
-          example: 3+ роки
-        salary_min:
+          example: 2+ роки
+        salaryMin:
           maximum: 1000000
           minimum: 0
           type: number
-          description: Мінімальна заробітна плата. Повинна бути більшою або рівною 0.
+          description: Мінімальна заробітна плата.
           format: double
           nullable: true
-          example: 3000
-        salary_max:
+          example: 2500
+        salaryMax:
           maximum: 1000000
           minimum: 0
           type: number
-          description: 'Максимальна заробітна плата. Повинна бути в межах від 0 до 1,000,000.'
+          description: Максимальна заробітна плата.
           format: double
           nullable: true
-          example: 5000
+          example: 4000
         currency:
-          maxLength: 3
-          minLength: 3
-          pattern: '^[A-Za-z]{3}$'
+          minLength: 1
+          pattern: ^(USD|EUR|UAH)$
           type: string
-          description: 'Валюта заробітної плати (3 символи ISO, наприклад USD, EUR, UAH).'
+          description: 'Валюта виплати заробітної плати (USD, EUR, UAH).'
           example: USD
         source:
           $ref: '#/components/schemas/JobSource'
-        source_url:
+        sourceUrl:
           maxLength: 2048
           minLength: 1
           type: string
-          description: Пряме посилання на першоджерело публікації.
+          description: Посилання на оригінал вакансії.
           format: uri
-          example: https://example.com/careers/senior-dotnet
+          example: https://djinni.co/jobs/example/
         skills:
           maxItems: 30
           type: array
@@ -447,12 +469,11 @@ components:
           description: Список ключових навичок.
           nullable: true
           example:
+            - .NET 10
             - C#
-            - .NET
-            - Architecture
             - PostgreSQL
       additionalProperties: false
-      description: Тіло запиту для створення або імпорту нової вакансії.
+      description: Модель запиту на створення нової вакансії через REST API.
     ErrorPayload:
       type: object
       properties:
@@ -476,255 +497,258 @@ components:
       additionalProperties: false
     JobSource:
       enum:
+        - Unknown
         - WorkUa
         - RobotaUa
         - Djinni
         - Dou
       type: string
-      description: 'Джерело, з якого агреговано або розміщено вакансію.'
+      description: Джерело походження вакансії (платформа агрегації).
     SaveVacancyRequest:
       required:
-        - vacancy_id
+        - vacancyId
       type: object
       properties:
-        vacancy_id:
+        vacancyId:
           type: string
-          description: 'Унікальний ідентифікатор вакансії, яку потрібно додати у збережені.'
+          description: 'Ідентифікатор вакансії, яку потрібно зберегти.'
           format: uuid
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          example: 11111111-1111-1111-1111-111111111111
         notes:
           maxLength: 500
           minLength: 0
           type: string
-          description: Необов'язкові власні нотатки користувача щодо цієї вакансії (до 500 символів).
+          description: Довільні нотатки кандидата до вакансії (за бажанням).
           nullable: true
-          example: 'Цікавий стек технологій, підготувати запитання про процеси тестування.'
+          example: Подати резюме у понеділок
       additionalProperties: false
-      description: Тіло запиту для збереження («лайку») вакансії.
+      description: Модель запиту на збереження вакансії у закладки («лайк»).
     SavedVacancyDto:
       type: object
       properties:
         id:
           type: string
-          description: Ідентифікатор запису збереженої вакансії.
+          description: Унікальний ідентифікатор запису збереження (UUID).
           format: uuid
-          example: 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d
-        vacancy_id:
+          example: 99999999-9999-9999-9999-999999999999
+        vacancyId:
           type: string
-          description: 'Ідентифікатор вакансії, яку збережено.'
+          description: Ідентифікатор самої збереженої вакансії.
           format: uuid
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          example: 11111111-1111-1111-1111-111111111111
         vacancy:
           $ref: '#/components/schemas/VacancyDto'
         notes:
           type: string
-          description: Особисті примітки шукача роботи до вакансії.
+          description: Персональні нотатки кандидата до вакансії (за наявності).
           nullable: true
-          example: 'Відправити CV у понеділок, звернути увагу на вимоги до Docker.'
-        saved_at:
+          example: 'Цікавий проєкт на .NET 10, підготувати CV'
+        savedAt:
           type: string
-          description: Дата та час збереження вакансії.
+          description: Дата та час додавання вакансії до збережених (UTC).
           format: date-time
-          example: '2026-09-29T14:30:00Z'
       additionalProperties: false
-      description: Представлення збереженої («лайкнутої») вакансії користувача.
+      description: DTO представлення збереженої вакансії («лайку» / закладки) для клієнтів API.
     UpdateVacancyRequest:
-      required:
-        - category
-        - company
-        - currency
-        - description
-        - location
-        - title
       type: object
       properties:
         title:
-          maxLength: 150
+          maxLength: 200
           minLength: 3
           type: string
-          description: Оновлена назва посади (від 3 до 150 символів).
-          example: Lead C# .NET Solutions Architect
+          description: Назва посади / позиції.
+          nullable: true
+          example: Lead .NET Developer
         company:
-          maxLength: 100
+          maxLength: 200
           minLength: 2
           type: string
-          description: Оновлена назва компанії (від 2 до 100 символів).
-          example: FinTech Solutions UA
+          description: Назва компанії-роботодавця.
+          nullable: true
+          example: Genesis Tech
         description:
           maxLength: 10000
-          minLength: 20
+          minLength: 10
           type: string
-          description: Повний зміст опису та вимог.
-          example: 'Оновлені вимоги: глибокі знання мікросервісної архітектури, .NET 10, Kubernetes.'
+          description: Повний опис вакансії.
+          nullable: true
+          example: Оновлений опис посади...
         category:
-          maxLength: 50
-          minLength: 2
+          maxLength: 100
+          minLength: 0
           type: string
-          description: Професійна категорія.
+          description: Професійна категорія / напрям.
+          nullable: true
           example: .NET
         location:
-          maxLength: 100
-          minLength: 2
-          type: string
-          description: Локація або формат зайнятості.
-          example: Київ (Гібрид)
-        full_address:
           maxLength: 200
           minLength: 0
           type: string
-          description: Повна фізична адреса офісу чи локації.
+          description: Місто / формат роботи.
           nullable: true
-          example: 'Київ, проспект Академіка Глушкова, 1'
+          example: Віддалено
+        fullAddress:
+          maxLength: 300
+          minLength: 0
+          type: string
+          description: Повна адреса офісу (за наявності).
+          nullable: true
         schedule:
           maxLength: 100
           minLength: 0
           type: string
-          description: Графік та тип зайнятості
+          description: Графік роботи.
           nullable: true
-          example: 'Повна зайнятість · Стандартний графік: 5/2'
         experience:
-          maxLength: 50
+          maxLength: 100
           minLength: 0
           type: string
-          description: Необхідний досвід роботи
+          description: Необхідний досвід.
           nullable: true
-          example: 3+ роки
-        salary_min:
+        salaryMin:
           maximum: 1000000
           minimum: 0
           type: number
           description: Мінімальна заробітна плата.
           format: double
           nullable: true
-          example: 3500
-        salary_max:
+        salaryMax:
           maximum: 1000000
           minimum: 0
           type: number
           description: Максимальна заробітна плата.
           format: double
           nullable: true
-          example: 5500
         currency:
-          maxLength: 3
-          minLength: 3
-          pattern: '^[A-Za-z]{3}$'
+          pattern: ^(USD|EUR|UAH)$
           type: string
-          description: Валюта заробітної плати (3 символи ISO).
-          example: USD
+          description: 'Валюта виплати заробітної плати (USD, EUR, UAH).'
+          nullable: true
+        source:
+          $ref: '#/components/schemas/JobSource'
+        sourceUrl:
+          maxLength: 2048
+          minLength: 1
+          type: string
+          description: Посилання на оригінал вакансії.
+          format: uri
+          nullable: true
         skills:
           maxItems: 30
           type: array
           items:
             type: string
-          description: Список оновлених навичок.
+          description: Список ключових навичок.
           nullable: true
-          example:
-            - C#
-            - .NET 10
-            - Architecture
-            - Microservices
-        is_active:
+        isActive:
           type: boolean
-          description: Статус активності вакансії.
-          example: true
+          description: Ознака активності вакансії.
+          nullable: true
       additionalProperties: false
-      description: Тіло запиту для оновлення існуючої вакансії.
+      description: Модель запиту на оновлення існуючої вакансії (PUT/PATCH).
     VacancyDto:
       type: object
       properties:
         id:
           type: string
-          description: Унікальний ідентифікатор вакансії.
+          description: Унікальний ідентифікатор вакансії (UUID).
           format: uuid
-          example: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+          example: 11111111-1111-1111-1111-111111111111
         title:
           type: string
-          description: Назва вакансії / посади.
+          description: Назва посади / позиції.
           nullable: true
-          example: .NET Core Backend Developer
+          example: Senior C# .NET Backend Developer
         company:
           type: string
-          description: Назва компанії або роботодавця.
+          description: Назва компанії-роботодавця.
           nullable: true
-          example: GlobalTech Innovations
+          example: Genesis Tech
         description:
           type: string
-          description: Детальний опис вакансії та обов'язків.
+          description: 'Детальний опис вакансії, обов''язків та вимог.'
           nullable: true
-          example: Шукаємо досвідченого C# розробника для створення високонавантажених REST API на базі .NET 10.
+          example: 'Розробка high-load мікросервісів на .NET 10, Kafka, Redis та PostgreSQL.'
         category:
           type: string
-          description: 'Категорія чи напрямок (наприклад, .NET, QA, DevOps, Mobile).'
+          description: 'Професійна категорія / напрям (.NET, QA, Frontend, DevOps).'
           nullable: true
           example: .NET
         location:
           type: string
-          description: 'Локація або формат роботи (Київ, Віддалено, Гібрид).'
+          description: 'Місто та формат роботи (наприклад, Віддалено, Київ).'
           nullable: true
           example: Київ (Віддалено)
-        full_address:
+        fullAddress:
           type: string
-          description: Повна фізична адреса офісу або локації
+          description: Повна адреса офісу роботодавця (за наявності).
           nullable: true
-          example: 'Київ, проспект Академіка Глушкова, 1'
+          example: 'Київ, вул. Мечникова, 2, БЦ Парус'
         schedule:
           type: string
-          description: Графік та тип зайнятості
+          description: Графік та тип зайнятості.
           nullable: true
-          example: 'Повна зайнятість · Стандартний графік: 5/2'
+          example: Повна зайнятість · Гнучкий графік
         experience:
           type: string
-          description: 'Необхідний досвід роботи (наприклад: "1-3 роки", "3+ роки", "5+ років", "Без досвіду").'
+          description: Вимоги до досвіду роботи.
           nullable: true
-          example: 3+ роки
-        salary_min:
+          example: 5+ років
+        salaryMin:
           type: number
-          description: Мінімальна заробітна плата у валюті currency (якщо вказана).
-          format: double
-          nullable: true
-          example: 2500
-        salary_max:
-          type: number
-          description: Максимальна заробітна плата у валюті currency (якщо вказана).
+          description: Мінімальна заробітна плата у валюті currency.
           format: double
           nullable: true
           example: 4000
+        salaryMax:
+          type: number
+          description: Максимальна заробітна плата у валюті currency.
+          format: double
+          nullable: true
+          example: 5500
         currency:
           type: string
-          description: Валюта виплати заробітної плати.
+          description: 'Валюта виплати заробітної плати (USD, EUR, UAH).'
           nullable: true
           example: USD
         source:
           $ref: '#/components/schemas/JobSource'
-        source_url:
+        sourceUrl:
           type: string
-          description: Пряме посилання на оригінал вакансії на ресурсі-джерелі.
+          description: Оригінальне посилання на вакансію на сайті джерела.
           nullable: true
-          example: https://djinni.co/jobs/12345-dotnet-developer/
+          example: https://djinni.co/jobs/example-senior-dotnet/
         skills:
           type: array
           items:
             type: string
-          description: Список ключових технологій та навичок (тегів).
+          description: Список ключових навичок та технологій (тегів).
           nullable: true
           example:
-            - C#
             - .NET 10
+            - C#
+            - Kafka
             - PostgreSQL
-            - Docker
-            - REST API
-        published_at:
+        publishedAt:
           type: string
-          description: Дата первинної публікації на джерелі.
+          description: Дата та час публікації вакансії.
           format: date-time
-          example: '2026-09-28T10:00:00Z'
-        is_active:
+        firstSeenAt:
+          type: string
+          description: Дата та час першого виявлення вакансії нашою платформою.
+          format: date-time
+        lastSeenAt:
+          type: string
+          description: Дата та час останнього підтвердження актуальності вакансії парсером.
+          format: date-time
+        isActive:
           type: boolean
-          description: Чи активна вакансія на даний момент.
-          example: true
+          description: 'Ознака активності (true — активна, false — закрита/архівна).'
+        isSaved:
+          type: boolean
+          description: "Ознака збереження вакансії поточним користувачем у закладки.\r\nОбчислюється динамічно за таблицею збережених вакансій."
       additionalProperties: false
-      description: Представлення сутності вакансії Waterfall.
+      description: 'DTO представлення вакансії для клієнтів API (Web API, .NET MAUI).'
     VacancyDtoPagedResult:
       type: object
       properties:
@@ -732,41 +756,39 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/VacancyDto'
-          description: Список елементів поточної сторінки.
+          description: Колекція елементів поточної сторінки.
           nullable: true
-        total_count:
+        totalCount:
           type: integer
-          description: 'Загальна кількість елементів, що задовольняють фільтр.'
+          description: 'Загальна кількість записів, що відповідають критеріям фільтрації у БД.'
           format: int32
           example: 42
         page:
           type: integer
-          description: Поточний номер сторінки (починаючи з 1).
+          description: Номер поточної сторінки (нумерація з 1).
           format: int32
           example: 1
-        page_size:
+        pageSize:
           type: integer
-          description: Розмір сторінки (кількість елементів на одній сторінці).
+          description: Розмір сторінки (кількість елементів).
           format: int32
-          example: 20
-        total_pages:
+          example: 10
+        totalPages:
           type: integer
-          description: Загальна кількість доступних сторінок.
+          description: Загальна кількість сторінок.
           format: int32
           readOnly: true
-          example: 3
-        has_next_page:
-          type: boolean
-          description: Чи існує наступна сторінка.
-          readOnly: true
-          example: true
-        has_previous_page:
+          example: 5
+        hasPreviousPage:
           type: boolean
           description: Чи існує попередня сторінка.
           readOnly: true
-          example: false
+        hasNextPage:
+          type: boolean
+          description: Чи існує наступна сторінка.
+          readOnly: true
       additionalProperties: false
-      description: Універсальна обгортка пагінації зі зсувом (offset pagination).
+      description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\r\nМістить сторінку елементів та метадані пагінації."
     ValidationErrorDetail:
       type: object
       properties:
