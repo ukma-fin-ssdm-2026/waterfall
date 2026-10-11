@@ -5,7 +5,9 @@ root = true
 # ==========================================
 [*]
 charset = utf-8
-end_of_line = crlf
+# LF усюди: git зберігає LF (див. .gitattributes), тож dotnet format
+# дає однаковий результат на Windows і на Linux-раннері CI.
+end_of_line = lf
 indent_style = space
 indent_size = 4
 insert_final_newline = true
@@ -16,6 +18,18 @@ trim_trailing_whitespace = true
 # ==========================================
 [*.xaml]
 indent_size = 4
+
+# ==========================================
+# Конфігурації, проєктні файли, TypeScript (MCP-сервер, як у src/mcp/.prettierrc)
+# ==========================================
+[*.{json,yml,yaml,csproj,props,targets,slnx,ts,js}]
+indent_size = 2
+
+# ==========================================
+# Markdown: два пробіли в кінці рядка = примусовий перенос
+# ==========================================
+[*.md]
+trim_trailing_whitespace = false
 
 # ==========================================
 # Налаштування для файлів C#
