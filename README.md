@@ -53,6 +53,12 @@
 * [**decisions/**](./docs/architecture/decisions/) — ADR-001…003
 * [**uml/**](./docs/architecture/uml/) — `.puml` + `.svg`
 
+### Клієнт і якість коду (Лаб 5)
+* [**progress.md**](./docs/code-quality/progress.md) — структура модулів, стан коду, запуск застосунку, результати перевірок якості
+* [**TeamCharter.md §9**](./TeamCharter.md#9-політика-якості-та-огляду-коду) — стандарти коду, лінтери, чекліст Peer Review, Definition of Done
+* Застосунок (Windows): `dotnet run --project src/waterfall.UI -f net10.0-windows10.0.19041.0` (поруч має працювати API)
+* Перед комітом: `dotnet format waterfall.slnx --verify-no-changes`; хук `gitleaks` — `pre-commit install` (див. [`.pre-commit-config.yaml`](./.pre-commit-config.yaml))
+
 ### Проєктування та специфікація API (Лаб 4)
 * [**api-design.md**](./docs/api/api-design.md) — документ проєктування REST API (ресурсна модель, ендпоінти, пагінація, обробка помилок)
 * [**openapi-generated.yaml**](./docs/api/openapi-generated.yaml) — згенерована специфікація OpenAPI 3.0 (100% Code-First, 0 рядків вручну; не редагувати)
@@ -111,3 +117,4 @@ TypeScript MCP-сервер в [`src/mcp/`](./src/mcp/), згенеровани�
 | розділ `### Архітектура` (навігація) | Садиков Константін | структурування посилань | самоперевірка автора (§8); рев'ю в PR |
 | розділ `### MCP-сервер` | Дмитро | структурування інструкцій | самоперевірка автора (§8) |
 | розділ `#### API: запуск, Swagger UI та регенерація специфікації` | Константін | текст інструкцій | самоперевірка автора (§8): скрипт `$ref`/описів/прикладів, HEAD-перевірка CDN, рев'ю в PR |
+| розділ `### Клієнт і якість коду (Лаб 5)` | Садиков Константін | так, текст | самоперевірка автора (§8); команди запущено локально |
