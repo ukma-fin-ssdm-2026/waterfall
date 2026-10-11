@@ -1,0 +1,82 @@
+// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+
+using System.Net;
+using CommunityToolkit.Mvvm.Messaging;
+using Waterfall.Client.Models.Vacancies;
+using Waterfall.Client.ViewModels;
+
+namespace Waterfall.Client.Tests;
+
+public class VacancyItemViewModelTests
+{
+    private readonly FakeGateway _gateway = new();
+    private readonly List<string> _errors = [];
+    private readonly List<VacancySaveChangedMessage> _sent = [];
+    private readonly StrongReferenceMessenger _messenger = new();
+
+    public VacancyItemViewModelTests()
+    {
+        _messenger.Register<VacancySaveChangedMessage>(this, (_, m) => _sent.Add(m));
+    }
+
+    private VacancyItemViewModel Item(bool isSaved = false, decimal? min = null, decimal? max = null) =>
+        new(new VacancyDto { Id = Guid.NewGuid(), IsSaved = isSaved, SalaryMin = min, SalaryMax = max, Currency = "USD" },
+            _gateway, _messenger, _errors.Add);
+
+    [Theory]
+    [InlineData(4000, 5500, "4\u00A0000–5\u00A0500 USD")]
+    [InlineData(4000, 4000, "4\u00A0000 USD")]
+    [InlineData(4000, null, "від 4\u00A0000 USD")]
+    [InlineData(null, 5500, "до 5\u00A0500 USD")]
+    [InlineData(null, null, null)]
+    public void SalaryText_CoversAllRangeShapes(int? min, int? max, string? expected)
+    {
+        VacancyItemViewModel item = Item(min: (decimal?)min, max: (decimal?)max);
+
+        Assert.Equal(expected, item.SalaryText);
+        Assert.Equal(expected is not null, item.HasSalary);
+    }
+
+    [Theory]
+    [InlineData(false, "save", true)]
+    [InlineData(true, "unsave", false)]
+    public async Task Toggle_CallsServerAndFlipsState(bool initiallySaved, string expectedAction, bool expectedSaved)
+    {
+        VacancyItemViewModel item = Item(isSaved: initiallySaved);
+
+        await item.ToggleSaveCommand.ExecuteAsync(null);
+
+        Assert.Equal((expectedAction, item.Id), Assert.Single(_gateway.ToggleCalls));
+        Assert.Equal(expectedSaved, item.IsSaved);
+        Assert.Equal(expectedSaved ? "★ Збережено" : "☆ Зберегти", item.SaveButtonText);
+        Assert.Equal(new VacancySaveChangedMessage(item.Id, expectedSaved), Assert.Single(_sent));
+    }
+
+    [Theory]
+    [InlineData(false, HttpStatusCode.Conflict, true)]
+    [InlineData(true, HttpStatusCode.NotFound, false)]
+    public async Task Toggle_ServerAlreadyInTargetState_SyncsWithoutError(bool initiallySaved, HttpStatusCode status, bool expectedSaved)
+    {
+        VacancyItemViewModel item = Item(isSaved: initiallySaved);
+        _gateway.ToggleError = new ApiException(status, null, "already");
+
+        await item.ToggleSaveCommand.ExecuteAsync(null);
+
+        Assert.Equal(expectedSaved, item.IsSaved);
+        Assert.Empty(_errors);
+        Assert.Equal(new VacancySaveChangedMessage(item.Id, expectedSaved), Assert.Single(_sent));
+    }
+
+    [Fact]
+    public async Task Toggle_RealFailure_KeepsStateAndReportsMessage()
+    {
+        VacancyItemViewModel item = Item(isSaved: false);
+        _gateway.ToggleError = new ApiException(HttpStatusCode.NotFound, null, "Вакансію не знайдено.");
+
+        await item.ToggleSaveCommand.ExecuteAsync(null);
+
+        Assert.False(item.IsSaved);
+        Assert.Equal(["Вакансію не знайдено."], _errors);
+        Assert.Empty(_sent);
+    }
+}
