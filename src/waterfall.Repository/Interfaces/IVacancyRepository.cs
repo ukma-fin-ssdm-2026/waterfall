@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: метод пошуку за джерелом і зовнішнім id для фонового збору (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, самоперевірка автора (§8)
 
 using Waterfall.Repository.Entities;
 
@@ -27,6 +28,13 @@ public interface IVacancyRepository
         CancellationToken ct = default);
 
     Task<VacancyDB?> GetByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Шукає вакансію за джерелом і її ідентифікатором на сайті-джерелі.
+    /// Потрібен фоновому збору даних: повторний імпорт оновлює наявний запис, а не дублює його.
+    /// </summary>
+    Task<VacancyDB?> GetBySourceAndExternalIdAsync(string source, string externalId, CancellationToken ct = default);
+
     Task<VacancyDB> CreateAsync(VacancyDB entity, CancellationToken ct = default);
     Task<VacancyDB?> UpdateAsync(VacancyDB entity, CancellationToken ct = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
