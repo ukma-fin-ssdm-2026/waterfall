@@ -39,6 +39,7 @@ public static class ServiceCollectionExtensions
         // 1. Репозиторії БД (працюють виключно із сутностями)
         services.AddScoped<IVacancyRepository, EfVacancyRepository>();
         services.AddScoped<ISavedVacancyRepository, EfSavedVacancyRepository>();
+        services.AddScoped<IUserRepository, EfUserRepository>();
 
         // 2. Кешування
         services.AddMemoryCache();
