@@ -26,3 +26,6 @@
 *.db
 *.db-shm
 *.db-wal
+
+# Secrets (THR-09): Jwt:Key and other secrets live ONLY in env vars (Jwt__Key)
+# or .NET User Secrets (stored outside the repo) — never in tracked config.

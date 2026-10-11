@@ -3,7 +3,86 @@ info:
   title: Waterfall API
   description: 'RESTful API для платформи агрегації та підбору вакансій Waterfall '
   version: v1
+servers:
+  - url: http://localhost:3000
+    description: Локальний сервер розробки
 paths:
+  /api/v1/auth/register:
+    post:
+      tags:
+        - Auth
+      summary: Зареєструвати нового користувача та видати access-JWT.
+      description: Створює обліковий запис (роль JobSeeker або Analyst) та повертає access-JWT на 15 хвилин.
+      operationId: Register
+      requestBody:
+        description: 'Email, пароль (мін. 12 символів + цифра) та роль.'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 'Користувача зареєстровано, токен видано.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Помилка валідації вхідного запиту.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '409':
+          description: Email вже зареєстровано.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/auth/login:
+    post:
+      tags:
+        - Auth
+      summary: Увійти та отримати access-JWT.
+      description: Перевіряє облікові дані та повертає access-JWT на 15 хвилин.
+      operationId: Login
+      requestBody:
+        description: Email та пароль.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 'Вхід успішний, токен видано.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Помилка валідації вхідного запиту.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: 'Невірні облікові дані (однакове повідомлення для обох причин, THR-01).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/saved-vacancies:
     get:
       tags:
@@ -126,7 +205,7 @@ paths:
       tags:
         - Vacancies
       summary: Отримати список вакансій із фільтрацією та пагінацією.
-      description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\r\nмінімальної зарплати та джерела агрегації."
+      description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\nмінімальної зарплати та джерела агрегації."
       operationId: GetVacancies
       parameters:
         - name: Page
@@ -198,7 +277,7 @@ paths:
           example: Djinni
         - name: OnlyActive
           in: query
-          description: "Ознака вибірки тільки активних вакансій (за замовчуванням true).\r\nЯкщо false — повертає як активні, так і закриті (архівні) вакансії."
+          description: "Ознака вибірки тільки активних вакансій (за замовчуванням true).\nЯкщо false — повертає як активні, так і закриті (архівні) вакансії."
           schema:
             type: boolean
             example: true
@@ -362,6 +441,32 @@ components:
           $ref: '#/components/schemas/ErrorPayload'
       additionalProperties: false
       description: Узгоджена структура помилок API
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: 'Access-JWT (HS256), несе claims sub=userId та userId=userId.'
+          nullable: true
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        expiresAt:
+          type: string
+          description: Момент спливу токена (UTC).
+          format: date-time
+        userId:
+          type: string
+          description: 'Ідентифікатор користувача (uuid, дублюється в sub/userId claims).'
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+        email:
+          type: string
+          description: Електронна пошта користувача.
+          nullable: true
+          example: jobseeker@example.com
+        role:
+          $ref: '#/components/schemas/UserRole'
+      additionalProperties: false
+      description: 'Відповідь автентифікації: access-JWT (15 хв, THR-02) та ідентифікатор користувача.'
     CreateVacancyRequest:
       required:
         - category
@@ -496,6 +601,49 @@ components:
       type: integer
       description: Джерело походження вакансії (платформа агрегації).
       format: int32
+    LoginRequest:
+      required:
+        - email
+        - password
+      type: object
+      properties:
+        email:
+          minLength: 1
+          type: string
+          description: Електронна пошта користувача.
+          format: email
+          example: jobseeker@example.com
+        password:
+          minLength: 1
+          type: string
+          description: 'Пароль користувача (ніколи не логується, THR-08).'
+          example: Secret123456
+      additionalProperties: false
+      description: 'Модель запиту на вхід користувача (навмисно без політики складності, щоб не розкривати її на логіні, THR-01).'
+    RegisterRequest:
+      required:
+        - email
+        - password
+      type: object
+      properties:
+        email:
+          maxLength: 80
+          minLength: 3
+          type: string
+          description: 'Електронна пошта користувача (унікальна, використовується як логін).'
+          format: email
+          example: jobseeker@example.com
+        password:
+          maxLength: 32
+          minLength: 12
+          pattern: .*\d.*
+          type: string
+          description: 'Пароль користувача (мінімум 12 символів та хоча б одна цифра; зберігається лише як хеш, SEC-001).'
+          example: Secret123456
+        role:
+          $ref: '#/components/schemas/UserRole'
+      additionalProperties: false
+      description: 'Модель запиту на реєстрацію нового користувача (роль JobSeeker за замовчуванням або Analyst, FR-008).'
     SaveVacancyRequest:
       required:
         - vacancyId
@@ -634,6 +782,13 @@ components:
           nullable: true
       additionalProperties: false
       description: Модель запиту на оновлення існуючої вакансії (PUT/PATCH).
+    UserRole:
+      enum:
+        - 0
+        - 1
+      type: integer
+      description: Роль користувача платформи (FR-008).
+      format: int32
     VacancyDto:
       type: object
       properties:
@@ -734,7 +889,7 @@ components:
           description: 'Ознака активності (true — активна, false — закрита/архівна).'
         isSaved:
           type: boolean
-          description: "Ознака збереження вакансії поточним користувачем у закладки.\r\nОбчислюється динамічно за таблицею збережених вакансій."
+          description: "Ознака збереження вакансії поточним користувачем у закладки.\nОбчислюється динамічно за таблицею збережених вакансій."
       additionalProperties: false
       description: 'DTO представлення вакансії для клієнтів API (Web API, .NET MAUI).'
     VacancyDtoPagedResult:
@@ -776,7 +931,7 @@ components:
           description: Чи існує наступна сторінка.
           readOnly: true
       additionalProperties: false
-      description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\r\nМістить сторінку елементів та метадані пагінації."
+      description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\nМістить сторінку елементів та метадані пагінації."
     ValidationErrorDetail:
       type: object
       properties:
@@ -791,7 +946,17 @@ components:
             - null
           nullable: true
       additionalProperties: false
+  securitySchemes:
+    Bearer:
+      type: http
+      description: 'JWT у заголовку Authorization. Формат: ''Bearer {token}''.'
+      scheme: bearer
+      bearerFormat: JWT
+security:
+  - Bearer: [ ]
 tags:
+  - name: Auth
+    description: Реєстрація та вхід користувачів платформи Waterfall (JWT)
   - name: SavedVacancies
     description: Керування вподобаними («лайкнутими») вакансіями для рекомендацій та статистики
   - name: Vacancies
