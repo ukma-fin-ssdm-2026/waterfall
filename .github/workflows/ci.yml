@@ -32,7 +32,29 @@ jobs:
 
       - name: Build
         run: dotnet build src/api/Waterfall.Api.csproj -c Release --no-restore --nologo
-      
-      # No dotnet test yet, since we have no tests
-      
+
+  test:
+    # AI: прогін юніт-тестів у CI (issue #62); перевірено: ті самі команди dotnet test локально (111 + 2 + 61 тестів), розбір YAML
+    # Full test run within 5 minutes in accordance with MAINT-001; runs in parallel with build
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      # On Linux the libraries target net10.0 only, so test projects build without MAUI workloads
+      - name: Security tests
+        run: dotnet test tests/waterfall.Security.Tests/waterfall.Security.Tests.csproj -c Release --nologo
+
+      - name: Ingestion tests
+        run: dotnet test tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -c Release --nologo
+
+      - name: Client tests
+        run: dotnet test tests/waterfall.Client.Tests/waterfall.Client.Tests.csproj -c Release --nologo
 
