@@ -205,6 +205,7 @@ npm run typecheck         # tsc --noEmit
 ```
 * `--ignore-scripts` не дає виконатися `postinstall`-скриптам залежностей — типовому каналу атак через ланцюжок постачання. Проєкту install-скрипти не потрібні.
 * `--max-warnings 0` додано в коміті `5e72efd`: правила `eslint-plugin-security` мають рівень warning, тож без цього прапорця `npm run lint` завершувався успішно навіть з `eval` у коді.
+* Ті самі команди виконує в CI workflow [`.github/workflows/mcp.yml`](../../.github/workflows/mcp.yml) на кожну зміну в `src/mcp` (п. 5.6).
 
 ### 5.2. Покриття аналізу
 
@@ -399,6 +400,18 @@ schema build failures in stderr: 0
 * `src/waterfall.UI` не включено: MAUI-проєкт потребує воркладів, яких немає в середовищі Dependabot.
 * **Потрібно від адміністратора репозиторію:** Settings → Code security → увімкнути Dependabot alerts і Dependabot security updates (PR про вразливості поза розкладом). Version updates запрацюють, щойно `dependabot.yml` потрапить у `main`; результати запусків — Insights → Dependency graph → Dependabot.
 
+**`npm audit` у CI** (друга опція бонусу) — workflow [`.github/workflows/mcp.yml`](../../.github/workflows/mcp.yml):
+
+| Крок | Команда | Падає, якщо |
+| :--- | :--- | :--- |
+| Встановлення | `npm ci --ignore-scripts` | `package-lock.json` не відповідає `package.json` |
+| Лінтер безпеки | `npm run lint` | є хоч одне попередження чи помилка ESLint, зокрема `eval` |
+| Типи | `npm run typecheck` | `tsc` знаходить помилку |
+| Аудит залежностей | `npm run audit:deps` | у дереві залежностей є вразливість рівня moderate і вище |
+
+* Workflow запускається лише на зміни в `src/mcp/**`, тож нове advisory в npm не блокує PR, які MCP-сервер не чіпають. За новими вразливостями між змінами стежать Dependabot alerts.
+* Окремий job `test` у [`ci.yml`](../../.github/workflows/ci.yml) запускає на кожен PR тести `waterfall.Security.Tests`, `waterfall.Ingestion.Tests` і `waterfall.Client.Tests` паралельно зі збіркою, з тим самим лімітом 5 хвилин (MAINT-001).
+
 **NuGet-залежності C#-проєктів** перевірено так само:
 ```bash
 dotnet list src/api/Waterfall.Api.csproj package --vulnerable --include-transitive
@@ -422,11 +435,13 @@ $ dotnet build src/api/Waterfall.Api.csproj -c Release --no-incremental -p:Targe
 
 Перевірено 111 юніт-тестами в `tests/waterfall.Ingestion.Tests`, зокрема на демонстраційному дампі `data/raw/djinni-sample.json` з фішинговим доменом `djinni-careers.example.net` і `<script>` в описі.
 
+Покриття рядків за `coverlet` (`dotnet test --collect "XPlat Code Coverage"`): парсинг і нормалізація (`Waterfall.Services.Ingestion`) — 92,4 % (612 з 662), воркер (`Waterfall.Api.Workers`) — 91,7 % (44 з 48). Вимогу MAINT-001 (не менше 70 %) виконано.
+
 ### 5.8. Залишкові ризики та наступні кроки
 * `index.ts` згенеровано: повторний запуск `openapi-mcp-generator` поверне `eval` і fallback без перевірки. `npm run lint` це зловить, після чого виправлення з комітів `ceffa9f` і `8e93555` треба застосувати знову.
 * Схеми інструментів відстали від API: поля в snake_case (`vacancy_id`, `page_size`, `salary_min`), а API після PR #66 приймає camelCase. Перевірка аргументів у MCP відповідає цим схемам, але API таких параметрів не розпізнає, тож сервер треба перегенерувати з актуальної специфікації.
 * У моделі загроз ([`threat-model.md`](../architecture/threat-model.md)) немає загроз для MCP-сервера і ланцюжка постачання залежностей — їх варто додати.
-* CI ([`ci.yml`](../../.github/workflows/ci.yml)) не запускає `npm run lint`, `npm audit` і `dotnet test`: Dependabot стежить за залежностями, але не за кодом.
+* CI запускає тести й перевірки MCP-сервера (п. 5.6), але не збирає звіт покриття: MAINT-001 поки перевірено лише локально (п. 5.7).
 * `src/mcp/jest.config.js` посилається на `ts-jest`, якого немає в залежностях: тестів MCP-сервера поки немає.
 
 ---
@@ -443,5 +458,5 @@ $ dotnet build src/api/Waterfall.Api.csproj -c Release --no-incremental -p:Targe
 | `src/waterfall.Repository/Data/WaterfallDbContext.cs` | Сидоренко Денис | Допомога у налаштуванні Fluent API, індексів та конфігурації сутностей EF Core | Перевірка цілісності схеми БД, компіляція проекту та самоперевірка (§8) |
 | `docs/code-quality/static-analysis.md`, розділ 5 | Саєнко Данило | Чернетка розділу, розбір знахідок лінтера та `npm audit` | Звірка з виводом `npm audit`, `npm run lint`, `npm outdated`, `dotnet list package --vulnerable`; самоперевірка за вимогами Lab05 |
 | `src/mcp/src/jsonSchemaToZod.ts`, `src/mcp/src/index.ts`, `src/mcp/eslint.config.js`, `src/mcp/package.json` | Саєнко Данило | Перетворювач JSON Schema → Zod без `eval`, fail-closed, налаштування ESLint з `eslint-plugin-security`, видалення `shx` | `npm run lint`, `npm run typecheck`, `npm audit`; диференційне порівняння зі старою реалізацією (670 наборів аргументів); stdio smoke-тест, зокрема з `--disallow-code-generation-from-strings` та ін'єкцією збою |
-| `.github/dependabot.yml` | Саєнко Данило | Конфігурація Dependabot (Бонус 2) | Звірка з довідником опцій Dependabot на docs.github.com, розбір YAML |
+| `.github/dependabot.yml`, `.github/workflows/mcp.yml`, job `test` у `.github/workflows/ci.yml` | Саєнко Данило | Конфігурація Dependabot і CI-перевірок (Бонус 2) | Звірка з довідником опцій Dependabot і `action.yml` setup-node на GitHub, розбір YAML, ті самі команди локально |
 | `src/waterfall.Services/Ingestion/`, `src/api/Workers/VacancyIngestionWorker.cs`, `src/api/Extensions/IngestionServiceCollectionExtensions.cs`, `GetBySourceAndExternalIdAsync` у репозиторії вакансій, `tests/waterfall.Ingestion.Tests/` | Саєнко Данило | Фоновий воркер, парсер дампу Djinni, нормалізатор, тимчасовий мапер у `VacancyDB` і юніт-тести | `dotnet test` (111 тестів); SecurityCodeScan без попереджень; ручний запуск API: 10 вакансій з дампу збережено, 3 відхилено з причиною |
