@@ -14,7 +14,7 @@
     "build": "tsc && node -e \"require('node:fs').chmodSync('build/index.js', 0o755)\"",
     "typecheck": "tsc --noEmit",
     "prestart": "npm run build",
-    "lint": "eslint src",
+    "lint": "eslint src --max-warnings 0",
     "audit:deps": "npm audit --audit-level=moderate"
   },
   "engines": {
