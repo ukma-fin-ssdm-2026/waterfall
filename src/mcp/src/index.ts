@@ -3,7 +3,7 @@
  * MCP Server generated from OpenAPI spec for waterfall-api vv1
  * Generated on: 2026-10-04T10:05:23.069Z
  */
-// AI: побудова Zod-схеми аргументів без eval (issue #62); перевірено: npm run typecheck, npm run lint, диференційне порівняння з json-schema-to-zod, самоперевірка автора (§8)
+// AI: побудова Zod-схеми аргументів без eval і розбір зауважень ESLint (issue #62); перевірено: npm run typecheck, npm run lint, диференційне порівняння з json-schema-to-zod, самоперевірка автора (§8)
 
 // Load environment variables from .env file
 import dotenv from 'dotenv';
@@ -255,6 +255,7 @@ async function acquireOAuth2Token(schemeName: string, scheme: any): Promise<stri
         
         // Check if we have a cached token
         const cacheKey = `${schemeName}_${clientId}`;
+        // eslint-disable-next-line security/detect-object-injection -- key is built from a generated scheme name and the OAUTH_CLIENT_ID env var, not from tool arguments
         const cachedToken = global.__oauthTokenCache[cacheKey];
         const now = Date.now();
         
@@ -277,7 +278,7 @@ async function acquireOAuth2Token(schemeName: string, scheme: any): Promise<stri
         }
         
         // Prepare the token request
-        let formData = new URLSearchParams();
+        const formData = new URLSearchParams();
         formData.append('grant_type', 'client_credentials');
         
         // Add scopes if specified
@@ -304,6 +305,7 @@ async function acquireOAuth2Token(schemeName: string, scheme: any): Promise<stri
             const expiresIn = response.data.expires_in || 3600; // Default to 1 hour
             
             // Cache the token
+            // eslint-disable-next-line security/detect-object-injection -- same trusted cacheKey as above
             global.__oauthTokenCache[cacheKey] = {
                 token,
                 expiresAt: now + (expiresIn * 1000) - 60000 // Expire 1 minute early
@@ -395,7 +397,8 @@ async function executeApiTool(
     // Security requirements use OR between array items and AND within each object
     const appliedSecurity = definition.securityRequirements?.find(req => {
         // Try each security requirement (combined with OR)
-        return Object.entries(req).every(([schemeName, scopesArray]) => {
+        return Object.entries(req).every(([schemeName]) => {
+            // eslint-disable-next-line security/detect-object-injection -- scheme names come from generated tool definitions, not from tool arguments
             const scheme = allSecuritySchemes[schemeName];
             if (!scheme) return false;
             
@@ -447,6 +450,7 @@ async function executeApiTool(
     if (appliedSecurity) {
         // Apply each security scheme from this requirement (combined with AND)
         for (const [schemeName, scopesArray] of Object.entries(appliedSecurity)) {
+            // eslint-disable-next-line security/detect-object-injection -- scheme names come from generated tool definitions, not from tool arguments
             const scheme = allSecuritySchemes[schemeName];
             
             // API Key security
@@ -579,8 +583,8 @@ async function executeApiTool(
     if (contentType.includes('application/json') && typeof response.data === 'object' && response.data !== null) {
          try { 
              responseText = JSON.stringify(response.data, null, 2); 
-         } catch (e) { 
-             responseText = "[Stringify Error]"; 
+         } catch {
+             responseText = "[Stringify Error]";
          }
     } 
     // Handle string responses
