@@ -1,7 +1,7 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
-using Microsoft.Extensions.Logging;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Services.Interfaces;
@@ -34,13 +34,17 @@ public class VacancyService : IVacancyService
         _logger = logger;
     }
 
-    public async Task<PagedResult<VacancyDto>> GetAllAsync(VacancyFilterParameters filter, CancellationToken ct = default)
+    public async Task<PagedResult<VacancyDto>> GetAllAsync(VacancyFilterParameters filter, CancellationToken ct = default, Guid? userId = null)
     {
-        PagedResult<VacancyDto>? cached = await _cacheService.GetPagedVacanciesAsync(filter, ct);
-        if (cached != null)
+        // Кеш спільний для всіх, а IsSaved — персональний: залогіненим віддаємо свіжі дані з їхніми флагами.
+        if (userId is null)
         {
-            _logger.LogDebug("Cache HIT для сторінки вакансій (Page={Page}, Size={PageSize})", filter.Page, filter.PageSize);
-            return cached;
+            PagedResult<VacancyDto>? cached = await _cacheService.GetPagedVacanciesAsync(filter, ct);
+            if (cached != null)
+            {
+                _logger.LogDebug("Cache HIT для сторінки вакансій (Page={Page}, Size={PageSize})", filter.Page, filter.PageSize);
+                return cached;
+            }
         }
 
         _logger.LogDebug("Cache MISS для вакансій. Звернення до бази даних...");
@@ -68,7 +72,9 @@ public class VacancyService : IVacancyService
                 ct: ct);
 
             List<Guid> pageIds = entities.Select(e => e.Id).ToList();
-            HashSet<Guid> savedIds = await _savedVacancyRepository.GetSavedVacancyIdsAsync(pageIds, ct);
+            HashSet<Guid> savedIds = userId is null
+                ? []
+                : await _savedVacancyRepository.GetSavedVacancyIdsAsync(pageIds, userId.Value, ct);
 
             List<VacancyDto> items = entities
                 .Select(e => MapToDto(e, savedIds.Contains(e.Id)))
@@ -82,7 +88,11 @@ public class VacancyService : IVacancyService
                 PageSize = filter.PageSize
             };
 
-            await _cacheService.SetPagedVacanciesAsync(filter, result, null, ct);
+            // Персональні флаги в спільний кеш не кладемо, щоб не просвітити чуже «Обране».
+            if (userId is null)
+            {
+                await _cacheService.SetPagedVacanciesAsync(filter, result, null, ct);
+            }
             return result;
         }
         catch (Exception ex)
@@ -100,12 +110,15 @@ public class VacancyService : IVacancyService
         }
     }
 
-    public async Task<VacancyDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<VacancyDto?> GetByIdAsync(Guid id, CancellationToken ct = default, Guid? userId = null)
     {
-        VacancyDto? cached = await _cacheService.GetVacancyByIdAsync(id, ct);
-        if (cached != null)
+        if (userId is null)
         {
-            return cached;
+            VacancyDto? cached = await _cacheService.GetVacancyByIdAsync(id, ct);
+            if (cached != null)
+            {
+                return cached;
+            }
         }
 
         VacancyDB? entity = await _vacancyRepository.GetByIdAsync(id, ct);
@@ -114,10 +127,15 @@ public class VacancyService : IVacancyService
             return null;
         }
 
-        bool isSaved = await _savedVacancyRepository.ExistsForVacancyAsync(id, ct);
+        bool isSaved = userId is null
+            ? false
+            : await _savedVacancyRepository.ExistsForVacancyAsync(id, userId.Value, ct);
         VacancyDto dto = MapToDto(entity, isSaved);
 
-        await _cacheService.SetVacancyByIdAsync(id, dto, null, ct);
+        if (userId is null)
+        {
+            await _cacheService.SetVacancyByIdAsync(id, dto, null, ct);
+        }
         return dto;
     }
 
@@ -187,7 +205,7 @@ public class VacancyService : IVacancyService
 
         await _cacheService.InvalidateVacancyAsync(id, ct);
 
-        bool isSaved = await _savedVacancyRepository.ExistsForVacancyAsync(id, ct);
+        bool isSaved = await _savedVacancyRepository.ExistsForVacancyAsync(id, null, ct);
         return MapToDto(updated, isSaved);
     }
 

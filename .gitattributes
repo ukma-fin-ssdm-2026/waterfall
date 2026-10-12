@@ -1,0 +1,9 @@
+# Текстові файли зберігаються і витягуються з LF на всіх ОС
+# (узгоджено з end_of_line = lf у .editorconfig, перевірка dotnet format у CI та локально).
+* text=auto eol=lf
+
+# Скрипти Windows потребують CRLF.
+*.{cmd,bat} text eol=crlf
+
+# Бінарні ресурси.
+*.{png,jpg,jpeg,gif,ico,ttf,otf,woff,woff2,db} binary

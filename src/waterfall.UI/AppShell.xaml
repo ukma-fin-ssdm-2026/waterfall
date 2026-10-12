@@ -3,12 +3,22 @@
     x:Class="waterfall.UI.AppShell"
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-    xmlns:local="clr-namespace:waterfall.UI"
-    Title="waterfall.UI">
+    xmlns:views="clr-namespace:waterfall.UI.Views"
+    Title="Waterfall">
 
-    <ShellContent
-        Title="Home"
-        ContentTemplate="{DataTemplate local:MainPage}"
-        Route="MainPage" />
+    <TabBar>
+        <ShellContent
+            Title="Каталог"
+            ContentTemplate="{DataTemplate views:CatalogPage}"
+            Route="catalog" />
+        <ShellContent
+            Title="Обране"
+            ContentTemplate="{DataTemplate views:FavoritesPage}"
+            Route="favorites" />
+        <ShellContent
+            Title="Вхід"
+            ContentTemplate="{DataTemplate views:LoginPage}"
+            Route="login" />
+    </TabBar>
 
 </Shell>

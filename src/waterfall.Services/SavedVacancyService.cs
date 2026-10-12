@@ -29,24 +29,25 @@ public class SavedVacancyService : ISavedVacancyService
         _logger = logger;
     }
 
-    public async Task<IReadOnlyList<SavedVacancyDto>> GetAllAsync(bool onlyActive = true, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SavedVacancyDto>> GetAllAsync(Guid userId, bool onlyActive = true, CancellationToken ct = default)
     {
-        IReadOnlyList<SavedVacancyDB> entities = await _savedVacancyRepository.GetAllAsync(onlyActive, ct);
+        IReadOnlyList<SavedVacancyDB> entities = await _savedVacancyRepository.GetAllAsync(userId, onlyActive, ct);
         return entities.Select(MapToDto).ToList();
     }
 
-    public async Task<SavedVacancyDto?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<SavedVacancyDto?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
-        SavedVacancyDB? entity = await _savedVacancyRepository.GetByIdAsync(id, ct);
+        SavedVacancyDB? entity = await _savedVacancyRepository.GetByIdAsync(id, userId, ct);
         return entity == null ? null : MapToDto(entity);
     }
 
-    public async Task<SavedVacancyDto> SaveAsync(SaveVacancyRequest request, CancellationToken ct = default)
+    public async Task<SavedVacancyDto> SaveAsync(SaveVacancyRequest request, Guid userId, CancellationToken ct = default)
     {
         SavedVacancyDB entity = new SavedVacancyDB
         {
             Id = Guid.NewGuid(),
             VacancyId = request.VacancyId,
+            UserId = userId,
             Notes = request.Notes?.Trim(),
             SavedAt = DateTimeOffset.UtcNow
         };
@@ -59,10 +60,10 @@ public class SavedVacancyService : ISavedVacancyService
         return MapToDto(saved);
     }
 
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
-        SavedVacancyDB? existing = await _savedVacancyRepository.GetByIdAsync(id, ct);
-        bool deleted = await _savedVacancyRepository.DeleteAsync(id, ct);
+        SavedVacancyDB? existing = await _savedVacancyRepository.GetByIdAsync(id, userId, ct);
+        bool deleted = await _savedVacancyRepository.DeleteAsync(id, userId, ct);
 
         if (deleted && existing != null)
         {

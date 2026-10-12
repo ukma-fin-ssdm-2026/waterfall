@@ -20,11 +20,12 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
         _context = context;
     }
 
-    public async Task<IReadOnlyList<SavedVacancyDB>> GetAllAsync(bool onlyActive = true, CancellationToken ct = default)
+    public async Task<IReadOnlyList<SavedVacancyDB>> GetAllAsync(Guid userId, bool onlyActive = true, CancellationToken ct = default)
     {
         IQueryable<SavedVacancyDB> baseQuery = _context.SavedVacancies
             .AsNoTracking()
-            .Include(s => s.Vacancy);
+            .Include(s => s.Vacancy)
+            .Where(s => s.UserId == userId);
 
         IQueryable<SavedVacancyDB> query;
         if (onlyActive)
@@ -47,12 +48,12 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
             .ToListAsync(ct);
     }
 
-    public async Task<SavedVacancyDB?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    public async Task<SavedVacancyDB?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         return await _context.SavedVacancies
             .AsNoTracking()
             .Include(s => s.Vacancy)
-            .FirstOrDefaultAsync(s => s.Id == id || s.VacancyId == id, ct);
+            .FirstOrDefaultAsync(s => (s.Id == id || s.VacancyId == id) && s.UserId == userId, ct);
     }
 
     public async Task<SavedVacancyDB> SaveAsync(SavedVacancyDB entity, CancellationToken ct = default)
@@ -82,10 +83,10 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
         return entity;
     }
 
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
+    public async Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         SavedVacancyDB? entity = await _context.SavedVacancies
-            .FirstOrDefaultAsync(s => s.Id == id || s.VacancyId == id, ct);
+            .FirstOrDefaultAsync(s => (s.Id == id || s.VacancyId == id) && s.UserId == userId, ct);
 
         if (entity is null)
         {
@@ -97,12 +98,17 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
         return true;
     }
 
-    public async Task<bool> ExistsForVacancyAsync(Guid vacancyId, CancellationToken ct = default)
+    public async Task<bool> ExistsForVacancyAsync(Guid vacancyId, Guid? userId, CancellationToken ct = default)
     {
-        return await _context.SavedVacancies.AnyAsync(s => s.VacancyId == vacancyId, ct);
+        if (userId is null)
+        {
+            return false;
+        }
+
+        return await _context.SavedVacancies.AnyAsync(s => s.VacancyId == vacancyId && s.UserId == userId, ct);
     }
 
-    public async Task<HashSet<Guid>> GetSavedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, CancellationToken ct = default)
+    public async Task<HashSet<Guid>> GetSavedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, Guid userId, CancellationToken ct = default)
     {
         List<Guid> ids = vacancyIds.ToList();
         if (ids.Count == 0)
@@ -112,7 +118,7 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
 
         List<Guid> found = await _context.SavedVacancies
             .AsNoTracking()
-            .Where(s => ids.Contains(s.VacancyId))
+            .Where(s => ids.Contains(s.VacancyId) && s.UserId == userId)
             .Select(s => s.VacancyId)
             .ToListAsync(ct);
 

@@ -1,7 +1,7 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
-using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Entities;
 
 namespace Waterfall.Repository.Data;
@@ -143,6 +143,8 @@ public static class WaterfallDbSeeder
                 {
                     Id = Guid.Parse("aaaaaaa1-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
                     VacancyId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                    // Закладки належать seeker1@waterfall.com (див. devUsers нижче).
+                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
                     Notes = "Пріоритет №1: підготувати сертифікати та стек мікросервісів.",
                     SavedAt = DateTimeOffset.UtcNow.AddHours(-5)
                 },
@@ -150,6 +152,7 @@ public static class WaterfallDbSeeder
                 {
                     Id = Guid.Parse("aaaaaaa2-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
                     VacancyId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
                     Notes = "Цікава вакансія по .NET MAUI: повторити життєвий цикл сторінок та XAML bindings.",
                     SavedAt = DateTimeOffset.UtcNow.AddHours(-2)
                 }

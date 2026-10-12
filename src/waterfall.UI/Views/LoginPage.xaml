@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
+             x:Class="waterfall.UI.Views.LoginPage"
+             x:DataType="vm:LoginViewModel"
+             Title="Вхід">
+
+    <ScrollView>
+        <Grid Padding="16" MaximumWidthRequest="480" HorizontalOptions="Fill">
+
+            <!-- Не увійшли: форма входу / реєстрації -->
+            <Border Style="{StaticResource VacancyCard}"
+                    VerticalOptions="Start"
+                    IsVisible="{Binding IsLoggedOut}">
+                <VerticalStackLayout Spacing="12">
+                    <Label Text="{Binding FormTitle}"
+                           Style="{StaticResource CardTitle}"
+                           FontSize="22" />
+
+                    <Entry Text="{Binding Email}"
+                           Placeholder="Електронна пошта"
+                           Keyboard="Email"
+                           IsSpellCheckEnabled="False"
+                           IsTextPredictionEnabled="False"
+                           SemanticProperties.Description="Електронна пошта" />
+
+                    <Entry Text="{Binding Password}"
+                           Placeholder="Пароль"
+                           IsPassword="True"
+                           ReturnCommand="{Binding SubmitCommand}"
+                           SemanticProperties.Description="Пароль" />
+
+                    <Label Text="{Binding PasswordHint}"
+                           IsVisible="{Binding IsRegisterMode}"
+                           Style="{StaticResource MutedLabel}" />
+
+                    <Picker Title="Роль"
+                            ItemsSource="{Binding Roles}"
+                            SelectedItem="{Binding SelectedRole}"
+                            ItemDisplayBinding="{Binding Title, x:DataType=vm:RoleOption}"
+                            IsVisible="{Binding IsRegisterMode}" />
+
+                    <Border Style="{StaticResource ErrorBanner}"
+                            Margin="0"
+                            IsVisible="{Binding HasError}">
+                        <Label Text="{Binding ErrorMessage}"
+                               Style="{StaticResource ErrorLabel}" />
+                    </Border>
+
+                    <Button Text="{Binding SubmitText}"
+                            Command="{Binding SubmitCommand}" />
+
+                    <ActivityIndicator IsRunning="{Binding IsBusy}"
+                                       IsVisible="{Binding IsBusy}"
+                                       HeightRequest="20" />
+
+                    <Button Text="{Binding SwitchModeText}"
+                            Command="{Binding SwitchModeCommand}"
+                            Style="{StaticResource LinkButton}" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Увійшли: хто, роль, термін сесії, вихід -->
+            <Border Style="{StaticResource VacancyCard}"
+                    VerticalOptions="Start"
+                    IsVisible="{Binding IsLoggedIn}">
+                <VerticalStackLayout Spacing="8">
+                    <Label Text="Ви увійшли як"
+                           Style="{StaticResource MutedLabel}" />
+                    <Label Text="{Binding UserEmail}"
+                           Style="{StaticResource CardTitle}"
+                           FontSize="20" />
+                    <HorizontalStackLayout Spacing="8">
+                        <Border Style="{StaticResource SkillChip}" Margin="0">
+                            <Label Text="{Binding UserRoleText}"
+                                   Style="{StaticResource BadgeLabel}" />
+                        </Border>
+                        <Label Text="{Binding SessionText}"
+                               VerticalOptions="Center"
+                               Style="{StaticResource MutedLabel}" />
+                    </HorizontalStackLayout>
+                    <Button Text="Вийти"
+                            Command="{Binding LogoutCommand}"
+                            Margin="0,8,0,0" />
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+    </ScrollView>
+</ContentPage>

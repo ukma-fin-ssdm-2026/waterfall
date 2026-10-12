@@ -1,12 +1,12 @@
 // AI: посилено обробку помилок валідації (issue #49); перевірено: прогін негативних тест-кейсів (docs/api/quality-attributes.md, розділ 6)
 // AI: реєстрація фонового збору вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API
 
+using System.Reflection;
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.Extensions.Primitives;
 using Microsoft.OpenApi;
-using System.Reflection;
-using System.Text.Json.Serialization;
 using Waterfall.Api.Extensions;
 using Waterfall.Api.Models.Common;
 using Waterfall.Api.Services;
