@@ -420,7 +420,7 @@ dotnet list src/api/Waterfall.Api.csproj package --vulnerable --include-transiti
 
 ### 5.7. Новий C#-код issue #62 (фоновий воркер) під SecurityCodeScan
 
-Фоновий воркер, парсер і нормалізатор вакансій ([`src/waterfall.Services/Ingestion/`](../../src/waterfall.Services/Ingestion/), [`src/api/Workers/VacancyIngestionWorker.cs`](../../src/api/Workers/VacancyIngestionWorker.cs)) входять у проєкти з SecurityCodeScan (розділ 1):
+Фоновий парсер [`src/api/Workers/JobParserService.cs`](../../src/api/Workers/JobParserService.cs) і сервіс нормалізації [`src/waterfall.Services/VacancyIngestionService.cs`](../../src/waterfall.Services/VacancyIngestionService.cs) входять у проєкти з SecurityCodeScan (розділ 1):
 ```text
 $ dotnet build src/api/Waterfall.Api.csproj -c Release --no-incremental -p:TargetFrameworks=net10.0
     0 Warning(s)
@@ -429,13 +429,13 @@ $ dotnet build src/api/Waterfall.Api.csproj -c Release --no-incremental -p:Targe
 `-p:TargetFrameworks=net10.0` потрібен лише на машині без MAUI-воркладів.
 
 Як код протистоїть загрозі **THR-03** (Tampering: шахрайська вакансія з фішинговим посиланням або HTML / JavaScript в описі):
-* посилання на першоджерело приймається лише з домену свого сайту (`djinni.co`, `work.ua`, `robota.ua`, `dou.ua` та їхні піддомени), без userinfo і нестандартного порту, а параметри запиту відкидаються ([`VacancyNormalizer.cs`](../../src/waterfall.Services/Ingestion/VacancyNormalizer.cs));
-* HTML в описі перетворюється на текст, а `<script>` і `<style>` видаляються разом із вмістом ([`TextNormalizer.cs`](../../src/waterfall.Services/Ingestion/Normalization/TextNormalizer.cs));
-* регулярні вирази мають тайм-аут (захист від ReDoS), а JSON-дамп читається з обмеженнями: файл ≤ 10 МБ, ≤ 5000 записів, глибина вкладеності ≤ 16.
+* посилання на першоджерело приймається лише як `https://` на `djinni.co` або його піддомен, а параметри запиту відкидаються;
+* HTML в описі перетворюється на текст, а `<script>` і `<style>` видаляються разом із вмістом;
+* регулярні вирази мають тайм-аут (захист від ReDoS).
 
-Перевірено 111 юніт-тестами в `tests/waterfall.Ingestion.Tests`, зокрема на демонстраційному дампі `data/raw/djinni-sample.json` з фішинговим доменом `djinni-careers.example.net` і `<script>` в описі.
+Перевірено 27 юніт-тестами в `tests/waterfall.Ingestion.Tests`, зокрема на демонстраційному дампі `data/raw/djinni-sample.json` з фішинговим доменом `djinni-careers.example.net` і `<script>` в описі. Збереження перевіряється на справжньому `EfVacancyRepository` з SQLite у пам'яті: повторний імпорт оновлює вакансії, а не дублює їх.
 
-Покриття рядків за `coverlet` (`dotnet test --collect "XPlat Code Coverage"`): парсинг і нормалізація (`Waterfall.Services.Ingestion`) — 92,4 % (612 з 662), воркер (`Waterfall.Api.Workers`) — 91,7 % (44 з 48). Вимогу MAINT-001 (не менше 70 %) виконано.
+Покриття рядків за `coverlet` (`dotnet test --collect "XPlat Code Coverage"`): нормалізація (`VacancyIngestionService`) — 100 % (122 з 122), фоновий парсер (`JobParserService`) — 88,1 % (37 з 42). Вимогу MAINT-001 (не менше 70 %) виконано.
 
 ### 5.8. Залишкові ризики та наступні кроки
 * `index.ts` згенеровано: повторний запуск `openapi-mcp-generator` поверне `eval` і fallback без перевірки. `npm run lint` це зловить, після чого виправлення з комітів `ceffa9f` і `8e93555` треба застосувати знову.
@@ -459,4 +459,4 @@ $ dotnet build src/api/Waterfall.Api.csproj -c Release --no-incremental -p:Targe
 | `docs/code-quality/static-analysis.md`, розділ 5 | Саєнко Данило | Чернетка розділу, розбір знахідок лінтера та `npm audit` | Звірка з виводом `npm audit`, `npm run lint`, `npm outdated`, `dotnet list package --vulnerable`; самоперевірка за вимогами Lab05 |
 | `src/mcp/src/jsonSchemaToZod.ts`, `src/mcp/src/index.ts`, `src/mcp/eslint.config.js`, `src/mcp/package.json` | Саєнко Данило | Перетворювач JSON Schema → Zod без `eval`, fail-closed, налаштування ESLint з `eslint-plugin-security`, видалення `shx` | `npm run lint`, `npm run typecheck`, `npm audit`; диференційне порівняння зі старою реалізацією (670 наборів аргументів); stdio smoke-тест, зокрема з `--disallow-code-generation-from-strings` та ін'єкцією збою |
 | `.github/dependabot.yml`, `.github/workflows/mcp.yml`, job `test` у `.github/workflows/ci.yml` | Саєнко Данило | Конфігурація Dependabot і CI-перевірок (Бонус 2) | Звірка з довідником опцій Dependabot і `action.yml` setup-node на GitHub, розбір YAML, ті самі команди локально |
-| `src/waterfall.Services/Ingestion/`, `src/api/Workers/VacancyIngestionWorker.cs`, `src/api/Extensions/IngestionServiceCollectionExtensions.cs`, `GetBySourceAndExternalIdAsync` у репозиторії вакансій, `tests/waterfall.Ingestion.Tests/` | Саєнко Данило | Фоновий воркер, парсер дампу Djinni, нормалізатор, тимчасовий мапер у `VacancyDB` і юніт-тести | `dotnet test` (111 тестів); SecurityCodeScan без попереджень; ручний запуск API: 10 вакансій з дампу збережено, 3 відхилено з причиною |
+| `src/api/Workers/JobParserService.cs`, `src/waterfall.Services/VacancyIngestionService.cs`, `src/waterfall.Services/Interfaces/IVacancyIngestionService.cs`, `BulkUpsertAsync` у репозиторії вакансій, `tests/waterfall.Ingestion.Tests/` | Саєнко Данило | Фоновий парсер дампу Djinni, нормалізація вакансій, масове збереження та юніт-тести | `dotnet test` (27 тестів, зокрема на SQLite); SecurityCodeScan без попереджень; ручний запуск API: з дампу збережено 10 вакансій, 2 відхилено з причиною |
