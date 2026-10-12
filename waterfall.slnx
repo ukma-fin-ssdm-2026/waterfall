@@ -11,4 +11,5 @@
     <Deploy Solution="Debug|*" />
   </Project>
   <Project Path="tests/waterfall.Security.Tests/waterfall.Security.Tests.csproj" />
+  <Project Path="tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj" />
 </Solution>

@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: метод пошуку за джерелом і зовнішнім id для фонового збору (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, самоперевірка автора (§8)
 
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Data;
@@ -128,6 +129,13 @@ public class EfVacancyRepository : IVacancyRepository
         return await _context.Vacancies
             .AsNoTracking()
             .FirstOrDefaultAsync(v => v.Id == id, ct);
+    }
+
+    public async Task<VacancyDB?> GetBySourceAndExternalIdAsync(string source, string externalId, CancellationToken ct = default)
+    {
+        return await _context.Vacancies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.Source == source && v.ExternalId == externalId, ct);
     }
 
     public async Task<VacancyDB> CreateAsync(VacancyDB entity, CancellationToken ct = default)

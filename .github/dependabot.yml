@@ -1,0 +1,62 @@
+# AI: конфігурація Dependabot для npm, NuGet і GitHub Actions (issue #62, бонус 2); перевірено: звірка з довідником опцій Dependabot на docs.github.com, розбір YAML, самоперевірка автора (§8)
+#
+# Щопонеділка Dependabot відкриває PR з оновленнями залежностей. Minor і patch збираються
+# в один PR на екосистему, major приходять окремо: їх треба переглядати (zod 4, TypeScript 7 тощо).
+# cooldown пропонує нову версію лише через 7 днів після публікації: скомпрометовані релізи
+# зазвичай виявляють і відкликають саме в перші дні.
+# Сповіщення й PR про вразливості (security updates) вмикає адміністратор репозиторію
+# в Settings → Code security; cooldown і ліміт відкритих PR на них не поширюються.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /src/mcp
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Kyiv
+    cooldown:
+      default-days: 7
+    groups:
+      mcp-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: nuget
+    # src/waterfall.UI не включено: MAUI-проєкт потребує воркладів, яких немає в Linux-середовищі Dependabot
+    directories:
+      - /src/api
+      - /src/waterfall.Services
+      - /src/waterfall.Repository
+      - /tests/*
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Kyiv
+    cooldown:
+      default-days: 7
+    groups:
+      dotnet-minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Мажорні версії пакетів ASP.NET Core та EF Core вимагають нового TargetFramework,
+      # тому оновлюються разом із переходом на нову версію .NET, а не окремим PR
+      - dependency-name: "Microsoft.AspNetCore.*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.EntityFrameworkCore*"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "Microsoft.Extensions.*"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Kyiv
+    cooldown:
+      default-days: 7
+    groups:
+      actions-minor-and-patch:
+        update-types: [minor, patch]
