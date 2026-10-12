@@ -3,7 +3,7 @@
  * MCP Server generated from OpenAPI spec for waterfall-api vv1
  * Generated on: 2026-10-04T10:05:23.069Z
  */
-// AI: побудова Zod-схеми аргументів без eval і розбір зауважень ESLint (issue #62); перевірено: npm run typecheck, npm run lint, диференційне порівняння з json-schema-to-zod, самоперевірка автора (§8)
+// AI: побудова Zod-схеми аргументів без eval із fail-closed і розбір зауважень ESLint (issue #62); перевірено: npm run typecheck, npm run lint, диференційне порівняння з json-schema-to-zod, stdio smoke-тест з ін'єкцією збою, самоперевірка автора (§8)
 
 // Load environment variables from .env file
 import dotenv from 'dotenv';
@@ -720,6 +720,7 @@ function getZodSchemaFromJsonSchema(jsonSchema: any, toolName: string): z.ZodTyp
         return jsonSchemaToZod(jsonSchema);
     } catch (err: any) {
         console.error(`Failed to build Zod schema for '${toolName}':`, err);
-        return z.object({}).passthrough();
+        // Fail closed: the caller reports a validation setup error instead of skipping validation
+        throw err;
     }
 }
