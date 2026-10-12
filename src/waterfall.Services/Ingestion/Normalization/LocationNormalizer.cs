@@ -16,12 +16,25 @@ public static class LocationNormalizer
 
     private static readonly Dictionary<string, string> Places = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["kyiv"] = "Київ", ["kiev"] = "Київ", ["київ"] = "Київ", ["киев"] = "Київ",
-        ["lviv"] = "Львів", ["львів"] = "Львів", ["львов"] = "Львів",
-        ["kharkiv"] = "Харків", ["харків"] = "Харків", ["харьков"] = "Харків",
-        ["odesa"] = "Одеса", ["odessa"] = "Одеса", ["одеса"] = "Одеса", ["одесса"] = "Одеса",
-        ["dnipro"] = "Дніпро", ["дніпро"] = "Дніпро", ["днепр"] = "Дніпро",
-        ["ukraine"] = Ukraine, ["україна"] = Ukraine
+        ["kyiv"] = "Київ",
+        ["kiev"] = "Київ",
+        ["київ"] = "Київ",
+        ["киев"] = "Київ",
+        ["lviv"] = "Львів",
+        ["львів"] = "Львів",
+        ["львов"] = "Львів",
+        ["kharkiv"] = "Харків",
+        ["харків"] = "Харків",
+        ["харьков"] = "Харків",
+        ["odesa"] = "Одеса",
+        ["odessa"] = "Одеса",
+        ["одеса"] = "Одеса",
+        ["одесса"] = "Одеса",
+        ["dnipro"] = "Дніпро",
+        ["дніпро"] = "Дніпро",
+        ["днепр"] = "Дніпро",
+        ["ukraine"] = Ukraine,
+        ["україна"] = Ukraine
     };
 
     private static readonly HashSet<string> RemoteMarkers = new(StringComparer.OrdinalIgnoreCase)

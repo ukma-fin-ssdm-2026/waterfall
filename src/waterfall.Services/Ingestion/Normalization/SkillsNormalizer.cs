@@ -16,16 +16,30 @@ public static class SkillsNormalizer
 
     private static readonly Dictionary<string, string> Aliases = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["c#"] = "C#", ["c sharp"] = "C#", ["csharp"] = "C#",
-        [".net"] = ".NET", ["dotnet"] = ".NET",
-        ["asp.net core"] = "ASP.NET Core", ["asp .net core"] = "ASP.NET Core",
-        ["js"] = "JavaScript", ["javascript"] = "JavaScript",
-        ["ts"] = "TypeScript", ["typescript"] = "TypeScript",
-        ["postgres"] = "PostgreSQL", ["postgresql"] = "PostgreSQL",
-        ["k8s"] = "Kubernetes", ["kubernetes"] = "Kubernetes",
-        ["mssql"] = "SQL Server", ["ms sql"] = "SQL Server", ["sql server"] = "SQL Server",
-        ["react"] = "React", ["reactjs"] = "React", ["react.js"] = "React",
-        ["node"] = "Node.js", ["nodejs"] = "Node.js", ["node.js"] = "Node.js"
+        ["c#"] = "C#",
+        ["c sharp"] = "C#",
+        ["csharp"] = "C#",
+        [".net"] = ".NET",
+        ["dotnet"] = ".NET",
+        ["asp.net core"] = "ASP.NET Core",
+        ["asp .net core"] = "ASP.NET Core",
+        ["js"] = "JavaScript",
+        ["javascript"] = "JavaScript",
+        ["ts"] = "TypeScript",
+        ["typescript"] = "TypeScript",
+        ["postgres"] = "PostgreSQL",
+        ["postgresql"] = "PostgreSQL",
+        ["k8s"] = "Kubernetes",
+        ["kubernetes"] = "Kubernetes",
+        ["mssql"] = "SQL Server",
+        ["ms sql"] = "SQL Server",
+        ["sql server"] = "SQL Server",
+        ["react"] = "React",
+        ["reactjs"] = "React",
+        ["react.js"] = "React",
+        ["node"] = "Node.js",
+        ["nodejs"] = "Node.js",
+        ["node.js"] = "Node.js"
     };
 
     public static IReadOnlyList<string> Normalize(string? raw)

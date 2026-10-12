@@ -17,12 +17,41 @@ public static partial class PublishedDateParser
 
     private static readonly Dictionary<string, int> Months = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["січня"] = 1, ["лютого"] = 2, ["березня"] = 3, ["квітня"] = 4, ["травня"] = 5, ["червня"] = 6,
-        ["липня"] = 7, ["серпня"] = 8, ["вересня"] = 9, ["жовтня"] = 10, ["листопада"] = 11, ["грудня"] = 12,
-        ["january"] = 1, ["february"] = 2, ["march"] = 3, ["april"] = 4, ["may"] = 5, ["june"] = 6,
-        ["july"] = 7, ["august"] = 8, ["september"] = 9, ["october"] = 10, ["november"] = 11, ["december"] = 12,
-        ["jan"] = 1, ["feb"] = 2, ["mar"] = 3, ["apr"] = 4, ["jun"] = 6, ["jul"] = 7,
-        ["aug"] = 8, ["sep"] = 9, ["oct"] = 10, ["nov"] = 11, ["dec"] = 12
+        ["січня"] = 1,
+        ["лютого"] = 2,
+        ["березня"] = 3,
+        ["квітня"] = 4,
+        ["травня"] = 5,
+        ["червня"] = 6,
+        ["липня"] = 7,
+        ["серпня"] = 8,
+        ["вересня"] = 9,
+        ["жовтня"] = 10,
+        ["листопада"] = 11,
+        ["грудня"] = 12,
+        ["january"] = 1,
+        ["february"] = 2,
+        ["march"] = 3,
+        ["april"] = 4,
+        ["may"] = 5,
+        ["june"] = 6,
+        ["july"] = 7,
+        ["august"] = 8,
+        ["september"] = 9,
+        ["october"] = 10,
+        ["november"] = 11,
+        ["december"] = 12,
+        ["jan"] = 1,
+        ["feb"] = 2,
+        ["mar"] = 3,
+        ["apr"] = 4,
+        ["jun"] = 6,
+        ["jul"] = 7,
+        ["aug"] = 8,
+        ["sep"] = 9,
+        ["oct"] = 10,
+        ["nov"] = 11,
+        ["dec"] = 12
     };
 
     private static readonly string[] DayFirstFormats = ["dd.MM.yyyy", "d.M.yyyy", "dd.MM.yy"];

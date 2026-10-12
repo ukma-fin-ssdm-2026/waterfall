@@ -164,19 +164,19 @@ internal static class RawData
         string? experience = "5 років досвіду",
         string? tags = "C#, .NET",
         string? location = "Kyiv, Remote") => new()
-    {
-        Source = source,
-        ExternalId = id,
-        Url = url,
-        Title = title,
-        Company = "Kvitka Software",
-        Salary = salary,
-        Location = location,
-        Posted = posted,
-        Experience = experience,
-        Employment = "Full Remote",
-        Category = category,
-        DescriptionHtml = description,
-        Tags = tags
-    };
+        {
+            Source = source,
+            ExternalId = id,
+            Url = url,
+            Title = title,
+            Company = "Kvitka Software",
+            Salary = salary,
+            Location = location,
+            Posted = posted,
+            Experience = experience,
+            Employment = "Full Remote",
+            Category = category,
+            DescriptionHtml = description,
+            Tags = tags
+        };
 }
