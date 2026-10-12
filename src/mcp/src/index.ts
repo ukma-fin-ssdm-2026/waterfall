@@ -3,6 +3,7 @@
  * MCP Server generated from OpenAPI spec for waterfall-api vv1
  * Generated on: 2026-10-04T10:05:23.069Z
  */
+// AI: побудова Zod-схеми аргументів без eval (issue #62); перевірено: npm run typecheck, npm run lint, диференційне порівняння з json-schema-to-zod, самоперевірка автора (§8)
 
 // Load environment variables from .env file
 import dotenv from 'dotenv';
@@ -19,7 +20,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 
 import { z, ZodError } from 'zod';
-import { jsonSchemaToZod } from 'json-schema-to-zod';
+import { jsonSchemaToZod } from './jsonSchemaToZod.js';
 import axios, { type AxiosRequestConfig, type AxiosError } from 'axios';
 
 /**
@@ -711,14 +712,10 @@ function getZodSchemaFromJsonSchema(jsonSchema: any, toolName: string): z.ZodTyp
         return z.object({}).passthrough(); 
     }
     try {
-        const zodSchemaString = jsonSchemaToZod(jsonSchema);
-        const zodSchema = eval(zodSchemaString);
-        if (typeof zodSchema?.parse !== 'function') { 
-            throw new Error('Eval did not produce a valid Zod schema.'); 
-        }
-        return zodSchema as z.ZodTypeAny;
+        // Build the schema object directly: no generated code is passed to eval (CWE-95)
+        return jsonSchemaToZod(jsonSchema);
     } catch (err: any) {
-        console.error(`Failed to generate/evaluate Zod schema for '${toolName}':`, err);
+        console.error(`Failed to build Zod schema for '${toolName}':`, err);
         return z.object({}).passthrough();
     }
 }
