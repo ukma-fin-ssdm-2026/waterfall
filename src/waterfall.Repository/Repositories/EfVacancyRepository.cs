@@ -1,5 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
-// AI: метод пошуку за джерелом і зовнішнім id для фонового збору (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, самоперевірка автора (§8)
+// AI: метод BulkUpsertAsync для фонового збору вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests на SQLite, самоперевірка автора (§8)
 
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Data;
@@ -131,11 +131,36 @@ public class EfVacancyRepository : IVacancyRepository
             .FirstOrDefaultAsync(v => v.Id == id, ct);
     }
 
-    public async Task<VacancyDB?> GetBySourceAndExternalIdAsync(string source, string externalId, CancellationToken ct = default)
+    public async Task<(int Created, int Updated)> BulkUpsertAsync(IReadOnlyList<VacancyDB> vacancies, CancellationToken ct = default)
     {
-        return await _context.Vacancies
-            .AsNoTracking()
-            .FirstOrDefaultAsync(v => v.Source == source && v.ExternalId == externalId, ct);
+        // Уже збережені вакансії шукаємо одним запитом, а не по одній
+        List<string?> externalIds = vacancies.Select(v => v.ExternalId).ToList();
+        List<VacancyDB> existing = await _context.Vacancies
+            .Where(v => externalIds.Contains(v.ExternalId))
+            .ToListAsync(ct);
+
+        int created = 0;
+        int updated = 0;
+        foreach (VacancyDB vacancy in vacancies)
+        {
+            VacancyDB? current = existing.FirstOrDefault(v => v.Source == vacancy.Source && v.ExternalId == vacancy.ExternalId);
+            if (current == null)
+            {
+                _context.Vacancies.Add(vacancy);
+                existing.Add(vacancy);
+                created++;
+                continue;
+            }
+
+            vacancy.Id = current.Id;
+            vacancy.PublishedAt = current.PublishedAt;
+            vacancy.FirstSeenAt = current.FirstSeenAt;
+            _context.Entry(current).CurrentValues.SetValues(vacancy);
+            updated++;
+        }
+
+        await _context.SaveChangesAsync(ct);
+        return (created, updated);
     }
 
     public async Task<VacancyDB> CreateAsync(VacancyDB entity, CancellationToken ct = default)

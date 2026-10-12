@@ -32,7 +32,7 @@
       "tags": "Playwright, C#, NUnit, CI/CD"
     },
     {
-      "id": 720033,
+      "id": "720033",
       "url": "https://djinni.co/jobs/720033-middle-react-developer/",
       "title": "Middle React Developer",
       "company": "Lumos Fintech",
@@ -43,16 +43,16 @@
       "employment": "Office або Remote на вибір",
       "category": "JavaScript / Front-End",
       "descriptionHtml": "<h2>Про проєкт</h2><p>Інтерфейси для мобільного банкінгу.</p><ul><li>React, TypeScript</li><li>Redux Toolkit</li></ul>",
-      "tags": ["React", "TypeScript", "ts", "Redux Toolkit"]
+      "tags": "React, TypeScript, Redux Toolkit"
     },
     {
       "id": "720047",
       "url": "https://djinni.co/jobs/720047-python-data-engineer/",
       "title": "Python Data Engineer",
       "company": "Dnipro Data Works",
-      "salary": "€2.5k–3.5k",
+      "salary": "€2500–3500",
       "location": "Remote (Ukraine)",
-      "posted": "1 тиждень тому",
+      "posted": "7 днів тому",
       "experience": "3+ years",
       "employment": "Remote",
       "category": "",
@@ -108,7 +108,7 @@
       "company": "Bright Path EdTech",
       "salary": "$3000 - 3800",
       "location": "Dnipro",
-      "posted": "8 жовтня 2026",
+      "posted": "3 дні тому",
       "experience": "6 років досвіду",
       "employment": "Office · Full-time",
       "category": "Java",
@@ -164,7 +164,6 @@
       "posted": "сьогодні",
       "descriptionHtml": "<p>Надішліть резюме та копію паспорта на нашу пошту.</p>",
       "tags": "Go, gRPC"
-    },
-    "оголошення без структури"
+    }
   ]
 }

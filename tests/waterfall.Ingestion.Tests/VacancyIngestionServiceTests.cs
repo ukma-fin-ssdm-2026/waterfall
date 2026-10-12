@@ -1,124 +1,187 @@
-// AI: тести циклу фонового збору вакансій (issue #62); перевірено: запуск dotnet test, самоперевірка автора (§8)
+// AI: тести нормалізації та збереження вакансій (issue #62); перевірено: запуск dotnet test, самоперевірка автора (§8)
 
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Waterfall.Api.Workers;
+using Waterfall.Repository.Data;
 using Waterfall.Repository.Entities;
-using Waterfall.Services.Ingestion;
+using Waterfall.Repository.Repositories;
+using Waterfall.Services;
+using Waterfall.Services.Interfaces;
 
 namespace Waterfall.Ingestion.Tests;
 
 public class VacancyIngestionServiceTests
 {
-    private static readonly DateTimeOffset FirstRun = new(2026, 10, 12, 10, 0, 0, TimeSpan.Zero);
+    private static readonly DateTimeOffset Now = new(2026, 10, 12, 10, 0, 0, TimeSpan.Zero);
 
-    private readonly FakeVacancyRepository _repository = new();
-    private readonly FakeVacancyCacheService _cache = new();
-    private readonly ManualTimeProvider _time = new(FirstRun);
-
-    [Fact]
-    public async Task FirstRun_CreatesValidVacancies()
+    [Theory]
+    [InlineData("$3500-4500", 3500, 4500, "USD")]
+    [InlineData("$6000-5000", 5000, 6000, "USD")]
+    [InlineData("до $2500", null, 2500, "USD")]
+    [InlineData("від $2000", 2000, null, "USD")]
+    [InlineData("€2500–3500", 2500, 3500, "EUR")]
+    [InlineData("45 000 грн", 45000, 45000, "UAH")]
+    [InlineData("$12/год", null, null, "USD")]
+    [InlineData("за домовленістю", null, null, "USD")]
+    public void ParseSalary_ReadsCommonFormats(string salary, int? min, int? max, string currency)
     {
-        IngestionReport report = await CreateService(Document("a.json", RawData.Job("1"), RawData.Job("2"))).RunOnceAsync();
+        (decimal? actualMin, decimal? actualMax, string actualCurrency) = VacancyIngestionService.ParseSalary(salary);
 
-        Assert.Equal(2, report.Created);
-        Assert.Equal(0, report.Updated);
-        Assert.Equal(2, _repository.Items.Count);
-        Assert.All(_repository.Items, v => Assert.Equal("Djinni", v.Source));
-        Assert.Equal(1, _cache.CatalogInvalidations);
+        Assert.Equal(min, (int?)actualMin);
+        Assert.Equal(max, (int?)actualMax);
+        Assert.Equal(currency, actualCurrency);
+    }
+
+    [Theory]
+    [InlineData("сьогодні", 0)]
+    [InlineData("вчора", 24 * 60)]
+    [InlineData("3 дні тому", 3 * 24 * 60)]
+    [InlineData("5 годин тому", 5 * 60)]
+    [InlineData("10 хв. тому", 10)]
+    [InlineData("незрозумілий формат", 0)]
+    public void ParsePublishedAt_ReadsRelativeDates(string posted, int minutesAgo)
+    {
+        Assert.Equal(Now.AddMinutes(-minutesAgo), VacancyIngestionService.ParsePublishedAt(posted, Now));
     }
 
     [Fact]
-    public async Task RepeatedRun_UpdatesInsteadOfDuplicating()
+    public void ParsePublishedAt_ReadsExactDates()
     {
-        RawVacancyDocument document = Document("a.json", RawData.Job("1"), RawData.Job("2"));
-        await CreateService(document).RunOnceAsync();
-        VacancyDB before = _repository.Items.Single(v => v.ExternalId == "1");
-
-        _time.Now = FirstRun.AddHours(6);
-        IngestionReport report = await CreateService(document).RunOnceAsync();
-
-        Assert.Equal(0, report.Created);
-        Assert.Equal(2, report.Updated);
-        Assert.Equal(2, _repository.Items.Count);
-
-        VacancyDB after = _repository.Items.Single(v => v.ExternalId == "1");
-        Assert.Equal(before.Id, after.Id);
-        Assert.Equal(before.FirstSeenAt, after.FirstSeenAt);
-        // «2 дні тому» в повторному прогоні не повинно зсунути дату публікації
-        Assert.Equal(before.PublishedAt, after.PublishedAt);
-        Assert.Equal(FirstRun.AddHours(6), after.LastSeenAt);
-        Assert.Contains(after.Id, _cache.InvalidatedVacancies);
+        Assert.Equal(new DateTimeOffset(2026, 10, 8, 0, 0, 0, TimeSpan.Zero), VacancyIngestionService.ParsePublishedAt("08.10.2026", Now));
+        Assert.Equal(new DateTimeOffset(2026, 10, 8, 9, 30, 0, TimeSpan.Zero), VacancyIngestionService.ParsePublishedAt("2026-10-08T09:30:00Z", Now));
+        // Дата з майбутнього — помилка на сайті, тож беремо поточну
+        Assert.Equal(Now, VacancyIngestionService.ParsePublishedAt("01.01.2030", Now));
     }
 
     [Fact]
-    public async Task InvalidRecords_AreSkippedAndValidOnesSaved()
+    public void CleanText_TurnsHtmlIntoPlainText()
     {
-        RawVacancyDocument document = Document("a.json",
-            RawData.Job("1"),
-            RawData.Job("2", title: ""),
-            RawData.Job("3", url: "https://djinni-careers.example.net/jobs/3/"),
-            "зламаний запис");
+        string html = "<p>Шукаємо&nbsp;розробника</p><script>alert('x')</script><ul><li>C#</li><li>SQL</li></ul>";
 
-        IngestionReport report = await CreateService(document).RunOnceAsync();
-
-        Assert.Equal(1, report.Created);
-        Assert.Equal(3, report.Skipped);
-        Assert.Equal(4, report.Items);
-        Assert.Equal("1", Assert.Single(_repository.Items).ExternalId);
+        Assert.Equal("Шукаємо розробника\nC#\nSQL", VacancyIngestionService.CleanText(html));
     }
 
     [Fact]
-    public async Task BrokenDocument_DoesNotStopOtherDocuments()
+    public void Normalize_FillsVacancyFields()
     {
-        IngestionReport report = await CreateService(
-            new RawVacancyDocument("broken.json", "{ не json"),
-            RawVacancyDocument.Unreadable("locked.json", "файл зайнятий іншим процесом"),
-            Document("ok.json", RawData.Job("1"))).RunOnceAsync();
+        RawVacancy raw = Raw() with
+        {
+            Title = "  Senior .NET   Developer ",
+            Url = "https://djinni.co/jobs/1-dev/?utm_source=telegram#apply",
+            Company = "",
+            Category = "",
+            Tags = "C#, .NET; c# | Docker"
+        };
 
-        Assert.Equal(2, report.FailedDocuments);
-        Assert.Equal(1, report.Documents);
-        Assert.Equal(1, report.Created);
+        (VacancyDB? vacancy, string? error) = VacancyIngestionService.Normalize(raw, Now);
+
+        Assert.Null(error);
+        Assert.NotNull(vacancy);
+        Assert.Equal("Djinni", vacancy.Source);
+        Assert.Equal("Senior .NET Developer", vacancy.Title);
+        Assert.Equal("https://djinni.co/jobs/1-dev/", vacancy.SourceUrl);
+        Assert.Equal("Не вказано", vacancy.Company);
+        Assert.Equal("Інше", vacancy.Category);
+        Assert.Equal("[\"C#\",\".NET\",\"Docker\"]", vacancy.SkillsJson);
+        Assert.Equal(3500m, vacancy.SalaryMin);
+        Assert.Equal(Now.AddDays(-2), vacancy.PublishedAt);
+    }
+
+    [Theory]
+    [InlineData("https://djinni-careers.example.net/jobs/1/")]
+    [InlineData("https://djinni.co.evil.example/jobs/1/")]
+    [InlineData("http://djinni.co/jobs/1/")]
+    [InlineData("не посилання")]
+    public void Normalize_RejectsLinksOutsideDjinni(string url)
+    {
+        (VacancyDB? vacancy, string? error) = VacancyIngestionService.Normalize(Raw() with { Url = url }, Now);
+
+        Assert.Null(vacancy);
+        Assert.Contains("djinni.co", error);
     }
 
     [Fact]
-    public async Task DatabaseFailureForOneVacancy_DoesNotStopOthers()
+    public void Normalize_RejectsVacancyWithoutTitleOrDescription()
     {
-        _repository.FailOnExternalId = "2";
-
-        IngestionReport report = await CreateService(Document("a.json", RawData.Job("1"), RawData.Job("2"), RawData.Job("3"))).RunOnceAsync();
-
-        Assert.Equal(2, report.Created);
-        Assert.Equal(1, report.Failed);
-        Assert.DoesNotContain(_repository.Items, v => v.ExternalId == "2");
+        Assert.Null(VacancyIngestionService.Normalize(Raw() with { Title = " " }, Now).Vacancy);
+        Assert.Null(VacancyIngestionService.Normalize(Raw() with { DescriptionHtml = "<p></p>" }, Now).Vacancy);
+        Assert.Null(VacancyIngestionService.Normalize(Raw() with { Id = null }, Now).Vacancy);
     }
 
     [Fact]
-    public async Task NothingSaved_KeepsCache()
+    public async Task SampleDump_IsSavedOnce_AndUpdatedOnRepeatedRun()
     {
-        IngestionReport report = await CreateService(Document("a.json", RawData.Job("1", title: ""))).RunOnceAsync();
+        // Справжній репозиторій на SQLite в пам'яті: перевіряємо і нормалізацію, і BulkUpsertAsync
+        using SqliteConnection connection = new("DataSource=:memory:");
+        connection.Open();
+        DbContextOptions<WaterfallDbContext> options = new DbContextOptionsBuilder<WaterfallDbContext>()
+            .UseSqlite(connection)
+            .Options;
+        using (WaterfallDbContext db = new(options))
+        {
+            db.Database.EnsureCreated();
+        }
 
-        Assert.Equal(1, report.Skipped);
-        Assert.Equal(0, _cache.CatalogInvalidations);
+        List<RawVacancy> rawItems = JobParserService.ParseDump(File.ReadAllText(SampleDumpPath()));
+
+        IngestionResult first = await ProcessAsync(options, rawItems);
+        Dictionary<string, Guid> idsAfterFirstRun = LoadVacancies(options).ToDictionary(v => v.ExternalId!, v => v.Id);
+        IngestionResult second = await ProcessAsync(options, rawItems);
+
+        Assert.Equal(new IngestionResult(Created: 10, Updated: 0, Skipped: 2), first);
+        Assert.Equal(new IngestionResult(Created: 0, Updated: 10, Skipped: 2), second);
+
+        List<VacancyDB> saved = LoadVacancies(options);
+        Assert.Equal(10, saved.Count);
+        Assert.All(saved, v => Assert.Equal(idsAfterFirstRun[v.ExternalId!], v.Id));
+
+        // Запис із «брудними» даними: трекінг у посиланні, перевернута вилка, script в описі
+        VacancyDB lead = saved.Single(v => v.ExternalId == "720096");
+        Assert.Equal("https://djinni.co/jobs/720096-lead-net-engineer/", lead.SourceUrl);
+        Assert.Equal(5000m, lead.SalaryMin);
+        Assert.Equal(6000m, lead.SalaryMax);
+        Assert.DoesNotContain("alert", lead.Description);
     }
 
-    [Fact]
-    public async Task CancelledRun_StopsWithoutSwallowingCancellation()
+    private static async Task<IngestionResult> ProcessAsync(DbContextOptions<WaterfallDbContext> options, List<RawVacancy> rawItems)
     {
-        using CancellationTokenSource cts = new();
-        cts.Cancel();
-
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => CreateService(Document("a.json", RawData.Job("1"))).RunOnceAsync(cts.Token));
+        await using WaterfallDbContext db = new(options);
+        VacancyIngestionService service = new(new EfVacancyRepository(db), NullLogger<VacancyIngestionService>.Instance);
+        return await service.ProcessRawVacanciesAsync(rawItems);
     }
 
-    private VacancyIngestionService CreateService(params RawVacancyDocument[] documents) => new(
-        new InMemoryRawSource(documents),
-        new DjinniRawJsonParser(),
-        new VacancyNormalizer(),
-        _repository,
-        _cache,
-        _time,
-        NullLogger<VacancyIngestionService>.Instance);
+    private static List<VacancyDB> LoadVacancies(DbContextOptions<WaterfallDbContext> options)
+    {
+        using WaterfallDbContext db = new(options);
+        return db.Vacancies.AsNoTracking().ToList();
+    }
 
-    private static RawVacancyDocument Document(string name, params object[] jobs) =>
-        new(name, RawData.DjinniDocument(jobs));
+    private static RawVacancy Raw() => new()
+    {
+        Id = "1",
+        Url = "https://djinni.co/jobs/1-dev/",
+        Title = "Middle .NET Developer",
+        Company = "Kvitka Software",
+        Salary = "$3500-4500",
+        Location = "Kyiv",
+        Posted = "2 дні тому",
+        DescriptionHtml = "<p>Опис вакансії</p>",
+        Tags = "C#"
+    };
+
+    internal static string SampleDumpPath()
+    {
+        for (DirectoryInfo? dir = new(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+        {
+            string candidate = Path.Combine(dir.FullName, "data", "raw", "djinni-sample.json");
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new FileNotFoundException("Не знайдено data/raw/djinni-sample.json.");
+    }
 }

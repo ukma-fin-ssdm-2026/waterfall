@@ -1,0 +1,262 @@
+// AI: нормалізація сирих вакансій і збереження в БД (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API, самоперевірка автора (§8)
+
+using System.Globalization;
+using System.Net;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
+using Waterfall.Repository.Entities;
+using Waterfall.Repository.Interfaces;
+using Waterfall.Services.Interfaces;
+
+namespace Waterfall.Services;
+
+/// <summary>
+/// Чистить і стандартизує сирі вакансії (назва, опис, зарплата, дата, навички)
+/// та зберігає їх через <see cref="IVacancyRepository.BulkUpsertAsync"/>.
+/// Поки що працюємо з одним сайтом — Djinni (домовленість команди).
+/// </summary>
+public class VacancyIngestionService : IVacancyIngestionService
+{
+    private const string Source = "Djinni";
+    private const string SourceHost = "djinni.co";
+
+    // Тайм-аут захищає від зависання регулярного виразу на шкідливому вводі (ReDoS)
+    private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(200);
+    private static readonly Regex ScriptOrStyle = new(@"<(script|style)\b.*?</\1\s*>", RegexOptions.IgnoreCase | RegexOptions.Singleline, RegexTimeout);
+    private static readonly Regex LineBreakTag = new(@"<(br|/p|/li|/div|/h\d)\b[^>]*>", RegexOptions.IgnoreCase, RegexTimeout);
+    private static readonly Regex AnyTag = new(@"<[^>]*>", RegexOptions.None, RegexTimeout);
+    private static readonly Regex Spaces = new(@"\s+", RegexOptions.None, RegexTimeout);
+    private static readonly Regex Number = new(@"\d+", RegexOptions.None, RegexTimeout);
+    private static readonly Regex TimeAgo = new(@"(\d+)\s*(хв|год|дн|ден)", RegexOptions.IgnoreCase, RegexTimeout);
+
+    private readonly IVacancyRepository _repository;
+    private readonly ILogger<VacancyIngestionService> _logger;
+
+    public VacancyIngestionService(IVacancyRepository repository, ILogger<VacancyIngestionService> logger)
+    {
+        _repository = repository;
+        _logger = logger;
+    }
+
+    public async Task<IngestionResult> ProcessRawVacanciesAsync(IReadOnlyList<RawVacancy> rawItems, CancellationToken ct = default)
+    {
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        List<VacancyDB> vacancies = [];
+
+        foreach (RawVacancy raw in rawItems)
+        {
+            (VacancyDB? vacancy, string? error) = Normalize(raw, now);
+            if (vacancy is null)
+            {
+                _logger.LogWarning("Вакансію {ExternalId} пропущено: {Reason}.", raw.Id, error);
+                continue;
+            }
+
+            vacancies.Add(vacancy);
+        }
+
+        (int created, int updated) = await _repository.BulkUpsertAsync(vacancies, ct);
+        IngestionResult result = new(created, updated, rawItems.Count - vacancies.Count);
+
+        _logger.LogInformation(
+            "Збережено вакансії: нових {Created}, оновлених {Updated}, пропущено {Skipped}.",
+            result.Created, result.Updated, result.Skipped);
+        return result;
+    }
+
+    /// <summary>
+    /// Перетворює сиру вакансію на запис БД. Якщо вакансія непридатна (немає назви, опису
+    /// чи посилання веде не на сайт-джерело), повертає null і причину.
+    /// </summary>
+    public static (VacancyDB? Vacancy, string? Error) Normalize(RawVacancy raw, DateTimeOffset now)
+    {
+        if (string.IsNullOrWhiteSpace(raw.Id))
+        {
+            return (null, "немає id вакансії");
+        }
+
+        string title = CleanText(raw.Title);
+        if (title.Length < 3)
+        {
+            return (null, "немає назви посади");
+        }
+
+        string description = CleanText(raw.DescriptionHtml);
+        if (description.Length == 0)
+        {
+            return (null, "немає опису");
+        }
+
+        // Фішингове посилання не має потрапити в каталог під виглядом вакансії з Djinni (THR-03)
+        string? url = NormalizeUrl(raw.Url);
+        if (url is null)
+        {
+            return (null, $"посилання веде не на {SourceHost}");
+        }
+
+        (decimal? salaryMin, decimal? salaryMax, string currency) = ParseSalary(raw.Salary);
+
+        VacancyDB vacancy = new()
+        {
+            Id = Guid.NewGuid(),
+            Source = Source,
+            ExternalId = Cut(raw.Id.Trim(), 100),
+            SourceUrl = url,
+            Title = Cut(title, 200),
+            Company = Cut(OrDefault(CleanText(raw.Company), "Не вказано"), 200),
+            Description = description,
+            Category = Cut(OrDefault(CleanText(raw.Category), "Інше"), 100),
+            Location = Cut(OrDefault(CleanText(raw.Location), "Не вказано"), 200),
+            Schedule = NullIfEmpty(Cut(CleanText(raw.Employment), 100)),
+            Experience = NullIfEmpty(Cut(CleanText(raw.Experience), 100)),
+            SalaryMin = salaryMin,
+            SalaryMax = salaryMax,
+            Currency = currency,
+            SkillsJson = JsonSerializer.Serialize(ParseSkills(raw.Tags)),
+            PublishedAt = ParsePublishedAt(raw.Posted, now),
+            FirstSeenAt = now,
+            LastSeenAt = now,
+            IsActive = true
+        };
+
+        return (vacancy, null);
+    }
+
+    /// <summary>
+    /// «$3500-4500» → 3500–4500 USD, «до 2500» → лише максимум, «від 2000» → лише мінімум.
+    /// Погодинні ставки й «за домовленістю» дають порожню зарплату.
+    /// </summary>
+    public static (decimal? Min, decimal? Max, string Currency) ParseSalary(string? salary)
+    {
+        string text = (salary ?? string.Empty).ToLowerInvariant();
+        string currency =
+            text.Contains('€') || text.Contains("eur") ? "EUR" :
+            text.Contains('₴') || text.Contains("грн") || text.Contains("uah") ? "UAH" :
+            "USD"; // Djinni публікує зарплати в доларах
+
+        // Погодинну ставку не можна порівнювати з місячними зарплатами в каталозі
+        if (text.Contains("/год") || text.Contains("/hour"))
+        {
+            return (null, null, currency);
+        }
+
+        // Пробіли прибираємо, щоб «45 000» читалося як одне число
+        List<decimal> numbers = Number.Matches(Spaces.Replace(text, string.Empty))
+            .Select(match => decimal.Parse(match.Value, CultureInfo.InvariantCulture))
+            .ToList();
+
+        if (numbers.Count == 0)
+        {
+            return (null, null, currency);
+        }
+
+        if (numbers.Count >= 2)
+        {
+            // Вилку записуємо від меншого до більшого, навіть якщо на сайті її перевернули
+            return (Math.Min(numbers[0], numbers[1]), Math.Max(numbers[0], numbers[1]), currency);
+        }
+
+        decimal amount = numbers[0];
+        if (text.Contains("до") || text.Contains("up to"))
+        {
+            return (null, amount, currency);
+        }
+
+        if (text.Contains("від") || text.Contains("from"))
+        {
+            return (amount, null, currency);
+        }
+
+        return (amount, amount, currency);
+    }
+
+    /// <summary>
+    /// «сьогодні», «вчора», «3 дні тому», «5 годин тому», «10 хв. тому», «08.10.2026» або ISO 8601.
+    /// Невідомий формат вважаємо сьогоднішньою датою, дату з майбутнього — теж.
+    /// </summary>
+    public static DateTimeOffset ParsePublishedAt(string? posted, DateTimeOffset now)
+    {
+        string text = (posted ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (text.Contains("сьогодні") || text.Contains("щойно"))
+        {
+            return now;
+        }
+
+        if (text.Contains("вчора"))
+        {
+            return now.AddDays(-1);
+        }
+
+        Match timeAgo = TimeAgo.Match(text);
+        if (timeAgo.Success)
+        {
+            int value = int.Parse(timeAgo.Groups[1].Value, CultureInfo.InvariantCulture);
+            return timeAgo.Groups[2].Value switch
+            {
+                "хв" => now.AddMinutes(-value),
+                "год" => now.AddHours(-value),
+                _ => now.AddDays(-value)
+            };
+        }
+
+        // dd.MM.yyyy перевіряємо першим: інакше «08.10.2026» прочиталося б як 10 серпня
+        if (DateTimeOffset.TryParseExact(text, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date)
+            || DateTimeOffset.TryParse(posted, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out date))
+        {
+            return date > now ? now : date;
+        }
+
+        return now;
+    }
+
+    /// <summary>
+    /// HTML → звичайний текст: script і style видаляються разом із вмістом,
+    /// абзаци й пункти списків стають окремими рядками, зайві пробіли зникають.
+    /// </summary>
+    public static string CleanText(string? html)
+    {
+        if (string.IsNullOrWhiteSpace(html))
+        {
+            return string.Empty;
+        }
+
+        string text = ScriptOrStyle.Replace(html, string.Empty);
+        text = LineBreakTag.Replace(text, "\n");
+        text = AnyTag.Replace(text, string.Empty);
+        text = WebUtility.HtmlDecode(text);
+
+        IEnumerable<string> lines = text
+            .Split('\n')
+            .Select(line => Spaces.Replace(line, " ").Trim())
+            .Where(line => line.Length > 0);
+        return string.Join("\n", lines);
+    }
+
+    /// <summary>Приймає лише https-посилання на сайт-джерело і відкидає з нього трекінгові параметри.</summary>
+    private static string? NormalizeUrl(string? url)
+    {
+        if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out Uri? uri) || uri.Scheme != Uri.UriSchemeHttps)
+        {
+            return null;
+        }
+
+        bool fromSource = uri.Host == SourceHost || uri.Host.EndsWith("." + SourceHost, StringComparison.Ordinal);
+        return fromSource ? Cut(uri.GetLeftPart(UriPartial.Path), 1000) : null;
+    }
+
+    private static List<string> ParseSkills(string? tags) =>
+        (tags ?? string.Empty)
+            .Split([',', ';', '|'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(30)
+            .ToList();
+
+    private static string OrDefault(string value, string fallback) => value.Length > 0 ? value : fallback;
+
+    private static string? NullIfEmpty(string value) => value.Length > 0 ? value : null;
+
+    // Обрізаємо до довжини колонки в БД (MaxLength у VacancyDB)
+    private static string Cut(string value, int maxLength) => value.Length <= maxLength ? value : value[..maxLength];
+}
