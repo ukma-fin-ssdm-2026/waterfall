@@ -34,8 +34,7 @@ jobs:
         run: dotnet build src/api/Waterfall.Api.csproj -c Release --no-restore --nologo
 
   test:
-    # AI: прогін юніт-тестів у CI (issue #62); перевірено: ті самі команди dotnet test локально (111 + 2 + 61 тестів), розбір YAML
-    # Full test run within 5 minutes in accordance with MAINT-001; runs in parallel with build
+    # Прогін юніт-тестів у CI (issue #62); перевірено: ті самі команди dotnet test локально (111 + 2 + 61 тестів), розбір YAML
     timeout-minutes: 5
     runs-on: ubuntu-latest
 
