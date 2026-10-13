@@ -12,6 +12,7 @@ using Waterfall.Api.Models.Common;
 using Waterfall.Api.Services;
 using Waterfall.Api.Workers;
 using Waterfall.Repository.Data;
+using Waterfall.Repository.Extensions;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Services;
 using Waterfall.Services.Extensions;
@@ -99,8 +100,9 @@ builder.Services.AddControllers(options =>
         };
     });
 
-// 2. Реєстрація інфраструктури (EF Core SQLite/MSSQL) та сервісів кешування (In-Memory Cache-Aside)
-builder.Services.AddWaterfallServices(builder.Configuration);
+// 2. Реєстрація інфраструктури (EF Core SQLite/MSSQL), репозиторіїв та сервісів бізнес-логіки
+builder.Services.AddWaterfallRepositories(builder.Configuration);
+builder.Services.AddWaterfallServices();
 builder.Services.Configure<IngestionOptions>(builder.Configuration.GetSection("Ingestion"));
 builder.Services.AddHostedService<JobParserService>();
 
