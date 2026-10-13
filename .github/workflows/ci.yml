@@ -57,3 +57,6 @@ jobs:
       - name: Client tests
         run: dotnet test tests/waterfall.Client.Tests/waterfall.Client.Tests.csproj -c Release --nologo
 
+      - name: Auth tests
+        run: dotnet test tests/waterfall.Auth.Tests/waterfall.Auth.Tests.csproj -c Release --nologo
+
