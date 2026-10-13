@@ -14,7 +14,7 @@ namespace Waterfall.Services;
 /// <summary>
 /// Чистить і стандартизує сирі вакансії (назва, опис, зарплата, дата, навички)
 /// та зберігає їх через <see cref="IVacancyRepository.BulkUpsertAsync"/>.
-/// Поки що працюємо з одним сайтом — Djinni (домовленість команди).
+/// Поки що працюємо з одним сайтом — Djinni.
 /// </summary>
 public class VacancyIngestionService : IVacancyIngestionService
 {
