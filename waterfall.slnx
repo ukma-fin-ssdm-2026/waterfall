@@ -12,4 +12,5 @@
   </Project>
   <Project Path="tests/waterfall.Security.Tests/waterfall.Security.Tests.csproj" />
   <Project Path="tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj" />
+  <Project Path="tests/waterfall.Auth.Tests/waterfall.Auth.Tests.csproj" />
 </Solution>
