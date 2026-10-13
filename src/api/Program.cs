@@ -1,5 +1,5 @@
 // AI: посилено обробку помилок валідації (issue #49); перевірено: прогін негативних тест-кейсів (docs/api/quality-attributes.md, розділ 6)
-// AI: реєстрація фонового збору вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API
+// AI: реєстрація фонового парсера вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API
 
 using System.Reflection;
 using System.Text.Json.Serialization;
@@ -10,6 +10,7 @@ using Microsoft.OpenApi;
 using Waterfall.Api.Extensions;
 using Waterfall.Api.Models.Common;
 using Waterfall.Api.Services;
+using Waterfall.Api.Workers;
 using Waterfall.Repository.Data;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Services;
@@ -100,7 +101,8 @@ builder.Services.AddControllers(options =>
 
 // 2. Реєстрація інфраструктури (EF Core SQLite/MSSQL) та сервісів кешування (In-Memory Cache-Aside)
 builder.Services.AddWaterfallServices(builder.Configuration);
-builder.Services.AddVacancyIngestion(builder.Configuration, builder.Environment);
+builder.Services.Configure<IngestionOptions>(builder.Configuration.GetSection("Ingestion"));
+builder.Services.AddHostedService<JobParserService>();
 
 // 2b. JWT Bearer, auth-сервіси та перевірка секретів (fail-fast, THR-09).
 // Генерація docs (--generate-openapi-and-exit) свідомо пропускає перевірку ключа:
