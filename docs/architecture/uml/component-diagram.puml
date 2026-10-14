@@ -39,14 +39,18 @@ package "Backend Services (C# .NET)" {
         AIService -left-> StorageService : GetUserContextAsync()\nSaveChatHistoryAsync()
     }
 
-    package "Repository Layer (Data Access & External Ingestion)" {
+    package "External Ingestion (BackgroundService)" {
         [Job Parser Service\n(HTML Scraper BackgroundService)] as ParserService
+    }
+
+    package "Repository Layer (Data Access)" {
         [Job Ingestion &\nNormalization Service] as IngestionService
         [Data Repositories\n(EF Core DbContext)] as Repo
 
-        ParserService -right-> IngestionService : ProcessRawVacanciesAsync(rawList)
         IngestionService -right-> Repo : BulkUpsertAsync(normalizedEntities)
     }
+
+    ParserService -down-> IngestionService : ProcessRawVacanciesAsync(rawList)
 
     ' Presentation to Core (Dependency Injection)
     VacanciesCtrl -down-> StorageService : GetVacanciesAsync(filter)\nGetVacancyByIdAsync(id)
