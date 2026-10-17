@@ -1,0 +1,29 @@
+Summary - waterfall — збір вакансій (issue #62)
+  Generated on: 18.10.2026 - 1:26:49
+  Coverage date: 18.10.2026 - 1:26:11
+  Parser: Cobertura
+  Assemblies: 2
+  Classes: 5
+  Files: 3
+  Line coverage: 99.4%
+  Covered lines: 179
+  Uncovered lines: 1
+  Coverable lines: 180
+  Total lines: 408
+  Branch coverage: 98.9% (93 of 94)
+  Covered branches: 93
+  Total branches: 94
+  Method coverage: 100% (34 of 34)
+  Full method coverage: 97% (33 of 34)
+  Covered methods: 34
+  Fully covered methods: 33
+  Total methods: 34
+
+Waterfall.Api                                     97.7%
+  Waterfall.Api.Workers.IngestionOptions           100%
+  Waterfall.Api.Workers.JobParserService          97.6%
+
+waterfall.Services                                 100%
+  Waterfall.Services.Interfaces.IngestionResult    100%
+  Waterfall.Services.Interfaces.RawVacancy         100%
+  Waterfall.Services.VacancyIngestionService       100%
