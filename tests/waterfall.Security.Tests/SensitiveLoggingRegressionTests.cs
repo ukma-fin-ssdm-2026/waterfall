@@ -5,6 +5,7 @@ using Waterfall.Api.Controllers;
 using Waterfall.Api.Services;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
+using Waterfall.Services.Exceptions;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Auth;
 
@@ -12,7 +13,7 @@ namespace Waterfall.Security.Tests;
 
 /// <summary>
 /// Регресійні тести безпеки для CWE-532 (Insertion of Sensitive Information into Log File).
-/// Перевіряють, що email користувача не потрапляє у логи під час операцій автентифікації.
+/// Перевіряють, що email та пароль користувача не потрапляють у логи під час операцій автентифікації (реєстрація та вхід).
 /// </summary>
 public sealed class SensitiveLoggingRegressionTests
 {
@@ -42,6 +43,7 @@ public sealed class SensitiveLoggingRegressionTests
         foreach (string logEntry in logger.Logs)
         {
             Assert.DoesNotContain(SensitiveEmail, logEntry, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(SensitivePassword, logEntry, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -70,6 +72,99 @@ public sealed class SensitiveLoggingRegressionTests
         foreach (string logEntry in logger.Logs)
         {
             Assert.DoesNotContain(SensitiveEmail, logEntry, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(SensitivePassword, logEntry, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task AuthController_ShouldNotLogSensitiveData_OnLogin_RegressionTest()
+    {
+        // Arrange
+        var logger = new FakeLogger<AuthController>();
+        var fakeAuthService = new FakeAuthService();
+        var controller = new AuthController(fakeAuthService, logger);
+
+        var request = new LoginRequest
+        {
+            Email = SensitiveEmail,
+            Password = SensitivePassword
+        };
+
+        // Act
+        await controller.Login(request, CancellationToken.None);
+
+        // Assert
+        Assert.NotEmpty(logger.Logs);
+        foreach (string logEntry in logger.Logs)
+        {
+            Assert.DoesNotContain(SensitiveEmail, logEntry, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(SensitivePassword, logEntry, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task AuthenticationService_ShouldNotLogSensitiveData_OnSuccessfulLogin_RegressionTest()
+    {
+        // Arrange
+        var logger = new FakeLogger<AuthenticationService>();
+        var userRepo = new FakeUserRepository();
+        var hasher = new FakePasswordHasher();
+        var jwt = new FakeJwtTokenService();
+        var service = new AuthenticationService(userRepo, hasher, jwt, logger);
+
+        var existingUser = new UserDB
+        {
+            Id = Guid.NewGuid(),
+            Email = SensitiveEmail.ToLowerInvariant(),
+            PasswordHash = hasher.Hash(SensitivePassword),
+            Role = UserRole.JobSeeker.ToString(),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        await userRepo.CreateAsync(existingUser);
+
+        var request = new LoginRequest
+        {
+            Email = SensitiveEmail,
+            Password = SensitivePassword
+        };
+
+        // Act
+        await service.LoginAsync(request);
+
+        // Assert
+        Assert.NotEmpty(logger.Logs);
+        foreach (string logEntry in logger.Logs)
+        {
+            Assert.DoesNotContain(SensitiveEmail, logEntry, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(SensitivePassword, logEntry, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task AuthenticationService_ShouldNotLogSensitiveData_OnFailedLogin_RegressionTest()
+    {
+        // Arrange
+        var logger = new FakeLogger<AuthenticationService>();
+        var userRepo = new FakeUserRepository(); // Empty repo -> user is null -> login fails
+        var hasher = new FakePasswordHasher();
+        var jwt = new FakeJwtTokenService();
+        var service = new AuthenticationService(userRepo, hasher, jwt, logger);
+
+        var request = new LoginRequest
+        {
+            Email = SensitiveEmail,
+            Password = SensitivePassword
+        };
+
+        // Act
+        await Assert.ThrowsAsync<InvalidCredentialsException>(() => service.LoginAsync(request));
+
+        // Assert
+        Assert.NotEmpty(logger.Logs);
+        foreach (string logEntry in logger.Logs)
+        {
+            Assert.DoesNotContain(SensitiveEmail, logEntry, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain(SensitivePassword, logEntry, StringComparison.OrdinalIgnoreCase);
         }
     }
 
@@ -88,10 +183,7 @@ public sealed class SensitiveLoggingRegressionTests
             EventId eventId,
             TState state,
             Exception? exception,
-            Func<TState, Exception?, string> formatter)
-        {
-            _logs.Add(formatter(state, exception));
-        }
+            Func<TState, Exception?, string> formatter) => _logs.Add(formatter(state, exception));
     }
 
     private sealed class FakeUserRepository : IUserRepository
