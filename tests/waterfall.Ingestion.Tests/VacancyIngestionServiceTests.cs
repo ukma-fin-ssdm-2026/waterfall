@@ -118,8 +118,8 @@ public class VacancyIngestionServiceTests
     }
 
     [Theory]
-    [InlineData("QA", false)]  // 2 символи — замало для назви посади
-    [InlineData("Dev", true)]  // 3 символи — мінімум
+    [InlineData("-", false)]  // 1 символ — сміття, а не назва посади
+    [InlineData("QA", true)]  // 2 символи — мінімум: QA, PM, UX — справжні назви посад
     public void Normalize_TitleLengthBoundary(string title, bool accepted)
     {
         Assert.Equal(accepted, VacancyIngestionService.Normalize(Raw() with { Title = title }, Now).Vacancy != null);

@@ -1,6 +1,6 @@
 Summary - waterfall — збір вакансій (issue #62)
-  Generated on: 18.10.2026 - 1:26:49
-  Coverage date: 18.10.2026 - 1:26:11
+  Generated on: 18.10.2026 - 1:50:59
+  Coverage date: 18.10.2026 - 1:50:57
   Parser: Cobertura
   Assemblies: 2
   Classes: 5
@@ -9,7 +9,7 @@ Summary - waterfall — збір вакансій (issue #62)
   Covered lines: 179
   Uncovered lines: 1
   Coverable lines: 180
-  Total lines: 408
+  Total lines: 409
   Branch coverage: 98.9% (93 of 94)
   Covered branches: 93
   Total branches: 94

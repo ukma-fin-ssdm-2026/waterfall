@@ -298,7 +298,7 @@ var assemblies = [
     "classes": [
       { "name": "Waterfall.Services.Interfaces.IngestionResult", "rp": "waterfall.Services_IngestionResult.html", "cl": 1, "ucl": 0, "cal": 1, "tl": 34, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
       { "name": "Waterfall.Services.Interfaces.RawVacancy", "rp": "waterfall.Services_RawVacancy.html", "cl": 12, "ucl": 0, "cal": 12, "tl": 34, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
-      { "name": "Waterfall.Services.VacancyIngestionService", "rp": "waterfall.Services_VacancyIngestionService.html", "cl": 122, "ucl": 0, "cal": 122, "tl": 262, "cb": 80, "tb": 80, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Services.VacancyIngestionService", "rp": "waterfall.Services_VacancyIngestionService.html", "cl": 122, "ucl": 0, "cal": 122, "tl": 263, "cb": 80, "tb": 80, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
     ]},
 ];
 
@@ -313,13 +313,13 @@ var riskHotspotMetrics = [
 
 var riskHotspots = [
   {
-    "assembly": "waterfall.Services", "class": "Waterfall.Services.VacancyIngestionService", "reportPath": "waterfall.Services_VacancyIngestionService.html", "methodName": "ParseSalary(System.String)", "methodShortName": "ParseSalary(...)", "fileIndex": 0, "line": 132,
+    "assembly": "waterfall.Services", "class": "Waterfall.Services.VacancyIngestionService", "reportPath": "waterfall.Services_VacancyIngestionService.html", "methodName": "ParseSalary(System.String)", "methodShortName": "ParseSalary(...)", "fileIndex": 0, "line": 133,
     "metrics": [
       { "value": 28, "exceeded": false },
       { "value": 28, "exceeded": true },
     ]},
   {
-    "assembly": "waterfall.Services", "class": "Waterfall.Services.VacancyIngestionService", "reportPath": "waterfall.Services_VacancyIngestionService.html", "methodName": "ParsePublishedAt(System.String,System.DateTimeOffset)", "methodShortName": "ParsePublishedAt(...)", "fileIndex": 0, "line": 180,
+    "assembly": "waterfall.Services", "class": "Waterfall.Services.VacancyIngestionService", "reportPath": "waterfall.Services_VacancyIngestionService.html", "methodName": "ParsePublishedAt(System.String,System.DateTimeOffset)", "methodShortName": "ParsePublishedAt(...)", "fileIndex": 0, "line": 181,
     "metrics": [
       { "value": 20, "exceeded": false },
       { "value": 20, "exceeded": true },
