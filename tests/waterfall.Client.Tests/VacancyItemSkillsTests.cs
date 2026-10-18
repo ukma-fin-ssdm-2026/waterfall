@@ -1,4 +1,4 @@
-// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: тести VisibleSkills / MoreSkillsText у циклах TDD (Lab 06); перевірено: кожен тест падав (RED) до мінімальної реалізації.
 
 using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Models.Vacancies;

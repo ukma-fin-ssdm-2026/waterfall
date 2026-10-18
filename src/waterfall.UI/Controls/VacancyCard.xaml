@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!-- Картка вакансії: спільна для «Каталогу» та «Обраного». BindingContext — VacancyItemViewModel. -->
+<!-- AI: чипи навичок обмежено трьома з чипом «+N» (Lab 06); перевірено: збірка net10.0-windows, перегляд у запущеному застосунку. -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"

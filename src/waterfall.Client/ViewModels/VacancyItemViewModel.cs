@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: VisibleSkills / MoreSkillsText через TDD (Lab 06); перевірено: VacancyItemSkillsTests (RED перед кожним GREEN), запуск застосунку.
 
 using System.Globalization;
 using System.Net;
