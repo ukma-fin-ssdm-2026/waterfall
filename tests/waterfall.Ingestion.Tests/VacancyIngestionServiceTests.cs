@@ -51,6 +51,13 @@ public class VacancyIngestionServiceTests
         Assert.Equal(Now.AddMinutes(-minutesAgo), VacancyIngestionService.ParsePublishedAt(posted, Now));
     }
 
+    
+    [Fact]
+    public void ParsePublishedAt_ReadsMonths()
+    {
+        Assert.Equal(Now.AddMonths(-2), VacancyIngestionService.ParsePublishedAt("2 місяці тому", Now));
+    }
+    
     [Fact]
     public void ParsePublishedAt_ReadsExactDates()
     {
