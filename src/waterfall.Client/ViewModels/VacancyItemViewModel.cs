@@ -77,7 +77,7 @@ public partial class VacancyItemViewModel : ObservableObject
         _ => null
     };
 
-    public IReadOnlyList<string> VisibleSkills => [];
+    public IReadOnlyList<string> VisibleSkills => Vacancy.Skills;
 
     public string? MoreSkillsText => null;
 
