@@ -77,9 +77,9 @@ public partial class VacancyItemViewModel : ObservableObject
         _ => null
     };
 
-    public IReadOnlyList<string> VisibleSkills => Vacancy.Skills;
+    public IReadOnlyList<string> VisibleSkills => Vacancy.Skills.Take(3).ToList();
 
-    public string? MoreSkillsText => null;
+    public string? MoreSkillsText => Vacancy.Skills.Count > 3 ? $"+{Vacancy.Skills.Count - 3}" : null;
 
     public bool HasMoreSkills => MoreSkillsText is not null;
 
