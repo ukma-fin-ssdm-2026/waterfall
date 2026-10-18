@@ -3,27 +3,39 @@
 
 ## 1. Поточний статус
 
+У рішенні налічується **247 модульних тестів**, розподілених за 6 проектами:
+
 | Набір тестів | Модуль | Тестів | Що перевіряє |
 | :--- | :--- | :---: | :--- |
-| [`waterfall.Ingestion.Tests`](../../tests/waterfall.Ingestion.Tests/README.md) | збір вакансій | 46 | нормалізація полів, фоновий парсер, `BulkUpsertAsync` на справжній SQLite; фікстури, заглушки, граничні випадки |
+| [`waterfall.Ingestion.Tests`](../../tests/waterfall.Ingestion.Tests/README.md) | збір вакансій | 50 | нормалізація полів, фоновий парсер, `BulkUpsertAsync` на справжній SQLite; фікстури, заглушки, граничні випадки |
 | `waterfall.Auth.Tests` | автентифікація | 40 | сервіс автентифікації, JWT, хешування паролів, контролер, валідація запитів |
 | `waterfall.Client.Tests` | клієнт / UI | 61 | `HttpGatewayService`, viewmodels каталогу, «Обраного» і входу |
-| `waterfall.Security.Tests` | регресії безпеки | 5 | email і паролі не потрапляють у логи (CWE-532) |
+| [`waterfall.Repository.Tests`](../../tests/waterfall.Repository.Tests/README.md) | сховище (репозиторії) | 36 | SQLite in-memory: пошук за 4 полями та JSON, фільтрація, сортування, пагінація, `BulkUpsert`, ізоляція закладок та операції користувачів |
+| [`waterfall.Services.Tests`](../../tests/waterfall.Services.Tests/README.md) | бізнес-сервіси та кеш | 35 | Cache-Aside (PERF-001), Stale-Cache fallback (REL-001), збагачення `IsSaved`, каскадна інвалідація кешу, стійкість до битого JSON |
+| [`waterfall.Api.Tests`](../../tests/waterfall.Api.Tests/README.md) | REST API та безпека | 25 | Ендпоинти вакансій і закладок (HTTP 200/201/400/404/409), трасування запитів, витяг claims з JWT, захист від витоку даних у логи (CWE-532) |
 | `src/mcp` (TypeScript) | MCP-сервер | — | тестів немає; лише статичні перевірки: ESLint з `eslint-plugin-security`, `tsc`, `npm audit` |
 
-Усі чотири набори .NET запускаються в CI на кожен PR (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)).
+Усі набори .NET запускаються в CI на кожен PR (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)).
 
-## 2. Покриття
+## 2. Покриття та філософія якості
 
-Загальне покриття (coverlet + ReportGenerator, 18.10.2026, без коду, який генерує компілятор): **63,5 % рядків, 49,7 % гілок**.
+Замість штучної гонитви за «100% рядковим покриттям» через тривіальні перевірки вбудованих методів ORM чи авто-властивостей, набір тестів сфокусовано на критичній бізнес-логіці, стійкості (resilience) та граничних умовах.
 
-| Модуль | Рядки | Гілки | Що не покрито і чому |
-| :--- | :---: | :---: | :--- |
-| Збір вакансій | 99,5 % | 99 % | лише вихід із циклу таймера, коли `WaitForNextTickAsync` повертає `false`: так буває, тільки якщо таймер знищити під час очікування, а код цього не робить. [HTML-звіт](../../tests/waterfall.Ingestion.Tests/coverage-report/index.html) |
-| Клієнт (`waterfall.Client`) | 84,1 % | — | далі буде |
-| Автентифікація | — | — | далі буде |
-| Каталог вакансій і «Обране»: сервіси, кеш, репозиторії, контролери | 0 % | 0 % | далі буде |
-| Стартовий код: `Program`, реєстрація DI, `OpenApiGenerator`, `WaterfallDbSeeder` | 0 % | 0 % | це «склеювання» застосунку: його перевіряють збірка й запуск API, а модульні тести дали б мало; покриє системний тест |
+Загальне рядкове покриття по всьому рішенню становить **77,6 %** (покриття методів — **86,2 %**).
+Покриття цільових сервісів та репозиторіїв:
+- `VacancyService`: **97,9 %**
+- `VacancyCacheService`: **98,7 %**
+- `SavedVacancyService`: **100 %**
+- `VacancyIngestionService`: **99,3 %**
+- `EfSavedVacancyRepository`: **96,2 %**
+- `EfUserRepository`: **100 %**
+- `ApiControllerBase`: **100 %**
+- `AuthController`: **100 %**
+- `AuthenticationService`: **98,5 %**
+- `VacanciesController` / `SavedVacanciesController`: **86,6 %**
+- `EfVacancyRepository`: **78,2 %** 
+
+[Єдиний зведений HTML-дашборд покриття](../../coverage-report/index.html) (доступний також через кореневий [`index.html`](../../index.html)).
 
 ## 3. Плани
 
@@ -45,3 +57,4 @@
 | Об'єкт | Внесок | ШІ | Як перевірено |
 | :--- | :--- | :--- | :--- |
 | Структура документа, розділи про збір вакансій, плани | Данило | Чернетка тексту, підрахунок покриття | Цифри звірено зі звітом ReportGenerator і результатами `dotnet test` усіх наборів |
+| Розділи про каталог вакансій, кеш, сховище та API, фокус на якості тестів та стійкості | Денис (s1ngleo) | Допомога у формулюванні, рефакторинг тестів під бізнес-правила, розрахунок покриття зведеного звіту | Звірка цифр зі звітом ReportGenerator (`coverage-report/`), `dotnet test` (96 якісних тестів: 36 Repository, 35 Services, 25 Api) |
