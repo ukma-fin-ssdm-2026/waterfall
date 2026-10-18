@@ -15,6 +15,7 @@ public static class SalaryRangeParser
             TryCleanDecimal(parts[0], out var min) &&
             TryCleanDecimal(parts[1], out var max))
         {
+            if (min > max) return null;
             return new SalaryRange(min, max);
         }
 
