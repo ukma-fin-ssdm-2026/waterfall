@@ -21,6 +21,9 @@ public class VacancyIngestionService : IVacancyIngestionService
     private const string Source = "Djinni";
     private const string SourceHost = "djinni.co";
 
+    // Більше значення в «N … тому» не буває реальною датою публікації. До того ж, навіть 10 000 місяців тому ще не виводять дату за межі календаря.
+    private const int MaxTimeAgo = 10_000;
+
     // Тайм-аут захищає від зависання регулярного виразу на шкідливому вводі (ReDoS)
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(200);
     private static readonly Regex ScriptOrStyle = new(@"<(script|style)\b.*?</\1\s*>", RegexOptions.IgnoreCase | RegexOptions.Singleline, RegexTimeout);
@@ -28,7 +31,7 @@ public class VacancyIngestionService : IVacancyIngestionService
     private static readonly Regex AnyTag = new(@"<[^>]*>", RegexOptions.None, RegexTimeout);
     private static readonly Regex Spaces = new(@"\s+", RegexOptions.None, RegexTimeout);
     private static readonly Regex Number = new(@"\d+", RegexOptions.None, RegexTimeout);
-    private static readonly Regex TimeAgo = new(@"(\d+)\s*(хв|год|дн|ден)", RegexOptions.IgnoreCase, RegexTimeout);
+    private static readonly Regex TimeAgo = new(@"(\d+)\s*(хв|год|дн|ден|тиж|міс)", RegexOptions.IgnoreCase, RegexTimeout);
 
     private readonly IVacancyRepository _repository;
     private readonly ILogger<VacancyIngestionService> _logger;
@@ -193,13 +196,13 @@ public class VacancyIngestionService : IVacancyIngestionService
         Match timeAgo = TimeAgo.Match(text);
         if (timeAgo.Success)
         {
-            int value = int.Parse(timeAgo.Groups[1].Value, CultureInfo.InvariantCulture);
-            return timeAgo.Groups[2].Value switch
+            // Абсурдно велике число — помилка на сайті, а не дата: як і з незрозумілим форматом, беремо момент збору
+            if (!int.TryParse(timeAgo.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out int value) || value > MaxTimeAgo)
             {
-                "хв" => now.AddMinutes(-value),
-                "год" => now.AddHours(-value),
-                _ => now.AddDays(-value)
-            };
+                return now;
+            }
+
+            return SubtractTimeAgo(now, timeAgo.Groups[2].Value, value);
         }
 
         // dd.MM.yyyy перевіряємо першим: інакше «08.10.2026» прочиталося б як 10 серпня
@@ -210,6 +213,21 @@ public class VacancyIngestionService : IVacancyIngestionService
         }
 
         return now;
+    }
+
+
+    /// <summary>«3 дні тому» → відняти від моменту збору 3 дні. Одиниця — початок слова, знайдений regex'ом TimeAgo.</summary>
+    private static DateTimeOffset SubtractTimeAgo(DateTimeOffset now, string unit, int value)
+    {
+        return unit switch
+        {
+            "хв" => now.AddMinutes(-value),
+            "год" => now.AddHours(-value),
+            "дн" or "ден" => now.AddDays(-value),
+            "тиж" => now.AddDays(-7 * value),
+            "міс" => now.AddMonths(-value),
+            _ => throw new ArgumentOutOfRangeException(nameof(unit), unit, "Невідома одиниця часу")
+        };
     }
 
     /// <summary>

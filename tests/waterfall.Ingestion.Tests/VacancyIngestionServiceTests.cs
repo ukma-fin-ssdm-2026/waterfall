@@ -42,12 +42,28 @@ public class VacancyIngestionServiceTests
     [InlineData("5 годин тому", 5 * 60)]
     [InlineData("10 хв. тому", 10)]
     [InlineData("1 день тому", 24 * 60)]
+    [InlineData("1 тиждень тому", 7 * 24 * 60)]
     [InlineData("щойно", 0)]
     [InlineData("незрозумілий формат", 0)]
     [InlineData(null, 0)] // дата відсутня — беремо момент збору
     public void ParsePublishedAt_ReadsRelativeDates(string? posted, int minutesAgo)
     {
         Assert.Equal(Now.AddMinutes(-minutesAgo), VacancyIngestionService.ParsePublishedAt(posted, Now));
+    }
+
+
+    [Fact]
+    public void ParsePublishedAt_ReadsMonths()
+    {
+        Assert.Equal(Now.AddMonths(-2), VacancyIngestionService.ParsePublishedAt("2 місяці тому", Now));
+    }
+
+    [Theory]
+    [InlineData("99999999999 днів тому")] // число не вміщується в int
+    [InlineData("9999999 днів тому")]     // дата вийшла б за межі календаря
+    public void ParsePublishedAt_AbsurdTimeAgo_FallsBackToNow(string posted)
+    {
+        Assert.Equal(Now, VacancyIngestionService.ParsePublishedAt(posted, Now));
     }
 
     [Fact]
