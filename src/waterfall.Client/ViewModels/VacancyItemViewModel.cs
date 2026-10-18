@@ -77,6 +77,12 @@ public partial class VacancyItemViewModel : ObservableObject
         _ => null
     };
 
+    public IReadOnlyList<string> VisibleSkills => [];
+
+    public string? MoreSkillsText => null;
+
+    public bool HasMoreSkills => MoreSkillsText is not null;
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SaveButtonText))]
     public partial bool IsSaved { get; set; }
