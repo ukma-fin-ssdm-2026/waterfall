@@ -16,6 +16,18 @@ public static class SalaryRangeParser
             return new SalaryRange(min, max);
         }
 
+        var trimmed = raw.Trim();
+        if (trimmed.EndsWith('+') && TryCleanDecimal(trimmed.TrimEnd('+'), out var plusMin))
+        {
+            return new SalaryRange(plusMin, null);
+        }
+
+        if (trimmed.StartsWith("до", StringComparison.OrdinalIgnoreCase) &&
+            TryCleanDecimal(trimmed[2..], out var maxOnly))
+        {
+            return new SalaryRange(null, maxOnly);
+        }
+
         return null;
     }
 
