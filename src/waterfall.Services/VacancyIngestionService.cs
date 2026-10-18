@@ -20,7 +20,7 @@ public class VacancyIngestionService : IVacancyIngestionService
 {
     private const string Source = "Djinni";
     private const string SourceHost = "djinni.co";
-    
+
     // Більше значення в «N … тому» не буває реальною датою публікації. До того ж, навіть 10 000 місяців тому ще не виводять дату за межі календаря.
     private const int MaxTimeAgo = 10_000;
 
@@ -215,7 +215,7 @@ public class VacancyIngestionService : IVacancyIngestionService
         return now;
     }
 
-    
+
     /// <summary>«3 дні тому» → відняти від моменту збору 3 дні. Одиниця — початок слова, знайдений regex'ом TimeAgo.</summary>
     private static DateTimeOffset SubtractTimeAgo(DateTimeOffset now, string unit, int value)
     {

@@ -51,7 +51,7 @@ public class VacancyIngestionServiceTests
         Assert.Equal(Now.AddMinutes(-minutesAgo), VacancyIngestionService.ParsePublishedAt(posted, Now));
     }
 
-    
+
     [Fact]
     public void ParsePublishedAt_ReadsMonths()
     {
