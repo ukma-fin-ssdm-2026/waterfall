@@ -48,17 +48,24 @@
                    MaxLines="3"
                    LineBreakMode="TailTruncation" />
 
+            <!-- BindableLayout перезаписує дочірні елементи, тому чип «+N» стоїть поруч, у зовнішньому FlexLayout. -->
             <FlexLayout Grid.Row="4"
-                        Wrap="Wrap"
-                        BindableLayout.ItemsSource="{Binding Skills}">
-                <BindableLayout.ItemTemplate>
-                    <DataTemplate x:DataType="x:String">
-                        <Border Style="{StaticResource SkillChip}">
-                            <Label Text="{Binding .}"
-                                   Style="{StaticResource BadgeLabel}" />
-                        </Border>
-                    </DataTemplate>
-                </BindableLayout.ItemTemplate>
+                        Wrap="Wrap">
+                <HorizontalStackLayout BindableLayout.ItemsSource="{Binding VisibleSkills}">
+                    <BindableLayout.ItemTemplate>
+                        <DataTemplate x:DataType="x:String">
+                            <Border Style="{StaticResource SkillChip}">
+                                <Label Text="{Binding .}"
+                                       Style="{StaticResource BadgeLabel}" />
+                            </Border>
+                        </DataTemplate>
+                    </BindableLayout.ItemTemplate>
+                </HorizontalStackLayout>
+                <Border Style="{StaticResource SkillChip}"
+                        IsVisible="{Binding HasMoreSkills}">
+                    <Label Text="{Binding MoreSkillsText}"
+                           Style="{StaticResource BadgeLabel}" />
+                </Border>
             </FlexLayout>
 
             <Button Grid.Row="4"
