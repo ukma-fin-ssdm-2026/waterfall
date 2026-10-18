@@ -24,7 +24,6 @@ jobs:
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-          # cache: true # Commented out because we need a lock file
 
       # Only API for now to not bundle excess packages (MAUI)
       - name: Restore dependencies
@@ -34,7 +33,7 @@ jobs:
         run: dotnet build src/api/Waterfall.Api.csproj -c Release --no-restore --nologo
 
   test:
-    # Прогін юніт-тестів у CI (issue #62); перевірено: ті самі команди dotnet test локально (111 + 2 + 61 тестів), розбір YAML
+    # Прогін юніт-тестів та Quality Gate покриття у CI (issue #62, Lab 6 Bonus)
     timeout-minutes: 5
     runs-on: ubuntu-latest
 
@@ -48,24 +47,67 @@ jobs:
           dotnet-version: 10.0.x
 
       # On Linux the libraries target net10.0 only, so test projects build without MAUI workloads
-      - name: Security tests
-        run: dotnet test tests/waterfall.Security.Tests/waterfall.Security.Tests.csproj -c Release --nologo
+      # Note: Sensitive logging security regression tests (CWE-532) are integrated into Api tests
 
       - name: Ingestion tests
-        run: dotnet test tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -c Release --nologo
+        run: dotnet test tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Ingestion
 
       - name: Client tests
-        run: dotnet test tests/waterfall.Client.Tests/waterfall.Client.Tests.csproj -c Release --nologo
+        run: dotnet test tests/waterfall.Client.Tests/waterfall.Client.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Client
 
       - name: Auth tests
-        run: dotnet test tests/waterfall.Auth.Tests/waterfall.Auth.Tests.csproj -c Release --nologo
+        run: dotnet test tests/waterfall.Auth.Tests/waterfall.Auth.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Auth
 
       - name: Repository tests
-        run: dotnet test tests/waterfall.Repository.Tests/waterfall.Repository.Tests.csproj -c Release --nologo
+        run: dotnet test tests/waterfall.Repository.Tests/waterfall.Repository.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Repository
 
       - name: Services tests
-        run: dotnet test tests/waterfall.Services.Tests/waterfall.Services.Tests.csproj -c Release --nologo
+        run: dotnet test tests/waterfall.Services.Tests/waterfall.Services.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Services
 
       - name: Api tests
-        run: dotnet test tests/waterfall.Api.Tests/waterfall.Api.Tests.csproj -c Release --nologo
+        run: dotnet test tests/waterfall.Api.Tests/waterfall.Api.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Api
 
+      - name: Restore tools & Generate coverage report
+        run: |
+          dotnet tool restore
+          dotnet tool run reportgenerator \
+            -reports:"TestResults/**/coverage.cobertura.xml" \
+            -targetdir:"coverage-report" \
+            -reporttypes:"TextSummary;MarkdownSummaryGithub" \
+            -assemblyfilters:"+waterfall.*;+Waterfall.*" \
+            -classfilters:"-Microsoft.AspNetCore.OpenApi.Generated*;-*Program*"
+
+      - name: Publish coverage to GitHub Step Summary
+        run: |
+          if [ -f coverage-report/SummaryGithub.md ]; then
+            cat coverage-report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Coverage Quality Gate (Fail under 75%)
+        run: |
+          echo "=== Quality Gate Check ==="
+          cat coverage-report/Summary.txt
+          python3 -c "
+          import re, sys
+
+          with open('coverage-report/Summary.txt') as f:
+              text = f.read()
+
+          m = re.search(r'Line coverage:\s*([0-9]+(?:\.[0-9]+)?)%', text)
+          if not m:
+              print('❌ Line coverage not found in Summary.txt')
+              sys.exit(1)
+
+          coverage = float(m.group(1))
+          threshold = 75.0
+          print('----------------------------------------')
+          print(f'Measured Line Coverage : {coverage}%')
+          print(f'Required Threshold     : {threshold}%')
+          print('----------------------------------------')
+
+          if coverage < threshold:
+              print(f'❌ Code coverage gate FAILED: {coverage}% is below required threshold {threshold}%!')
+              sys.exit(1)
+          else:
+              print(f'✅ Code coverage gate PASSED: {coverage}% >= {threshold}%!')
+          "
