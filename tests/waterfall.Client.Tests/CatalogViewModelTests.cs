@@ -1,4 +1,5 @@
-// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: тести EnsureLoaded/LoadMore/ShowTotal, скасованого застарілого завантаження і гілок debounce (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using System.Net;
 using CommunityToolkit.Mvvm.Messaging;
@@ -150,6 +151,85 @@ public class CatalogViewModelTests
     }
 
     [Fact]
+    public async Task EnsureLoaded_WhenAlreadyLoaded_DoesNotReload()
+    {
+        Task load = _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(FakeGateway.Page(1, 1, hasNext: false, "A"));
+        await load;
+
+        _vm.SearchText = string.Empty;
+        await _vm.EnsureLoadedCommand.ExecuteAsync(null);
+
+        Assert.Single(_gateway.CatalogCalls);
+    }
+
+    [Fact]
+    public async Task EnsureLoaded_WhileLoading_DoesNotStartSecondLoad()
+    {
+        Task first = _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        FakeGateway.CatalogCall call = await _gateway.WaitForCatalogCallAsync(1);
+
+        await _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        Assert.Single(_gateway.CatalogCalls);
+
+        call.Response.SetResult(FakeGateway.Page(1, 1, hasNext: false, "A"));
+        await first;
+        Assert.Single(_vm.Vacancies);
+    }
+
+    [Fact]
+    public async Task Search_SameQueryAfterLoad_IsNoOp()
+    {
+        Task load = _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(FakeGateway.Page(1, 1, hasNext: false, "A"));
+        await load;
+
+        await _vm.SearchCommand.ExecuteAsync(null);
+
+        Assert.Single(_gateway.CatalogCalls);
+    }
+
+    [Fact]
+    public async Task ShowTotal_HiddenBeforeLoad_AndOnError() 
+    {
+        Task load = _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        Assert.False(_vm.ShowTotal);
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(FakeGateway.Page(1, 1, hasNext: false, "A"));
+        await load;
+        Assert.True(_vm.ShowTotal);
+
+        Task failing = _vm.RetryCommand.ExecuteAsync(null);
+        (await _gateway.WaitForCatalogCallAsync(2)).Response.SetException(
+            new ApiException(HttpStatusCode.ServiceUnavailable, null, "Сервер повернув помилку 503."));
+        await failing;
+        Assert.True(_vm.HasError);
+        Assert.False(_vm.ShowTotal);
+
+        Task recovery = _vm.RetryCommand.ExecuteAsync(null);
+        (await _gateway.WaitForCatalogCallAsync(3)).Response.SetResult(FakeGateway.Page(1, 1, hasNext: false, "B"));
+        await recovery;
+        Assert.True(_vm.ShowTotal);
+    }
+
+    [Fact]
+    public async Task LoadMore_WhenServerRejects_ShowsError()
+    {
+        Task first = _vm.SearchCommand.ExecuteAsync(null);
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(FakeGateway.Page(1, 3, hasNext: true, "A"));
+        await first;
+
+        Task more = _vm.LoadMoreCommand.ExecuteAsync(null);
+        await _gateway.WaitForCatalogCallAsync(2);
+        _gateway.CatalogCalls[1].Response.SetException(new ApiException(HttpStatusCode.InternalServerError, null, "Сервер повернув помилку 500."));
+        await more;
+
+        Assert.Equal("Сервер повернув помилку 500.", _vm.ErrorMessage);
+        Assert.False(_vm.IsLoadingMore);
+        Assert.True(_vm.HasError);
+        Assert.False(_vm.ShowTotal);
+    }
+
+    [Fact]
     public async Task Refresh_ResetsRefreshingFlag_AndReplacesList()
     {
         Task load = _vm.EnsureLoadedCommand.ExecuteAsync(null);
@@ -178,5 +258,62 @@ public class CatalogViewModelTests
 
         Assert.Equal("Сервер повернув помилку 500.", _vm.ErrorMessage);
         Assert.False(_vm.Vacancies[0].IsSaved);
+    }
+
+    [Fact]
+    public async Task SupersededLoad_CancelledSilently_NewResultShown()
+    {
+        // Перше завантаження висить; повторне (Retry) його витісняє: скасування — не помилка,
+        // банер не з'являється, показуються дані новішого запиту, прапорці скинуто.
+        Task stale = _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        FakeGateway.CatalogCall first = await _gateway.WaitForCatalogCallAsync(1);
+        Assert.True(_vm.IsLoading);
+
+        Task fresh = _vm.RetryCommand.ExecuteAsync(null);
+        FakeGateway.CatalogCall second = await _gateway.WaitForCatalogCallAsync(2);
+        Assert.True(first.Ct.IsCancellationRequested);
+        Assert.Null(_vm.ErrorMessage);
+
+        second.Response.SetResult(FakeGateway.Page(1, 1, hasNext: false, "B"));
+        await Task.WhenAll(stale, fresh);
+
+        Assert.Equal(["B"], _vm.Vacancies.Select(v => v.Title));
+        Assert.False(_vm.HasError);
+        Assert.False(_vm.IsLoading);
+        Assert.False(_vm.IsLoadingMore);
+        Assert.True(_vm.ShowTotal);
+    }
+
+    [Fact]
+    public async Task Debounce_BeforeFirstLoad_SameQueryStillLoads()
+    {
+        // Користувач друкує до першого завантаження, потім стирає: нормалізований запит уже
+        // «той самий» (порожній), але HasLoaded == false, тож пауза все одно завершується завантаженням.
+        _vm.SearchText = "q";
+        _vm.SearchText = string.Empty;
+        _time.Advance(TimeSpan.FromMilliseconds(400));
+        FakeGateway.CatalogCall call = await _gateway.WaitForCatalogCallAsync(1);
+
+        Assert.Equal((null, 1), (call.Search, call.Page));
+    }
+
+    [Fact]
+    public async Task Debounce_AfterLoad_SameQueryDoesNotReload()
+    {
+        // Після завантаження користувач додає пробіл: нормалізований запит той самий —
+        // пауза минає без повторного запиту (зайве мерехтіння списку й запит).
+        // (SearchCommand скасовує debounce від набору, тож перший запит один.)
+        _vm.SearchText = "net";
+        Task load = _vm.SearchCommand.ExecuteAsync(null);
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(FakeGateway.Page(1, 1, hasNext: false, "A"));
+        await load;
+        Assert.Single(_gateway.CatalogCalls);
+
+        _vm.SearchText = "net ";
+        _time.Advance(CatalogViewModel.SearchDebounce);
+        await Task.Delay(50);
+
+        Assert.Single(_gateway.CatalogCalls);
+        Assert.Equal(["A"], _vm.Vacancies.Select(v => v.Title));
     }
 }

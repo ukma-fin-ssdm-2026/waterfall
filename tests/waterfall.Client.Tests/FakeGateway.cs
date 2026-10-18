@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: відкладені виклики «Обраного» і входу через TaskCompletionSource (Lab 06); перевірено: тести, що на них спираються, dotnet test.
 
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Auth;
@@ -20,7 +21,15 @@ internal sealed class FakeGateway : IHttpGatewayService
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
+    public sealed record SavedCall(CancellationToken Ct)
+    {
+        public TaskCompletionSource<IReadOnlyList<SavedVacancyDto>> Response { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
     private readonly SemaphoreSlim _callSignal = new(0);
+
+    private readonly SemaphoreSlim _savedSignal = new(0);
 
     public List<CatalogCall> CatalogCalls { get; } = [];
 
@@ -91,9 +100,30 @@ internal sealed class FakeGateway : IHttpGatewayService
 
     public int SavedCalls { get; private set; }
 
+    /// <summary>
+    /// Якщо true, GetSavedVacanciesAsync повертає керований TaskCompletionSource (як у каталогу):
+    /// тест сам вирішує, коли завершити запит, а скасування токена скасовує очікування.
+    /// </summary>
+    public bool DeferSavedCalls { get; set; }
+
+    public List<SavedCall> SavedPendingCalls { get; } = [];
+
     public Task<IReadOnlyList<SavedVacancyDto>> GetSavedVacanciesAsync(CancellationToken ct = default)
     {
         SavedCalls++;
+        if (DeferSavedCalls)
+        {
+            SavedCall call = new(ct);
+            ct.Register(() => call.Response.TrySetCanceled(ct));
+            lock (SavedPendingCalls)
+            {
+                SavedPendingCalls.Add(call);
+            }
+
+            _savedSignal.Release();
+            return call.Response.Task;
+        }
+
         try
         {
             return Task.FromResult(Saved());
@@ -103,12 +133,40 @@ internal sealed class FakeGateway : IHttpGatewayService
             return Task.FromException<IReadOnlyList<SavedVacancyDto>>(ex);
         }
     }
+
+    /// <summary>
+    /// Чекає, доки кількість відкладених викликів «Обраного» досягне <paramref name="count"/>.
+    /// </summary>
+    public async Task<SavedCall> WaitForSavedCallAsync(int count)
+    {
+        while (true)
+        {
+            lock (SavedPendingCalls)
+            {
+                if (SavedPendingCalls.Count >= count)
+                {
+                    return SavedPendingCalls[count - 1];
+                }
+            }
+
+            if (!await _savedSignal.WaitAsync(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException($"Очікувалось {count} викликів «Обраного», отримано {SavedPendingCalls.Count}.");
+            }
+        }
+    }
     /// <summary>
     /// Відповідь на LoginAsync / RegisterAsync: результат або виняток.
     /// </summary>
     public Func<AuthResponse> Auth { get; set; } = () => throw new NotSupportedException();
 
     public List<object> AuthRequests { get; } = [];
+
+    /// <summary>
+    /// Якщо задано, LoginAsync/RegisterAsync чекають на нього — тест сам завершує вхід вручну,
+    /// тож видно проміжний стан (IsBusy, CanExecute) під час очікування відповіді.
+    /// </summary>
+    public TaskCompletionSource<AuthResponse>? DeferredAuth { get; set; }
 
     public int LogoutCalls { get; private set; }
 
@@ -125,6 +183,11 @@ internal sealed class FakeGateway : IHttpGatewayService
     private Task<AuthResponse> Authenticate(object request)
     {
         AuthRequests.Add(request);
+        if (DeferredAuth is not null)
+        {
+            return DeferredAuth.Task;
+        }
+
         try
         {
             return Task.FromResult(Auth());
