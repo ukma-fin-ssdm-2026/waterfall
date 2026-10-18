@@ -9,17 +9,19 @@ public static class SalaryRangeParser
         if (string.IsNullOrWhiteSpace(raw)) return null;
 
         var parts = raw.Split('-');
-        if (parts.Length == 2)
+        if (parts.Length == 2 &&
+            TryCleanDecimal(parts[0], out var min) &&
+            TryCleanDecimal(parts[1], out var max))
         {
-            var minStr = parts[0].Replace("$", "").Trim();
-            var maxStr = parts[1].Replace("$", "").Trim();
-
-            if (decimal.TryParse(minStr, out var min) && decimal.TryParse(maxStr, out var max))
-            {
-                return new SalaryRange(min, max);
-            }
+            return new SalaryRange(min, max);
         }
 
         return null;
+    }
+
+    private static bool TryCleanDecimal(string input, out decimal result)
+    {
+        var cleaned = input.Replace("$", "").Trim();
+        return decimal.TryParse(cleaned, out result);
     }
 }
