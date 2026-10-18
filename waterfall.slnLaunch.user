@@ -1,0 +1,15 @@
+[
+  {
+    "Name": "Main profile",
+    "Projects": [
+      {
+        "Path": "src\\api\\Waterfall.Api.csproj",
+        "Action": "Start"
+      },
+      {
+        "Path": "src\\waterfall.UI\\waterfall.UI.csproj",
+        "Action": "Start"
+      }
+    ]
+  }
+]
