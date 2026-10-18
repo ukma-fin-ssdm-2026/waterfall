@@ -138,12 +138,12 @@ public sealed class HttpGatewayService : IHttpGatewayService
         }
         catch (JsonException)
         {
-            // Порожнє тіло (напр. 401 від JwtBearer) або не наш формат.
+            // Порожнє тіло (напр. 401 від JwtBearer), HTML від проксі або не наш формат.
             return null;
         }
-        catch (NotSupportedException)
+        catch (InvalidOperationException)
         {
-            // Тіло не JSON (напр. HTML від проксі).
+            // Невідоме кодування в Content-Type (напр. сторінка проксі в windows-1251).
             return null;
         }
     }

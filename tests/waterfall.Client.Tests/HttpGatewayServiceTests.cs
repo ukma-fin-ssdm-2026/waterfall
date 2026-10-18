@@ -1,6 +1,7 @@
 ﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
@@ -142,6 +143,24 @@ public class HttpGatewayServiceTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _gateway.GetVacanciesAsync(null, 1, 10, cts.Token));
+    }
+
+    /// <summary>
+    /// Сторінка помилки проксі з кодуванням, якого .NET не знає без CodePagesEncodingProvider:
+    /// ReadFromJsonAsync кидає InvalidOperationException, і вона не повинна вилетіти повз ApiException
+    /// (viewmodels ловлять лише ApiException, решта роняє команду).
+    /// </summary>
+    [Theory]
+    [InlineData("text/html; charset=windows-1251")]
+    [InlineData("application/json; charset=bogus")]
+    public async Task ErrorBodyWithUnsupportedCharset_FallsBackToStatusMessage(string contentType)
+    {
+        _server.RespondRaw(HttpStatusCode.BadGateway, "<html>502 Bad Gateway</html>", contentType);
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacanciesAsync(null, 1, 10));
+
+        Assert.Equal(HttpStatusCode.BadGateway, ex.StatusCode);
+        Assert.Equal("Сервер повернув помилку 502.", ex.Message);
     }
 
     [Fact]
@@ -322,6 +341,15 @@ public class HttpGatewayServiceTests
 
         public void Respond(HttpStatusCode status, string body, string mediaType = "application/json") =>
             _next = () => new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, mediaType) };
+
+        /// <summary>Відповідь із довільним Content-Type (StringContent завжди дописує charset=utf-8).</summary>
+        public void RespondRaw(HttpStatusCode status, string body, string contentType) =>
+            _next = () =>
+            {
+                ByteArrayContent content = new(Encoding.UTF8.GetBytes(body));
+                content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+                return new HttpResponseMessage(status) { Content = content };
+            };
 
         public void Throw(Exception ex) => _next = () => throw ex;
 
