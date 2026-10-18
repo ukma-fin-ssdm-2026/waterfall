@@ -194,14 +194,7 @@ public class VacancyIngestionService : IVacancyIngestionService
         if (timeAgo.Success)
         {
             int value = int.Parse(timeAgo.Groups[1].Value, CultureInfo.InvariantCulture);
-            return timeAgo.Groups[2].Value switch
-            {
-                "хв" => now.AddMinutes(-value),
-                "год" => now.AddHours(-value),
-                "тиж" => now.AddDays(-7 * value),
-                "міс" => now.AddMonths(-value),
-                _ => now.AddDays(-value)
-            };
+            return SubtractTimeAgo(now, timeAgo.Groups[2].Value, value);
         }
 
         // dd.MM.yyyy перевіряємо першим: інакше «08.10.2026» прочиталося б як 10 серпня
@@ -212,6 +205,21 @@ public class VacancyIngestionService : IVacancyIngestionService
         }
 
         return now;
+    }
+
+    
+    /// <summary>«3 дні тому» → відняти від моменту збору 3 дні. Одиниця — початок слова, знайдений regex'ом TimeAgo.</summary>
+    private static DateTimeOffset SubtractTimeAgo(DateTimeOffset now, string unit, int value)
+    {
+        return unit switch
+        {
+            "хв" => now.AddMinutes(-value),
+            "год" => now.AddHours(-value),
+            "дн" or "ден" => now.AddDays(-value),
+            "тиж" => now.AddDays(-7 * value),
+            "міс" => now.AddMonths(-value),
+            _ => throw new ArgumentOutOfRangeException(nameof(unit), unit, "Невідома одиниця часу")
+        };
     }
 
     /// <summary>
