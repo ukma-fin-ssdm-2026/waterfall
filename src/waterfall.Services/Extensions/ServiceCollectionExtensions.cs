@@ -1,51 +1,27 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
-using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Waterfall.Repository.Data;
-using Waterfall.Repository.Interfaces;
-using Waterfall.Repository.Repositories;
 using Waterfall.Services.Interfaces;
 
 namespace Waterfall.Services.Extensions;
 
 /// <summary>
-/// Реєстрація сервісів бізнес-логіки, доступу до даних (EF Core) та кешування у DI-контейнері.
+/// Реєстрація сервісів бізнес-логіки та кешування у DI-контейнері.
 /// </summary>
 public static class ServiceCollectionExtensions
 {
-    public static IServiceCollection AddWaterfallServices(
-        this IServiceCollection services,
-        IConfiguration configuration)
+    /// <summary>
+    /// Реєструє кешування (In-Memory) та сервіси бізнес-логіки (<see cref="IVacancyService"/>,
+    /// <see cref="ISavedVacancyService"/>, <see cref="IVacancyIngestionService"/>) у DI-контейнері.
+    /// </summary>
+    /// <param name="services">Колекція сервісів DI-контейнера.</param>
+    public static IServiceCollection AddWaterfallServices(this IServiceCollection services)
     {
-
-        string provider = configuration["DatabaseProvider"] ?? "Sqlite";
-        string connectionString = configuration.GetConnectionString("DefaultConnection") ?? "Data Source=waterfall.db";
-
-        services.AddDbContext<WaterfallDbContext>(options =>
-        {
-            if (provider.Equals("SqlServer", StringComparison.OrdinalIgnoreCase) ||
-                provider.Equals("Mssql", StringComparison.OrdinalIgnoreCase))
-            {
-                options.UseSqlServer(connectionString);
-            }
-            else
-            {
-                options.UseSqlite(connectionString);
-            }
-        });
-
-        // 1. Репозиторії БД (працюють виключно із сутностями)
-        services.AddScoped<IVacancyRepository, EfVacancyRepository>();
-        services.AddScoped<ISavedVacancyRepository, EfSavedVacancyRepository>();
-        services.AddScoped<IUserRepository, EfUserRepository>();
-
-        // 2. Кешування
+        // 1. Кешування
         services.AddMemoryCache();
         services.AddSingleton<IVacancyCacheService, VacancyCacheService>();
 
-        // 3. Сервіси бізнес-логіки (Працюють з DTO та кешем)
+        // 2. Сервіси бізнес-логіки (працюють з DTO та кешем)
         services.AddScoped<IVacancyService, VacancyService>();
         services.AddScoped<ISavedVacancyService, SavedVacancyService>();
         services.AddScoped<IVacancyIngestionService, VacancyIngestionService>();

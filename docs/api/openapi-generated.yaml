@@ -205,7 +205,7 @@ paths:
       tags:
         - Vacancies
       summary: Отримати список вакансій із фільтрацією та пагінацією.
-      description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\nмінімальної зарплати та джерела агрегації."
+      description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\r\nмінімальної зарплати та джерела агрегації."
       operationId: GetVacancies
       parameters:
         - name: Page
@@ -283,7 +283,7 @@ paths:
           example: Djinni
         - name: OnlyActive
           in: query
-          description: "Ознака вибірки тільки активних вакансій (за замовчуванням true).\nЯкщо false — повертає як активні, так і закриті (архівні) вакансії."
+          description: "Ознака вибірки тільки активних вакансій (за замовчуванням true).\r\nЯкщо false — повертає як активні, так і закриті (архівні) вакансії."
           schema:
             type: boolean
             example: true
@@ -799,7 +799,7 @@ components:
         - JobSeeker
         - Analyst
       type: string
-      description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\n1 = Analyst (доступ до агрегованої аналітики)."
+      description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\r\n1 = Analyst (доступ до агрегованої аналітики)."
     VacancyDto:
       type: object
       properties:
@@ -900,7 +900,7 @@ components:
           description: 'Ознака активності (true — активна, false — закрита/архівна).'
         isSaved:
           type: boolean
-          description: "Ознака збереження вакансії поточним користувачем у закладки.\nОбчислюється динамічно за таблицею збережених вакансій."
+          description: "Ознака збереження вакансії поточним користувачем у закладки.\r\nОбчислюється динамічно за таблицею збережених вакансій."
       additionalProperties: false
       description: 'DTO представлення вакансії для клієнтів API (Web API, .NET MAUI).'
     VacancyDtoPagedResult:
@@ -942,7 +942,7 @@ components:
           description: Чи існує наступна сторінка.
           readOnly: true
       additionalProperties: false
-      description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\nМістить сторінку елементів та метадані пагінації."
+      description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\r\nМістить сторінку елементів та метадані пагінації."
     ValidationErrorDetail:
       type: object
       properties:
