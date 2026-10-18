@@ -82,9 +82,16 @@ public partial class VacancyItemViewModel : ObservableObject
     /// </summary>
     public const int MaxVisibleSkills = 3;
 
-    public IReadOnlyList<string> VisibleSkills => Vacancy.Skills.Take(MaxVisibleSkills).ToList();
+    public IReadOnlyList<string> VisibleSkills => Vacancy.Skills
+        .Select(s => s.Trim())
+        .Where(s => s.Length > 0)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .Take(MaxVisibleSkills)
+        .ToList();
 
-    private int HiddenSkillCount => Math.Max(Vacancy.Skills.Count - MaxVisibleSkills, 0);
+    private int HiddenSkillCount => Math.Max(
+        Vacancy.Skills.Select(s => s.Trim()).Where(s => s.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Count() - MaxVisibleSkills,
+        0);
 
     public string? MoreSkillsText => HiddenSkillCount > 0 ? $"+{HiddenSkillCount}" : null;
 
