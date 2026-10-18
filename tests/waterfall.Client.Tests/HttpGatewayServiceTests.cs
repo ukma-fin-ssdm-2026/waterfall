@@ -257,12 +257,18 @@ public class HttpGatewayServiceTests
         Assert.Equal(expected, ex.Message);
     }
 
-    [Fact]
-    public async Task BaseAddress_WithTrailingSlash_DoesNotDuplicateSlash()
+    /// <summary>
+    /// API за зворотним проксі з префіксом шляху: без доданого "/" HttpClient відкинув би "waterfall"
+    /// з BaseAddress і пішов би на http://api.test:3000/api/v1/...; зайвого "//" теж бути не повинно.
+    /// </summary>
+    [Theory]
+    [InlineData("http://api.test:3000/waterfall")]
+    [InlineData("http://api.test:3000/waterfall/")]
+    public async Task BaseAddress_WithPathPrefix_KeepsPrefixWithSingleSlash(string baseAddress)
     {
         var server = new StubHandler();
         ServiceCollection services = new();
-        services.AddWaterfallClient<InMemoryTokenStore>(new Uri("http://api.test:3000/"));
+        services.AddWaterfallClient<InMemoryTokenStore>(new Uri(baseAddress));
         services.ConfigureAll<HttpClientFactoryOptions>(o =>
             o.HttpMessageHandlerBuilderActions.Add(b => b.PrimaryHandler = server));
         IHttpGatewayService gateway = services.BuildServiceProvider().GetRequiredService<IHttpGatewayService>();
@@ -270,7 +276,7 @@ public class HttpGatewayServiceTests
 
         await gateway.GetVacanciesAsync(null, page: 1, pageSize: 20);
 
-        Assert.Equal("http://api.test:3000/api/v1/vacancies?page=1&pageSize=20", server.Requests.Single().Uri);
+        Assert.Equal("http://api.test:3000/waterfall/api/v1/vacancies?page=1&pageSize=20", server.Requests.Single().Uri);
     }
 
     [Fact]
