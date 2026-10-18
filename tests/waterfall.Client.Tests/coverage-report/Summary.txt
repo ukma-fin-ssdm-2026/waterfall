@@ -1,0 +1,32 @@
+Summary
+  Generated on: 18/10/2026 - 2:26:12 PM
+  Coverage date: 18/10/2026 - 2:26:10 PM
+  Parser: Cobertura
+  Assemblies: 1
+  Classes: 10
+  Files: 9
+  Line coverage: 99.4%
+  Covered lines: 197
+  Uncovered lines: 1
+  Coverable lines: 198
+  Total lines: 1039
+  Branch coverage: 96.4% (108 of 112)
+  Covered branches: 108
+  Total branches: 112
+  Method coverage: 98.4% (65 of 66)
+  Full method coverage: 98.4% (65 of 66)
+  Covered methods: 65
+  Fully covered methods: 65
+  Total methods: 66
+
+waterfall.Client                                            99.4%
+  Waterfall.Client.ApiException                              100%
+  Waterfall.Client.Extensions.ServiceCollectionExtensions    100%
+  Waterfall.Client.Models.Auth.AuthSession                   100%
+  Waterfall.Client.Services.AuthHeaderHandler                100%
+  Waterfall.Client.Services.HttpGatewayService               100%
+  Waterfall.Client.ViewModels.CatalogViewModel               100%
+  Waterfall.Client.ViewModels.FavoritesViewModel             100%
+  Waterfall.Client.ViewModels.LoginViewModel                97.5%
+  Waterfall.Client.ViewModels.RoleOption                     100%
+  Waterfall.Client.ViewModels.VacancyItemViewModel           100%
