@@ -46,4 +46,13 @@ public class VacancyItemSkillsTests
         Assert.Equal("+2", item.MoreSkillsText);
         Assert.True(item.HasMoreSkills);
     }
+
+    [Fact]
+    public void VisibleSkills_BlanksAndDuplicates_DroppedBeforeCounting()
+    {
+        VacancyItemViewModel item = Item(" C# ", "", "c#", "SQL", "   ", "sql", "Docker");
+
+        Assert.Equal(["C#", "SQL", "Docker"], item.VisibleSkills);
+        Assert.Null(item.MoreSkillsText);
+    }
 }
