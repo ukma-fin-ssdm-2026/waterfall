@@ -11,6 +11,8 @@ public sealed class InMemoryTokenStore : IAuthTokenStore
 {
     public string? Token { get; set; }
 
+    public int ClearCalls { get; private set; }
+
     public Task<string?> GetTokenAsync(CancellationToken ct = default) => Task.FromResult(Token);
 
     public Task SetTokenAsync(string token, CancellationToken ct = default)
@@ -21,6 +23,7 @@ public sealed class InMemoryTokenStore : IAuthTokenStore
 
     public Task ClearAsync(CancellationToken ct = default)
     {
+        ClearCalls++;
         Token = null;
         return Task.CompletedTask;
     }

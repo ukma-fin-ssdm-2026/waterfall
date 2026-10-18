@@ -112,6 +112,7 @@ public class HttpGatewayServiceTests
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized, "", "Потрібно увійти в обліковий запис.")]
     [InlineData(HttpStatusCode.BadGateway, "<html>proxy</html>", "Сервер повернув помилку 502.")]
+    [InlineData(HttpStatusCode.InternalServerError, "null", "Сервер повернув помилку 500.")]
     public async Task ErrorWithoutEnvelope_FallsBackToStatusMessage(HttpStatusCode status, string body, string expected)
     {
         _server.Respond(status, body, body.StartsWith('<') ? "text/html" : "application/json");

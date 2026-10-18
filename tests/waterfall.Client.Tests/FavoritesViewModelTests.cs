@@ -112,4 +112,28 @@ public class FavoritesViewModelTests
         Assert.False(_vm.IsRefreshing);
         Assert.True(_vm.HasLoaded);
     }
+
+    [Fact]
+    public async Task SupersededLoad_CancelledSilently_NewResultShown()
+    {
+        // Перше завантаження висить; повторне його витісняє: скасування — не помилка,
+        // банер не з'являється, показуються дані новішого запиту, прапорець скинуто.
+        _gateway.DeferSavedCalls = true;
+        Task stale = _vm.LoadCommand.ExecuteAsync(null);
+        await _gateway.WaitForSavedCallAsync(1);
+        Assert.True(_vm.IsLoading);
+
+        Task fresh = _vm.LoadCommand.ExecuteAsync(null);
+        FakeGateway.SavedCall second = await _gateway.WaitForSavedCallAsync(2);
+        Assert.True(_gateway.SavedPendingCalls[0].Ct.IsCancellationRequested);
+        Assert.Null(_vm.ErrorMessage);
+
+        second.Response.SetResult([Saved("B", 5)]);
+        await Task.WhenAll(stale, fresh);
+
+        Assert.Equal(["B"], _vm.Vacancies.Select(v => v.Title));
+        Assert.False(_vm.HasError);
+        Assert.False(_vm.IsLoading);
+        Assert.True(_vm.ShowTotal);
+    }
 }

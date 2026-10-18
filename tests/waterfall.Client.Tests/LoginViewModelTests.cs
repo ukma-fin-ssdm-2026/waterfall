@@ -242,4 +242,35 @@ public class LoginViewModelTests
         Assert.True(_vm.IsLoggedOut);
         Assert.Null(_tokens.Token);
     }
+
+    [Fact]
+    public async Task Restore_WithoutStoredToken_StaysLoggedOutWithoutClearing()
+    {
+        // Жодного токена не збережено: сесії немає, а ClearAsync не викликається (чистити нічого).
+        _tokens.Token = null;
+
+        await _vm.RestoreSessionCommand.ExecuteAsync(null);
+
+        Assert.True(_vm.IsLoggedOut);
+        Assert.Equal(0, _tokens.ClearCalls);
+    }
+
+    [Fact]
+    public async Task Submit_WhileRequestPending_DisablesSubmit()
+    {
+        // Поки сервер не відповів: кнопка недоступна (інакше користувач надіслав би дублікат запиту).
+        _gateway.DeferredAuth = new TaskCompletionSource<AuthResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _vm.Email = "a@b.c";
+        _vm.Password = "anything";
+
+        Task submit = _vm.SubmitCommand.ExecuteAsync(null);
+        Assert.False(_vm.SubmitCommand.CanExecute(null));
+
+        _gateway.DeferredAuth.SetResult(new AuthResponse { Token = "t", Email = "a@b.c", ExpiresAt = Now.AddMinutes(15) });
+        await submit;
+
+        Assert.True(_vm.IsLoggedIn);
+        Assert.True(_vm.SubmitCommand.CanExecute(null));
+        Assert.False(_vm.IsBusy);
+    }
 }

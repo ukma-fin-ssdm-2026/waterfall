@@ -258,4 +258,61 @@ public class CatalogViewModelTests
         Assert.Equal("Сервер повернув помилку 500.", _vm.ErrorMessage);
         Assert.False(_vm.Vacancies[0].IsSaved);
     }
+
+    [Fact]
+    public async Task SupersededLoad_CancelledSilently_NewResultShown()
+    {
+        // Перше завантаження висить; повторне (Retry) його витісняє: скасування — не помилка,
+        // банер не з'являється, показуються дані новішого запиту, прапорці скинуто.
+        Task stale = _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        FakeGateway.CatalogCall first = await _gateway.WaitForCatalogCallAsync(1);
+        Assert.True(_vm.IsLoading);
+
+        Task fresh = _vm.RetryCommand.ExecuteAsync(null);
+        FakeGateway.CatalogCall second = await _gateway.WaitForCatalogCallAsync(2);
+        Assert.True(first.Ct.IsCancellationRequested);
+        Assert.Null(_vm.ErrorMessage);
+
+        second.Response.SetResult(FakeGateway.Page(1, 1, hasNext: false, "B"));
+        await Task.WhenAll(stale, fresh);
+
+        Assert.Equal(["B"], _vm.Vacancies.Select(v => v.Title));
+        Assert.False(_vm.HasError);
+        Assert.False(_vm.IsLoading);
+        Assert.False(_vm.IsLoadingMore);
+        Assert.True(_vm.ShowTotal);
+    }
+
+    [Fact]
+    public async Task Debounce_BeforeFirstLoad_SameQueryStillLoads()
+    {
+        // Користувач друкує до першого завантаження, потім стирає: нормалізований запит уже
+        // «той самий» (порожній), але HasLoaded == false, тож пауза все одно завершується завантаженням.
+        _vm.SearchText = "q";
+        _vm.SearchText = string.Empty;
+        _time.Advance(TimeSpan.FromMilliseconds(400));
+        FakeGateway.CatalogCall call = await _gateway.WaitForCatalogCallAsync(1);
+
+        Assert.Equal((null, 1), (call.Search, call.Page));
+    }
+
+    [Fact]
+    public async Task Debounce_AfterLoad_SameQueryDoesNotReload()
+    {
+        // Після завантаження користувач додає пробіл: нормалізований запит той самий —
+        // пауза минає без повторного запиту (зайве мерехтіння списку й запит).
+        // (SearchCommand скасовує debounce від набору, тож перший запит один.)
+        _vm.SearchText = "net";
+        Task load = _vm.SearchCommand.ExecuteAsync(null);
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(FakeGateway.Page(1, 1, hasNext: false, "A"));
+        await load;
+        Assert.Single(_gateway.CatalogCalls);
+
+        _vm.SearchText = "net ";
+        _time.Advance(CatalogViewModel.SearchDebounce);
+        await Task.Delay(50);
+
+        Assert.Single(_gateway.CatalogCalls);
+        Assert.Equal(["A"], _vm.Vacancies.Select(v => v.Title));
+    }
 }
