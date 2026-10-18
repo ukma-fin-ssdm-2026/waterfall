@@ -6,7 +6,8 @@
       <DataCollector friendlyName="XPlat Code Coverage">
         <Configuration>
           <Format>cobertura</Format>
-          <ExcludeByAttribute>GeneratedCodeAttribute,CompilerGeneratedAttribute</ExcludeByAttribute>
+          <!-- Не CompilerGeneratedAttribute: ним позначено й рукописний Program з top-level statements. -->
+          <ExcludeByAttribute>GeneratedCodeAttribute</ExcludeByAttribute>
           <ExcludeByFile>**/*.g.cs</ExcludeByFile>
         </Configuration>
       </DataCollector>
