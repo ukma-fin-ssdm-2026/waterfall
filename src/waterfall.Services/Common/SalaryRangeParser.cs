@@ -4,6 +4,8 @@ public record SalaryRange(decimal? Min, decimal? Max);
 
 public static class SalaryRangeParser
 {
+    private const string PrefixDo = "до";
+
     public static SalaryRange? Parse(string? raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return null;
@@ -22,8 +24,8 @@ public static class SalaryRangeParser
             return new SalaryRange(plusMin, null);
         }
 
-        if (trimmed.StartsWith("до", StringComparison.OrdinalIgnoreCase) &&
-            TryCleanDecimal(trimmed[2..], out var maxOnly))
+        if (trimmed.StartsWith(PrefixDo, StringComparison.OrdinalIgnoreCase) &&
+            TryCleanDecimal(trimmed[PrefixDo.Length..], out var maxOnly))
         {
             return new SalaryRange(null, maxOnly);
         }
