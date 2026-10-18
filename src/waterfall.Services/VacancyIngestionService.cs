@@ -77,7 +77,8 @@ public class VacancyIngestionService : IVacancyIngestionService
         }
 
         string title = CleanText(raw.Title);
-        if (title.Length < 3)
+        // 2 символи — мінімум: є справжні назви посад на кшталт QA, PM чи UX, а «-» чи «.» — сміття
+        if (title.Length < 2)
         {
             return (null, "немає назви посади");
         }
