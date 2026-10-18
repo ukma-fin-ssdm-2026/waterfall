@@ -36,7 +36,7 @@ public static class SalaryRangeParser
 
     private static bool TryCleanDecimal(string input, out decimal result)
     {
-        var cleaned = input.Replace("$", "").Trim();
-        return decimal.TryParse(cleaned, out result);
+        var digitsOnly = new string(input.Where(char.IsDigit).ToArray());
+        return decimal.TryParse(digitsOnly, out result);
     }
 }
