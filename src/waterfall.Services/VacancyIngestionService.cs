@@ -20,6 +20,9 @@ public class VacancyIngestionService : IVacancyIngestionService
 {
     private const string Source = "Djinni";
     private const string SourceHost = "djinni.co";
+    
+    // Більше значення в «N … тому» не буває реальною датою публікації. До того ж, навіть 10 000 місяців тому ще не виводять дату за межі календаря.
+    private const int MaxTimeAgo = 10_000;
 
     // Тайм-аут захищає від зависання регулярного виразу на шкідливому вводі (ReDoS)
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(200);
@@ -193,7 +196,12 @@ public class VacancyIngestionService : IVacancyIngestionService
         Match timeAgo = TimeAgo.Match(text);
         if (timeAgo.Success)
         {
-            int value = int.Parse(timeAgo.Groups[1].Value, CultureInfo.InvariantCulture);
+            // Абсурдно велике число — помилка на сайті, а не дата: як і з незрозумілим форматом, беремо момент збору
+            if (!int.TryParse(timeAgo.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out int value) || value > MaxTimeAgo)
+            {
+                return now;
+            }
+
             return SubtractTimeAgo(now, timeAgo.Groups[2].Value, value);
         }
 
