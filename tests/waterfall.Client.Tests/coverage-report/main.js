@@ -291,7 +291,7 @@ var assemblies = [
     "name": "waterfall.Client",
     "classes": [
       { "name": "Waterfall.Client.ApiException", "rp": "waterfall.Client_ApiException.html", "cl": 4, "ucl": 0, "cal": 4, "tl": 30, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
-      { "name": "Waterfall.Client.Extensions.ServiceCollectionExtensions", "rp": "waterfall.Client_ServiceCollectionExtensions.html", "cl": 6, "ucl": 0, "cal": 6, "tl": 35, "cb": 1, "tb": 2, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Client.Extensions.ServiceCollectionExtensions", "rp": "waterfall.Client_ServiceCollectionExtensions.html", "cl": 6, "ucl": 0, "cal": 6, "tl": 35, "cb": 2, "tb": 2, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
       { "name": "Waterfall.Client.Models.Auth.AuthSession", "rp": "waterfall.Client_AuthSession.html", "cl": 24, "ucl": 0, "cal": 24, "tl": 69, "cb": 18, "tb": 18, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
       { "name": "Waterfall.Client.Services.AuthHeaderHandler", "rp": "waterfall.Client_AuthHeaderHandler.html", "cl": 3, "ucl": 0, "cal": 3, "tl": 30, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
       { "name": "Waterfall.Client.Services.HttpGatewayService", "rp": "waterfall.Client_HttpGatewayService.html", "cl": 25, "ucl": 0, "cal": 25, "tl": 158, "cb": 7, "tb": 7, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
@@ -299,7 +299,7 @@ var assemblies = [
       { "name": "Waterfall.Client.ViewModels.FavoritesViewModel", "rp": "waterfall.Client_FavoritesViewModel.html", "cl": 27, "ucl": 0, "cal": 27, "tl": 141, "cb": 7, "tb": 10, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
       { "name": "Waterfall.Client.ViewModels.LoginViewModel", "rp": "waterfall.Client_LoginViewModel.html", "cl": 40, "ucl": 1, "cal": 41, "tl": 202, "cb": 32, "tb": 32, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
       { "name": "Waterfall.Client.ViewModels.RoleOption", "rp": "waterfall.Client_RoleOption.html", "cl": 1, "ucl": 0, "cal": 1, "tl": 202, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
-      { "name": "Waterfall.Client.ViewModels.VacancyItemViewModel", "rp": "waterfall.Client_VacancyItemViewModel.html", "cl": 36, "ucl": 0, "cal": 36, "tl": 122, "cb": 19, "tb": 19, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Client.ViewModels.VacancyItemViewModel", "rp": "waterfall.Client_VacancyItemViewModel.html", "cl": 34, "ucl": 2, "cal": 36, "tl": 122, "cb": 19, "tb": 19, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
     ]},
 ];
 
