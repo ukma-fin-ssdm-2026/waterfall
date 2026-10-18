@@ -1,7 +1,8 @@
-// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 using Waterfall.Client;
@@ -188,6 +189,76 @@ public class HttpGatewayServiceTests
         var page = await _gateway.GetVacanciesAsync(null, 1, 10);
 
         Assert.Equal(JobSource.Djinni, Assert.Single(page.Items).Source);
+    }
+
+    [Fact]
+    public async Task GetVacancy_ReturnsItem()
+    {
+        Guid id = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        _server.Respond(HttpStatusCode.OK, """
+            { "id": "44444444-4444-4444-4444-444444444444",
+              "title": "Senior .NET", "company": "Genesis", "source": "Djinni" }
+            """);
+
+        VacancyDto vacancy = await _gateway.GetVacancyAsync(id);
+
+        Assert.Equal($"http://api.test:3000/api/v1/vacancies/{id}", _server.Requests.Single().Uri);
+        Assert.Equal((id, "Senior .NET", JobSource.Djinni), (vacancy.Id, vacancy.Title, vacancy.Source));
+    }
+
+    [Fact]
+    public async Task GetVacancy_NullBody_ThrowsEmptyResponse()
+    {
+        _server.Respond(HttpStatusCode.OK, "null");
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacancyAsync(Guid.NewGuid()));
+
+        Assert.Equal(HttpStatusCode.OK, ex.StatusCode);
+        Assert.Null(ex.Error);
+        Assert.Equal("Сервер повернув порожню відповідь.", ex.Message);
+    }
+
+    [Fact]
+    public async Task GetVacancy_MalformedJson_ThrowsInvalidResponse()
+    {
+        _server.Respond(HttpStatusCode.OK, "{oops");
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacancyAsync(Guid.NewGuid()));
+
+        Assert.Equal(HttpStatusCode.OK, ex.StatusCode);
+        Assert.Equal("Сервер повернув некоректну відповідь.", ex.Message);
+        Assert.IsType<JsonException>(ex.InnerException);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, "Недостатньо прав для цієї дії.")]
+    [InlineData(HttpStatusCode.NotFound, "Ресурс не знайдено.")]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "Сервер повернув помилку 503.")]
+    public async Task ErrorStatus_MapsToDefaultMessage(HttpStatusCode status, string expected)
+    {
+        _server.Respond(status, "");
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetSavedVacanciesAsync());
+
+        Assert.Equal(status, ex.StatusCode);
+        Assert.Null(ex.Error);
+        Assert.Equal(expected, ex.Message);
+    }
+
+    [Fact]
+    public async Task BaseAddress_WithTrailingSlash_DoesNotDuplicateSlash()
+    {
+        var server = new StubHandler();
+        ServiceCollection services = new();
+        services.AddWaterfallClient<InMemoryTokenStore>(new Uri("http://api.test:3000/"));
+        services.ConfigureAll<HttpClientFactoryOptions>(o =>
+            o.HttpMessageHandlerBuilderActions.Add(b => b.PrimaryHandler = server));
+        IHttpGatewayService gateway = services.BuildServiceProvider().GetRequiredService<IHttpGatewayService>();
+        server.Respond(HttpStatusCode.OK, """{ "items": [] }""");
+
+        await gateway.GetVacanciesAsync(null, page: 1, pageSize: 20);
+
+        Assert.Equal("http://api.test:3000/api/v1/vacancies?page=1&pageSize=20", server.Requests.Single().Uri);
     }
 
     [Fact]
