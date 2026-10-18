@@ -35,6 +35,11 @@ public partial class VacancyItemViewModel : ObservableObject
         _messenger = messenger;
         _reportError = reportError;
         IsSaved = vacancy.IsSaved;
+
+        List<string> skills = CleanSkills(vacancy.Skills);
+        VisibleSkills = skills.Take(MaxVisibleSkills).ToList();
+        int hidden = skills.Count - VisibleSkills.Count;
+        MoreSkillsText = hidden > 0 ? $"+{hidden}" : null;
     }
 
     public VacancyDto Vacancy { get; }
@@ -82,18 +87,9 @@ public partial class VacancyItemViewModel : ObservableObject
     /// </summary>
     public const int MaxVisibleSkills = 3;
 
-    public IReadOnlyList<string> VisibleSkills => Vacancy.Skills
-        .Select(s => s.Trim())
-        .Where(s => s.Length > 0)
-        .Distinct(StringComparer.OrdinalIgnoreCase)
-        .Take(MaxVisibleSkills)
-        .ToList();
+    public IReadOnlyList<string> VisibleSkills { get; }
 
-    private int HiddenSkillCount => Math.Max(
-        Vacancy.Skills.Select(s => s.Trim()).Where(s => s.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).Count() - MaxVisibleSkills,
-        0);
-
-    public string? MoreSkillsText => HiddenSkillCount > 0 ? $"+{HiddenSkillCount}" : null;
+    public string? MoreSkillsText { get; }
 
     public bool HasMoreSkills => MoreSkillsText is not null;
 
@@ -139,4 +135,13 @@ public partial class VacancyItemViewModel : ObservableObject
     }
 
     private static string Money(decimal value) => value.ToString("#,0", MoneyFormat);
+
+    /// <summary>
+    /// Навички зі скрапера бувають з пробілами, порожні або повторені в іншому регістрі.
+    /// </summary>
+    private static List<string> CleanSkills(IEnumerable<string> skills) => skills
+        .Select(s => s.Trim())
+        .Where(s => s.Length > 0)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
 }
