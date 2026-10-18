@@ -144,6 +144,18 @@ public class HttpGatewayServiceTests
     }
 
     [Fact]
+    public async Task HttpClientTimeout_BecomesApiException_UnlikeCallerCancellation()
+    {
+        // HttpClient.Timeout кидає TaskCanceledException, хоча токен виклику не скасовано.
+        _server.Throw(new TaskCanceledException("timeout"));
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacanciesAsync(null, 1, 10));
+
+        Assert.Null(ex.StatusCode);
+        Assert.Equal("Сервер не відповів вчасно.", ex.Message);
+    }
+
+    [Fact]
     public async Task Login_StoresToken_SubsequentRequestsSendBearer_LogoutStops()
     {
         Assert.Null(await LastAuthHeaderAfterCatalogCall());

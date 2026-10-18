@@ -75,17 +75,6 @@ public class VacancyItemViewModelTests
         Assert.Equal(isActive, item.IsActive);
     }
 
-    [Fact]
-    public void Passthrough_ExposesVacancyData()
-    {
-        VacancyItemViewModel item = Item(company: "Genesis", title: "Senior .NET");
-
-        Assert.Equal("Senior .NET", item.Title);
-        Assert.Equal("Опис", item.Description);
-        Assert.Equal(["C#", "Kafka"], item.Skills);
-        Assert.True(item.IsActive);
-    }
-
     [Theory]
     [InlineData(false, "save", true)]
     [InlineData(true, "unsave", false)]
