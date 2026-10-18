@@ -1,18 +1,20 @@
 <Solution>
   <Folder Name="/Solution Items/" />
-  <Project Path="src/waterfall.Repository/waterfall.Repository.csproj" />
-  <Project Path="src/waterfall.Services/waterfall.Services.csproj" />
-  <Project Path="src/waterfall.Client/waterfall.Client.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/waterfall.Repository/waterfall.Repository.csproj" />
+    <Project Path="src/waterfall.Services/waterfall.Services.csproj" />
+    <Project Path="src/waterfall.Client/waterfall.Client.csproj" />
+    <Project Path="src/api/Waterfall.Api.csproj" />
+    <Project Path="src/waterfall.UI/waterfall.UI.csproj">
+      <Deploy Solution="Debug|*" />
+    </Project>
+  </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/waterfall.Client.Tests/waterfall.Client.Tests.csproj" />
+    <Project Path="tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj" />
+    <Project Path="tests/waterfall.Auth.Tests/waterfall.Auth.Tests.csproj" />
+    <Project Path="tests/waterfall.Repository.Tests/waterfall.Repository.Tests.csproj" />
+    <Project Path="tests/waterfall.Services.Tests/waterfall.Services.Tests.csproj" />
+    <Project Path="tests/waterfall.Api.Tests/waterfall.Api.Tests.csproj" />
   </Folder>
-  <Project Path="src/api/Waterfall.Api.csproj" />
-  <Project Path="src/waterfall.UI/waterfall.UI.csproj">
-    <Deploy Solution="Debug|*" />
-  </Project>
-  <Project Path="tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj" />
-  <Project Path="tests/waterfall.Auth.Tests/waterfall.Auth.Tests.csproj" />
-  <Project Path="tests/waterfall.Repository.Tests/waterfall.Repository.Tests.csproj" />
-  <Project Path="tests/waterfall.Services.Tests/waterfall.Services.Tests.csproj" />
-  <Project Path="tests/waterfall.Api.Tests/waterfall.Api.Tests.csproj" />
 </Solution>
