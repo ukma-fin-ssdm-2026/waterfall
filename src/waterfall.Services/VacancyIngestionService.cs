@@ -28,7 +28,7 @@ public class VacancyIngestionService : IVacancyIngestionService
     private static readonly Regex AnyTag = new(@"<[^>]*>", RegexOptions.None, RegexTimeout);
     private static readonly Regex Spaces = new(@"\s+", RegexOptions.None, RegexTimeout);
     private static readonly Regex Number = new(@"\d+", RegexOptions.None, RegexTimeout);
-    private static readonly Regex TimeAgo = new(@"(\d+)\s*(хв|год|дн|ден)", RegexOptions.IgnoreCase, RegexTimeout);
+    private static readonly Regex TimeAgo = new(@"(\d+)\s*(хв|год|дн|ден|тиж)", RegexOptions.IgnoreCase, RegexTimeout);
 
     private readonly IVacancyRepository _repository;
     private readonly ILogger<VacancyIngestionService> _logger;
@@ -198,6 +198,7 @@ public class VacancyIngestionService : IVacancyIngestionService
             {
                 "хв" => now.AddMinutes(-value),
                 "год" => now.AddHours(-value),
+                "тиж" => now.AddDays(-7 * value),
                 _ => now.AddDays(-value)
             };
         }
