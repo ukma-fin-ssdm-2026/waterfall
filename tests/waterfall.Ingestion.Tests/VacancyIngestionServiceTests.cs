@@ -57,7 +57,15 @@ public class VacancyIngestionServiceTests
     {
         Assert.Equal(Now.AddMonths(-2), VacancyIngestionService.ParsePublishedAt("2 місяці тому", Now));
     }
-    
+
+    [Theory]
+    [InlineData("99999999999 днів тому")] // число не вміщується в int
+    [InlineData("9999999 днів тому")]     // дата вийшла б за межі календаря
+    public void ParsePublishedAt_AbsurdTimeAgo_FallsBackToNow(string posted)
+    {
+        Assert.Equal(Now, VacancyIngestionService.ParsePublishedAt(posted, Now));
+    }
+
     [Fact]
     public void ParsePublishedAt_ReadsExactDates()
     {
