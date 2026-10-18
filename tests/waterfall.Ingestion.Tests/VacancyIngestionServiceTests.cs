@@ -42,6 +42,7 @@ public class VacancyIngestionServiceTests
     [InlineData("5 годин тому", 5 * 60)]
     [InlineData("10 хв. тому", 10)]
     [InlineData("1 день тому", 24 * 60)]
+    [InlineData("1 тиждень тому", 7 * 24 * 60)]
     [InlineData("щойно", 0)]
     [InlineData("незрозумілий формат", 0)]
     [InlineData(null, 0)] // дата відсутня — беремо момент збору
