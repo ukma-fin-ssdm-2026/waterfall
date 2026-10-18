@@ -418,6 +418,8 @@ dotnet list src/api/Waterfall.Api.csproj package --vulnerable --include-transiti
 ```
 Для всіх п'яти проєктів (`Waterfall.Api`, `waterfall.Services`, `waterfall.Repository`, `waterfall.Security.Tests`, `waterfall.Ingestion.Tests`) результат однаковий: «has no vulnerable packages given the current sources».
 
+**Оновлення від 18.10.2026.** 13 жовтня для транзитивного пакета `System.Security.Cryptography.Pkcs` 9.0.4 опубліковано [GHSA-846f-f764-76mx](https://github.com/advisories/GHSA-846f-f764-76mx) (CVE-2026-84008, high, DoS) і [GHSA-2fmv-rv2c-59x7](https://github.com/advisories/GHSA-2fmv-rv2c-59x7) (CVE-2026-70162, moderate, DoS). Пакет приходить через `Microsoft.Data.SqlClient` (залежність EF Core SqlServer), а NuGet Audit почав видавати попередження NU1902/NU1903 під час збірки. Оновлення EF Core не допомагає: навіть найновіші SqlClient 6.1.7 і 7.1.1 тягнуть `Pkcs` 9.0.11 і 9.0.18, а виправлено лише з 9.0.21 / 10.0.13. Тому у `waterfall.Repository.csproj` зафіксовано `System.Security.Cryptography.Pkcs` 10.0.13. Після цього `dotnet list package --vulnerable --include-transitive` чистий для всіх семи проєктів, а збірка API — без попереджень.
+
 ### 5.7. Новий C#-код issue #62 (фоновий воркер) під SecurityCodeScan
 
 Фоновий парсер [`src/api/Workers/JobParserService.cs`](../../src/api/Workers/JobParserService.cs) і сервіс нормалізації [`src/waterfall.Services/VacancyIngestionService.cs`](../../src/waterfall.Services/VacancyIngestionService.cs) входять у проєкти з SecurityCodeScan (розділ 1):
