@@ -10,7 +10,9 @@
   <Project Path="src/waterfall.UI/waterfall.UI.csproj">
     <Deploy Solution="Debug|*" />
   </Project>
-  <Project Path="tests/waterfall.Security.Tests/waterfall.Security.Tests.csproj" />
   <Project Path="tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj" />
   <Project Path="tests/waterfall.Auth.Tests/waterfall.Auth.Tests.csproj" />
+  <Project Path="tests/waterfall.Repository.Tests/waterfall.Repository.Tests.csproj" />
+  <Project Path="tests/waterfall.Services.Tests/waterfall.Services.Tests.csproj" />
+  <Project Path="tests/waterfall.Api.Tests/waterfall.Api.Tests.csproj" />
 </Solution>

@@ -60,3 +60,12 @@ jobs:
       - name: Auth tests
         run: dotnet test tests/waterfall.Auth.Tests/waterfall.Auth.Tests.csproj -c Release --nologo
 
+      - name: Repository tests
+        run: dotnet test tests/waterfall.Repository.Tests/waterfall.Repository.Tests.csproj -c Release --nologo
+
+      - name: Services tests
+        run: dotnet test tests/waterfall.Services.Tests/waterfall.Services.Tests.csproj -c Release --nologo
+
+      - name: Api tests
+        run: dotnet test tests/waterfall.Api.Tests/waterfall.Api.Tests.csproj -c Release --nologo
+
