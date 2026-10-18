@@ -25,4 +25,15 @@ public class VacancyItemSkillsTests
         Assert.Null(item.MoreSkillsText);
         Assert.False(item.HasMoreSkills);
     }
+
+    [Theory]
+    [InlineData("C#")]
+    [InlineData("C#", ".NET", "SQL")]
+    public void VisibleSkills_UpToThree_AllShownWithoutOverflow(params string[] skills)
+    {
+        VacancyItemViewModel item = Item(skills);
+
+        Assert.Equal(skills, item.VisibleSkills);
+        Assert.Null(item.MoreSkillsText);
+    }
 }
