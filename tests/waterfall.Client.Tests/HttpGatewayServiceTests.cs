@@ -262,6 +262,20 @@ public class HttpGatewayServiceTests
         Assert.IsType<JsonException>(ex.InnerException);
     }
 
+    /// <summary>
+    /// Captive portal (Wi-Fi з авторизацією) відповідає 200 зі своєю HTML-сторінкою в будь-якому кодуванні.
+    /// </summary>
+    [Fact]
+    public async Task SuccessBodyWithUnsupportedCharset_ThrowsInvalidResponse()
+    {
+        _server.RespondRaw(HttpStatusCode.OK, "<html>Увійдіть у Wi-Fi</html>", "text/html; charset=windows-1251");
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacancyAsync(Guid.NewGuid()));
+
+        Assert.Equal(HttpStatusCode.OK, ex.StatusCode);
+        Assert.Equal("Сервер повернув некоректну відповідь.", ex.Message);
+    }
+
     [Theory]
     [InlineData(HttpStatusCode.Forbidden, "Недостатньо прав для цієї дії.")]
     [InlineData(HttpStatusCode.NotFound, "Ресурс не знайдено.")]

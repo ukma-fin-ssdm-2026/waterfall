@@ -84,8 +84,9 @@ public sealed class HttpGatewayService : IHttpGatewayService
             return await response.Content.ReadFromJsonAsync(typeInfo, ct)
                 ?? throw new ApiException(response.StatusCode, null, "Сервер повернув порожню відповідь.");
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
+            // InvalidOperationException — невідоме кодування в Content-Type (напр. сторінка captive portal).
             throw new ApiException(response.StatusCode, null, "Сервер повернув некоректну відповідь.", ex);
         }
     }
