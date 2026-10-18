@@ -77,9 +77,16 @@ public partial class VacancyItemViewModel : ObservableObject
         _ => null
     };
 
-    public IReadOnlyList<string> VisibleSkills => Vacancy.Skills.Take(3).ToList();
+    /// <summary>
+    /// Скільки чипів навичок показує картка; решту згортає чип «+N».
+    /// </summary>
+    public const int MaxVisibleSkills = 3;
 
-    public string? MoreSkillsText => Vacancy.Skills.Count > 3 ? $"+{Vacancy.Skills.Count - 3}" : null;
+    public IReadOnlyList<string> VisibleSkills => Vacancy.Skills.Take(MaxVisibleSkills).ToList();
+
+    private int HiddenSkillCount => Math.Max(Vacancy.Skills.Count - MaxVisibleSkills, 0);
+
+    public string? MoreSkillsText => HiddenSkillCount > 0 ? $"+{HiddenSkillCount}" : null;
 
     public bool HasMoreSkills => MoreSkillsText is not null;
 
