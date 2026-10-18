@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: тест скасованого застарілого завантаження (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Models.SavedVacancies;

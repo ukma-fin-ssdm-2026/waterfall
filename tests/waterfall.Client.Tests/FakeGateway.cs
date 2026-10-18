@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: відкладені виклики «Обраного» і входу через TaskCompletionSource (Lab 06); перевірено: тести, що на них спираються, dotnet test.
 
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Auth;

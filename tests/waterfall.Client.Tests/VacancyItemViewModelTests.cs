@@ -1,4 +1,5 @@
 ﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: тести всіх гілок SalaryText/SourceText, CompanyLine, StatusText (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using System.Net;
 using CommunityToolkit.Mvvm.Messaging;

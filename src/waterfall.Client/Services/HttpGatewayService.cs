@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: обробка невідомого кодування відповіді (InvalidOperationException) замість недосяжного NotSupportedException (Lab 06); перевірено: регресійні тести HttpGatewayServiceTests, що падали до виправлення.
 
 using System.Net;
 using System.Net.Http.Json;
