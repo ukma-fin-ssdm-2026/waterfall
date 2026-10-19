@@ -14,7 +14,7 @@ jobs:
     # Timeout 5 minutes in accordance with MAINT-001
     # Check: /docs/requirements/requirements.md
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
 
     steps:
       - name: Checkout
@@ -35,7 +35,7 @@ jobs:
   test:
     # Прогін юніт-тестів та Quality Gate покриття у CI (issue #62, Lab 6 Bonus)
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
 
     steps:
       - name: Checkout
