@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: VisibleSkills / MoreSkillsText через TDD (Lab 06); перевірено: VacancyItemSkillsTests (RED перед кожним GREEN), запуск застосунку.
 
 using System.Globalization;
 using System.Net;
@@ -35,6 +36,11 @@ public partial class VacancyItemViewModel : ObservableObject
         _messenger = messenger;
         _reportError = reportError;
         IsSaved = vacancy.IsSaved;
+
+        List<string> skills = CleanSkills(vacancy.Skills);
+        VisibleSkills = skills.Take(MaxVisibleSkills).ToList();
+        int hidden = skills.Count - VisibleSkills.Count;
+        MoreSkillsText = hidden > 0 ? $"+{hidden}" : null;
     }
 
     public VacancyDto Vacancy { get; }
@@ -76,6 +82,17 @@ public partial class VacancyItemViewModel : ObservableObject
         JobSource.Dou => "DOU",
         _ => null
     };
+
+    /// <summary>
+    /// Скільки чипів навичок показує картка; решту згортає чип «+N».
+    /// </summary>
+    public const int MaxVisibleSkills = 3;
+
+    public IReadOnlyList<string> VisibleSkills { get; }
+
+    public string? MoreSkillsText { get; }
+
+    public bool HasMoreSkills => MoreSkillsText is not null;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SaveButtonText))]
@@ -119,4 +136,13 @@ public partial class VacancyItemViewModel : ObservableObject
     }
 
     private static string Money(decimal value) => value.ToString("#,0", MoneyFormat);
+
+    /// <summary>
+    /// Навички зі скрапера бувають з пробілами, порожні або повторені в іншому регістрі.
+    /// </summary>
+    private static List<string> CleanSkills(IEnumerable<string> skills) => skills
+        .Select(s => s.Trim())
+        .Where(s => s.Length > 0)
+        .Distinct(StringComparer.OrdinalIgnoreCase)
+        .ToList();
 }

@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: мінімальну довжину title знижено з 3 до 2 символів, щоб приймати назви на кшталт QA (issue #62, погоджено з автором); перевірено: dotnet test, ручний запит до API
 // AI: посилено валідацію вхідних даних (issue #49); перевірено: прогін негативних тест-кейсів (docs/api/quality-attributes.md, розділ 6)
 
 using System.ComponentModel.DataAnnotations;
@@ -15,7 +16,7 @@ public record CreateVacancyRequest : IValidatableObject
     /// </summary>
     /// <example>Middle .NET Developer</example>
     [Required(ErrorMessage = "Поле title є обов'язковим")]
-    [StringLength(200, MinimumLength = 3, ErrorMessage = "Довжина title повинна бути від 3 до 200 символів")]
+    [StringLength(200, MinimumLength = 2, ErrorMessage = "Довжина title повинна бути від 2 до 200 символів")]
     public string Title { get; init; } = string.Empty;
 
     /// <summary>

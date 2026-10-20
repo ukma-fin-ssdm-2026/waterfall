@@ -1,4 +1,5 @@
-// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: тести текстів режимів, SessionText, RoleOption, відсутнього токена і блокування входу під час запиту (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using System.Net;
 using System.Text;
@@ -61,6 +62,56 @@ public class LoginViewModelTests
         Assert.Empty(_gateway.AuthRequests);
         Assert.True(_vm.HasError);
         Assert.False(_vm.IsLoggedIn);
+    }
+
+    [Theory]
+    [InlineData(false, "Вхід", "Увійти", "Немає облікового запису? Зареєструватися", null, "")]
+    [InlineData(true, "Реєстрація", "Зареєструватися", "Вже маєте обліковий запис? Увійти", "Від 12 до 32 символів, хоча б одна цифра", "")]
+    public void ModeSwitch_UpdatesAllTexts(bool register, string form, string submit, string switchBack,
+        string? hint, string sessionText)
+    {
+        _vm.IsRegisterMode = register;
+
+        Assert.Equal((form, submit), (_vm.FormTitle, _vm.SubmitText));
+        Assert.Contains(switchBack, _vm.SwitchModeText);
+        Assert.Equal(hint, _vm.PasswordHint);
+        Assert.Equal(sessionText, _vm.SessionText);
+        Assert.Equal(sessionText, _vm.UserEmail);
+        Assert.Equal(sessionText, _vm.UserRoleText);
+    }
+
+    [Fact]
+    public void RoleOption_ToStringShowsTitle()
+    {
+        Assert.Equal("Шукач роботи", _vm.Roles[0].ToString());
+    }
+
+    [Fact]
+    public async Task SessionText_ShowsLocalExpiryTime()
+    {
+        _gateway.Auth = () => new AuthResponse { Token = "t", Email = "kosta@ukma.edu.ua", Role = UserRole.JobSeeker, ExpiresAt = Now.AddHours(1) };
+        _vm.Email = "kosta@ukma.edu.ua";
+        _vm.Password = "anything";
+        await _vm.SubmitCommand.ExecuteAsync(null);
+
+        string expected = _vm.Session!.ExpiresAt.ToLocalTime().ToString("HH:mm", System.Globalization.CultureInfo.GetCultureInfo("uk-UA"));
+
+        Assert.Equal($"Сесія дійсна до {expected}", _vm.SessionText);
+    }
+
+    [Fact]
+    public async Task SwitchMode_ClearsError() 
+    {
+        _vm.IsRegisterMode = true;
+        _vm.Email = "a@b.c";
+        _vm.Password = "tooshort";
+        await _vm.SubmitCommand.ExecuteAsync(null);
+        Assert.True(_vm.HasError);
+
+        _vm.SwitchModeCommand.Execute(null);
+
+        Assert.False(_vm.HasError);
+        Assert.False(_vm.IsRegisterMode);
     }
 
     [Fact]
@@ -191,5 +242,36 @@ public class LoginViewModelTests
 
         Assert.True(_vm.IsLoggedOut);
         Assert.Null(_tokens.Token);
+    }
+
+    [Fact]
+    public async Task Restore_WithoutStoredToken_StaysLoggedOutWithoutClearing()
+    {
+        // Жодного токена не збережено: сесії немає, а ClearAsync не викликається (чистити нічого).
+        _tokens.Token = null;
+
+        await _vm.RestoreSessionCommand.ExecuteAsync(null);
+
+        Assert.True(_vm.IsLoggedOut);
+        Assert.Equal(0, _tokens.ClearCalls);
+    }
+
+    [Fact]
+    public async Task Submit_WhileRequestPending_DisablesSubmit()
+    {
+        // Поки сервер не відповів: кнопка недоступна (інакше користувач надіслав би дублікат запиту).
+        _gateway.DeferredAuth = new TaskCompletionSource<AuthResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _vm.Email = "a@b.c";
+        _vm.Password = "anything";
+
+        Task submit = _vm.SubmitCommand.ExecuteAsync(null);
+        Assert.False(_vm.SubmitCommand.CanExecute(null));
+
+        _gateway.DeferredAuth.SetResult(new AuthResponse { Token = "t", Email = "a@b.c", ExpiresAt = Now.AddMinutes(15) });
+        await submit;
+
+        Assert.True(_vm.IsLoggedIn);
+        Assert.True(_vm.SubmitCommand.CanExecute(null));
+        Assert.False(_vm.IsBusy);
     }
 }
