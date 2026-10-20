@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Спільні налаштування покриття для всіх тестових проєктів: вимірюємо лише рукописний код. -->
+<!-- AI: налаштування виключення згенерованого коду з покриття (Lab 06); перевірено: звіти ReportGenerator до/після, перелік класів у звіті. -->
+<RunSettings>
+  <DataCollectionRunSettings>
+    <DataCollectors>
+      <DataCollector friendlyName="XPlat Code Coverage">
+        <Configuration>
+          <Format>cobertura</Format>
+          <!-- Не CompilerGeneratedAttribute: ним позначено й рукописний Program з top-level statements. -->
+          <ExcludeByAttribute>GeneratedCodeAttribute</ExcludeByAttribute>
+          <ExcludeByFile>**/*.g.cs</ExcludeByFile>
+        </Configuration>
+      </DataCollector>
+    </DataCollectors>
+  </DataCollectionRunSettings>
+</RunSettings>

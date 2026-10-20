@@ -62,10 +62,10 @@
 - **Repository Layer ↔ Relational Database (MSSQL for server, SQLite for local use):**
   - **Протокол:** TCP/IP (TDS) або звернення до локального файлу (через Entity Framework Core). 
   - **Функція:** Надійне персистентне збереження та зчитування профілів користувачів, нормалізованих вакансій, аналітичної статистики, пошукових запитів та історії взаємодії з ШІ.
-- **Job Parser Service ↔ Job Ingestion & Normalization Service (усередині Repository Layer):**
+- **Job Parser Service (External Ingestion) → Job Ingestion & Normalization Service (Repository Layer):**
   - **Протокол:** Внутрішні виклики (C# Interfaces / Dependency Injection). 
   - **Функція:** Парсер передає сирі зібрані вакансії через `ProcessRawVacanciesAsync(rawItems)`. Сервіс нормалізації обробляє їх, очищає, стандартизує формати заробітних плат і стек технологій та передає до репозиторіїв для збереження в базі даних. Інвалідація кешу координується сервісом сховища (`StorageService`) або реалізується за часом життя TTL, уникаючи залежностей знизу-вгору до `CacheService`.
-- **Job Parser Service (Repository Layer) ↔ Сайти пошуку роботи (Work.ua, Robota.ua, Djinni):**
+- **Job Parser Service (External Ingestion) ↔ Сайти пошуку роботи (Work.ua, Robota.ua, Djinni):**
   - **Протокол:** HTTPS (GET-запити через .NET `HttpClient` із дотриманням рейт-ліміту ≤ 2 req/s на джерело).
   - **Функція:** Отримання відкритих HTML-сторінок із майданчиків працевлаштування для подальшого вилучення та структурування вакансій.
 - **Core Services Layer ↔ LLM API (External):**
@@ -98,8 +98,8 @@
 5. **AI Consultant Service (`IAIConsultantService`):** підготовка контексту та взаємодія із зовнішніми LLM API з контролем таймауту (REL-003).
 6. **Security Service (`ISecurityService`):** криптографічні операції, стійке хешування паролів (BCrypt) та захист чутливих конфігурацій (SEC-001).
 
-### 3.5. Сервіси Repository Layer (рівень доступу до даних та зовнішнього збору)
-1. **Job Parser Service (`IJobParserService`):** фоновий збір відкритих вакансій (Work.ua, Robota.ua, Djinni) через `HttpClient` з контролем ліміту запитів (≤ 2 req/s) та ізоляцією збоїв джерел (REL-001).
+### 3.5. Зовнішній збір та рівень доступу до даних (External Ingestion + Repository Layer)
+1. **Job Parser Service (`IJobParserService`, окремий пакет External Ingestion):** фоновий збір відкритих вакансій (Work.ua, Robota.ua, Djinni) через `HttpClient` з контролем ліміту запитів (≤ 2 req/s) та ізоляцією збоїв джерел (REL-001).
 2. **Job Ingestion & Normalization Service (`IJobIngestionService`):** стандартизація зарплат і стеків, дедуплікація та збереження сутностей.
 3. **Data Repositories (`IVacancyRepository`, `ISavedVacancyRepository`):** інкапсуляція доступу до реляційної бази даних (MSSQL / SQLite) через Entity Framework Core.
 

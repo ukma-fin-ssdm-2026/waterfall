@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: обробка невідомого кодування відповіді (InvalidOperationException) замість недосяжного NotSupportedException (Lab 06); перевірено: регресійні тести HttpGatewayServiceTests, що падали до виправлення.
 
 using System.Net;
 using System.Net.Http.Json;
@@ -84,8 +85,9 @@ public sealed class HttpGatewayService : IHttpGatewayService
             return await response.Content.ReadFromJsonAsync(typeInfo, ct)
                 ?? throw new ApiException(response.StatusCode, null, "Сервер повернув порожню відповідь.");
         }
-        catch (JsonException ex)
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException)
         {
+            // InvalidOperationException — невідоме кодування в Content-Type (напр. сторінка captive portal).
             throw new ApiException(response.StatusCode, null, "Сервер повернув некоректну відповідь.", ex);
         }
     }
@@ -138,12 +140,12 @@ public sealed class HttpGatewayService : IHttpGatewayService
         }
         catch (JsonException)
         {
-            // Порожнє тіло (напр. 401 від JwtBearer) або не наш формат.
+            // Порожнє тіло (напр. 401 від JwtBearer), HTML від проксі або не наш формат.
             return null;
         }
-        catch (NotSupportedException)
+        catch (InvalidOperationException)
         {
-            // Тіло не JSON (напр. HTML від проксі).
+            // Невідоме кодування в Content-Type (напр. сторінка проксі в windows-1251).
             return null;
         }
     }
