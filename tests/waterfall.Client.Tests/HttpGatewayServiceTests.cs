@@ -1,7 +1,10 @@
-// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: тести GetVacancy, порожньої/зіпсованої відповіді, кодів помилок, тайм-ауту, префікса адреси API і невідомого кодування (Lab 06); перевірено: dotnet test, звіт покриття, тести кодування падали до виправлення.
 
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Http;
 using Waterfall.Client;
@@ -111,6 +114,7 @@ public class HttpGatewayServiceTests
     [Theory]
     [InlineData(HttpStatusCode.Unauthorized, "", "Потрібно увійти в обліковий запис.")]
     [InlineData(HttpStatusCode.BadGateway, "<html>proxy</html>", "Сервер повернув помилку 502.")]
+    [InlineData(HttpStatusCode.InternalServerError, "null", "Сервер повернув помилку 500.")]
     public async Task ErrorWithoutEnvelope_FallsBackToStatusMessage(HttpStatusCode status, string body, string expected)
     {
         _server.Respond(status, body, body.StartsWith('<') ? "text/html" : "application/json");
@@ -140,6 +144,36 @@ public class HttpGatewayServiceTests
         cts.Cancel();
 
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => _gateway.GetVacanciesAsync(null, 1, 10, cts.Token));
+    }
+
+    /// <summary>
+    /// Сторінка помилки проксі з кодуванням, якого .NET не знає без CodePagesEncodingProvider:
+    /// ReadFromJsonAsync кидає InvalidOperationException, і вона не повинна вилетіти повз ApiException
+    /// (viewmodels ловлять лише ApiException, решта роняє команду).
+    /// </summary>
+    [Theory]
+    [InlineData("text/html; charset=windows-1251")]
+    [InlineData("application/json; charset=bogus")]
+    public async Task ErrorBodyWithUnsupportedCharset_FallsBackToStatusMessage(string contentType)
+    {
+        _server.RespondRaw(HttpStatusCode.BadGateway, "<html>502 Bad Gateway</html>", contentType);
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacanciesAsync(null, 1, 10));
+
+        Assert.Equal(HttpStatusCode.BadGateway, ex.StatusCode);
+        Assert.Equal("Сервер повернув помилку 502.", ex.Message);
+    }
+
+    [Fact]
+    public async Task HttpClientTimeout_BecomesApiException_UnlikeCallerCancellation()
+    {
+        // HttpClient.Timeout кидає TaskCanceledException, хоча токен виклику не скасовано.
+        _server.Throw(new TaskCanceledException("timeout"));
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacanciesAsync(null, 1, 10));
+
+        Assert.Null(ex.StatusCode);
+        Assert.Equal("Сервер не відповів вчасно.", ex.Message);
     }
 
     [Fact]
@@ -191,6 +225,96 @@ public class HttpGatewayServiceTests
     }
 
     [Fact]
+    public async Task GetVacancy_ReturnsItem()
+    {
+        Guid id = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        _server.Respond(HttpStatusCode.OK, """
+            { "id": "44444444-4444-4444-4444-444444444444",
+              "title": "Senior .NET", "company": "Genesis", "source": "Djinni" }
+            """);
+
+        VacancyDto vacancy = await _gateway.GetVacancyAsync(id);
+
+        Assert.Equal($"http://api.test:3000/api/v1/vacancies/{id}", _server.Requests.Single().Uri);
+        Assert.Equal((id, "Senior .NET", JobSource.Djinni), (vacancy.Id, vacancy.Title, vacancy.Source));
+    }
+
+    [Fact]
+    public async Task GetVacancy_NullBody_ThrowsEmptyResponse()
+    {
+        _server.Respond(HttpStatusCode.OK, "null");
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacancyAsync(Guid.NewGuid()));
+
+        Assert.Equal(HttpStatusCode.OK, ex.StatusCode);
+        Assert.Null(ex.Error);
+        Assert.Equal("Сервер повернув порожню відповідь.", ex.Message);
+    }
+
+    [Fact]
+    public async Task GetVacancy_MalformedJson_ThrowsInvalidResponse()
+    {
+        _server.Respond(HttpStatusCode.OK, "{oops");
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacancyAsync(Guid.NewGuid()));
+
+        Assert.Equal(HttpStatusCode.OK, ex.StatusCode);
+        Assert.Equal("Сервер повернув некоректну відповідь.", ex.Message);
+        Assert.IsType<JsonException>(ex.InnerException);
+    }
+
+    /// <summary>
+    /// Captive portal (Wi-Fi з авторизацією) відповідає 200 зі своєю HTML-сторінкою в будь-якому кодуванні.
+    /// </summary>
+    [Fact]
+    public async Task SuccessBodyWithUnsupportedCharset_ThrowsInvalidResponse()
+    {
+        _server.RespondRaw(HttpStatusCode.OK, "<html>Увійдіть у Wi-Fi</html>", "text/html; charset=windows-1251");
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetVacancyAsync(Guid.NewGuid()));
+
+        Assert.Equal(HttpStatusCode.OK, ex.StatusCode);
+        Assert.Equal("Сервер повернув некоректну відповідь.", ex.Message);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Forbidden, "Недостатньо прав для цієї дії.")]
+    [InlineData(HttpStatusCode.NotFound, "Ресурс не знайдено.")]
+    [InlineData(HttpStatusCode.ServiceUnavailable, "Сервер повернув помилку 503.")]
+    public async Task ErrorStatus_MapsToDefaultMessage(HttpStatusCode status, string expected)
+    {
+        _server.Respond(status, "");
+
+        ApiException ex = await Assert.ThrowsAsync<ApiException>(() => _gateway.GetSavedVacanciesAsync());
+
+        Assert.Equal(status, ex.StatusCode);
+        Assert.Null(ex.Error);
+        Assert.Equal(expected, ex.Message);
+    }
+
+    /// <summary>
+    /// API за зворотним проксі з префіксом шляху: без доданого "/" HttpClient відкинув би "waterfall"
+    /// з BaseAddress і пішов би на http://api.test:3000/api/v1/...; зайвого "//" теж бути не повинно.
+    /// </summary>
+    [Theory]
+    [InlineData("http://api.test:3000/waterfall")]
+    [InlineData("http://api.test:3000/waterfall/")]
+    public async Task BaseAddress_WithPathPrefix_KeepsPrefixWithSingleSlash(string baseAddress)
+    {
+        var server = new StubHandler();
+        ServiceCollection services = new();
+        services.AddWaterfallClient<InMemoryTokenStore>(new Uri(baseAddress));
+        services.ConfigureAll<HttpClientFactoryOptions>(o =>
+            o.HttpMessageHandlerBuilderActions.Add(b => b.PrimaryHandler = server));
+        IHttpGatewayService gateway = services.BuildServiceProvider().GetRequiredService<IHttpGatewayService>();
+        server.Respond(HttpStatusCode.OK, """{ "items": [] }""");
+
+        await gateway.GetVacanciesAsync(null, page: 1, pageSize: 20);
+
+        Assert.Equal("http://api.test:3000/waterfall/api/v1/vacancies?page=1&pageSize=20", server.Requests.Single().Uri);
+    }
+
+    [Fact]
     public async Task Unsave_DeletesByVacancyId()
     {
         Guid vacancyId = Guid.Parse("33333333-3333-3333-3333-333333333333");
@@ -232,6 +356,15 @@ public class HttpGatewayServiceTests
 
         public void Respond(HttpStatusCode status, string body, string mediaType = "application/json") =>
             _next = () => new HttpResponseMessage(status) { Content = new StringContent(body, Encoding.UTF8, mediaType) };
+
+        /// <summary>Відповідь із довільним Content-Type (StringContent завжди дописує charset=utf-8).</summary>
+        public void RespondRaw(HttpStatusCode status, string body, string contentType) =>
+            _next = () =>
+            {
+                ByteArrayContent content = new(Encoding.UTF8.GetBytes(body));
+                content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+                return new HttpResponseMessage(status) { Content = content };
+            };
 
         public void Throw(Exception ex) => _next = () => throw ex;
 

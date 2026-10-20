@@ -1,4 +1,4 @@
-// AI: тести нормалізації та збереження вакансій (issue #62); перевірено: запуск dotnet test, самоперевірка автора (§8)
+// AI: тести нормалізації та збереження вакансій (issue #62), регресійні тести з челенджу «Зламай, потім відлагодь» (Lab 06); перевірено: запуск dotnet test, тести падають з внесеними помилками, самоперевірка автора (§8)
 
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -25,7 +25,8 @@ public class VacancyIngestionServiceTests
     [InlineData("45 000 грн", 45000, 45000, "UAH")]
     [InlineData("$12/год", null, null, "USD")]
     [InlineData("за домовленістю", null, null, "USD")]
-    public void ParseSalary_ReadsCommonFormats(string salary, int? min, int? max, string currency)
+    [InlineData(null, null, null, "USD")] // поле зарплати відсутнє
+    public void ParseSalary_ReadsCommonFormats(string? salary, int? min, int? max, string currency)
     {
         (decimal? actualMin, decimal? actualMax, string actualCurrency) = VacancyIngestionService.ParseSalary(salary);
 
@@ -40,10 +41,29 @@ public class VacancyIngestionServiceTests
     [InlineData("3 дні тому", 3 * 24 * 60)]
     [InlineData("5 годин тому", 5 * 60)]
     [InlineData("10 хв. тому", 10)]
+    [InlineData("1 день тому", 24 * 60)]
+    [InlineData("1 тиждень тому", 7 * 24 * 60)]
+    [InlineData("щойно", 0)]
     [InlineData("незрозумілий формат", 0)]
-    public void ParsePublishedAt_ReadsRelativeDates(string posted, int minutesAgo)
+    [InlineData(null, 0)] // дата відсутня — беремо момент збору
+    public void ParsePublishedAt_ReadsRelativeDates(string? posted, int minutesAgo)
     {
         Assert.Equal(Now.AddMinutes(-minutesAgo), VacancyIngestionService.ParsePublishedAt(posted, Now));
+    }
+
+
+    [Fact]
+    public void ParsePublishedAt_ReadsMonths()
+    {
+        Assert.Equal(Now.AddMonths(-2), VacancyIngestionService.ParsePublishedAt("2 місяці тому", Now));
+    }
+
+    [Theory]
+    [InlineData("99999999999 днів тому")] // число не вміщується в int
+    [InlineData("9999999 днів тому")]     // дата вийшла б за межі календаря
+    public void ParsePublishedAt_AbsurdTimeAgo_FallsBackToNow(string posted)
+    {
+        Assert.Equal(Now, VacancyIngestionService.ParsePublishedAt(posted, Now));
     }
 
     [Fact]
@@ -92,14 +112,59 @@ public class VacancyIngestionServiceTests
     [Theory]
     [InlineData("https://djinni-careers.example.net/jobs/1/")]
     [InlineData("https://djinni.co.evil.example/jobs/1/")]
+    // Домен-двійник закінчується на djinni.co, але не є його піддоменом (регресія з Lab 06)
+    [InlineData("https://fakedjinni.co/jobs/1/")]
     [InlineData("http://djinni.co/jobs/1/")]
     [InlineData("не посилання")]
-    public void Normalize_RejectsLinksOutsideDjinni(string url)
+    [InlineData(null)]
+    public void Normalize_RejectsLinksOutsideDjinni(string? url)
     {
         (VacancyDB? vacancy, string? error) = VacancyIngestionService.Normalize(Raw() with { Url = url }, Now);
 
         Assert.Null(vacancy);
         Assert.Contains("djinni.co", error);
+    }
+
+    [Fact]
+    public void Normalize_AcceptsDjinniSubdomain()
+    {
+        (VacancyDB? vacancy, _) = VacancyIngestionService.Normalize(Raw() with { Url = "https://jobs.djinni.co/jobs/1-dev/" }, Now);
+
+        Assert.Equal("https://jobs.djinni.co/jobs/1-dev/", vacancy?.SourceUrl);
+    }
+
+    [Theory]
+    [InlineData("-", false)]  // 1 символ — сміття, а не назва посади
+    [InlineData("QA", true)]  // 2 символи — мінімум: QA, PM, UX — справжні назви посад
+    public void Normalize_TitleLengthBoundary(string title, bool accepted)
+    {
+        Assert.Equal(accepted, VacancyIngestionService.Normalize(Raw() with { Title = title }, Now).Vacancy != null);
+    }
+
+    [Fact]
+    public void Normalize_FitsDatabaseLimits_AndTreatsBlankFieldsAsMissing()
+    {
+        RawVacancy raw = Raw() with
+        {
+            Id = new string('9', 150),
+            Title = new string('T', 250),
+            Company = new string('C', 200),
+            Experience = "   ",
+            Employment = "",
+            Location = null,
+            Tags = null
+        };
+
+        (VacancyDB? vacancy, _) = VacancyIngestionService.Normalize(raw, Now);
+
+        Assert.NotNull(vacancy);
+        Assert.Equal(100, vacancy.ExternalId?.Length);
+        Assert.Equal(200, vacancy.Title.Length);   // обрізано до MaxLength колонки
+        Assert.Equal(200, vacancy.Company.Length); // рівно на межі — без змін
+        Assert.Null(vacancy.Experience);
+        Assert.Null(vacancy.Schedule);
+        Assert.Equal("Не вказано", vacancy.Location);
+        Assert.Equal("[]", vacancy.SkillsJson);
     }
 
     [Fact]
@@ -127,7 +192,7 @@ public class VacancyIngestionServiceTests
         List<RawVacancy> rawItems = JobParserService.ParseDump(File.ReadAllText(SampleDumpPath()));
 
         IngestionResult first = await ProcessAsync(options, rawItems);
-        Dictionary<string, Guid> idsAfterFirstRun = LoadVacancies(options).ToDictionary(v => v.ExternalId!, v => v.Id);
+        Dictionary<string, VacancyDB> afterFirstRun = LoadVacancies(options).ToDictionary(v => v.ExternalId!);
         IngestionResult second = await ProcessAsync(options, rawItems);
 
         Assert.Equal(new IngestionResult(Created: 10, Updated: 0, Skipped: 2), first);
@@ -135,7 +200,12 @@ public class VacancyIngestionServiceTests
 
         List<VacancyDB> saved = LoadVacancies(options);
         Assert.Equal(10, saved.Count);
-        Assert.All(saved, v => Assert.Equal(idsAfterFirstRun[v.ExternalId!], v.Id));
+        Assert.All(saved, v =>
+        {
+            Assert.Equal(afterFirstRun[v.ExternalId!].Id, v.Id);
+            // «3 дні тому» в повторному прогоні не повинно зсувати дату публікації (регресія з Lab 06)
+            Assert.Equal(afterFirstRun[v.ExternalId!].PublishedAt, v.PublishedAt);
+        });
 
         // Запис із «брудними» даними: трекінг у посиланні, перевернута вилка, script в описі
         VacancyDB lead = saved.Single(v => v.ExternalId == "720096");

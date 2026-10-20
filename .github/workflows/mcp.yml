@@ -21,7 +21,7 @@ jobs:
   check:
     # Timeout 5 minutes in accordance with MAINT-001
     timeout-minutes: 5
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux]
     defaults:
       run:
         working-directory: src/mcp

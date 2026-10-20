@@ -1,4 +1,4 @@
-// AI: Генерація структури регресійних тестів безпеки для CWE-532 та допоміжних тестових заглушок (FakeLogger, FakeUserRepository, FakePasswordHasher, FakeJwtTokenService, FakeAuthService); перевірено: dotnet test (перевірка падіння на вразливому коді та успішного проходження після виправлення), ручна самоперевірка.
+// AI: Генерація структури регресійних тестів безпеки для CWE-532 та допоміжних тестових заглушок (FakeLogger, FakeUserRepository, FakePasswordHasher, FakeJwtTokenService, FakeAuthService); перевірено: dotnet test, ручна самоперевірка (Денис Сидоренко, §8)
 
 using Microsoft.Extensions.Logging;
 using Waterfall.Api.Controllers;
@@ -9,7 +9,7 @@ using Waterfall.Services.Exceptions;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Auth;
 
-namespace Waterfall.Security.Tests;
+namespace Waterfall.Api.Tests;
 
 /// <summary>
 /// Регресійні тести безпеки для CWE-532 (Insertion of Sensitive Information into Log File).
@@ -24,7 +24,7 @@ public sealed class SensitiveLoggingRegressionTests
     public async Task AuthController_ShouldNotLogSensitiveEmail_RegressionTest()
     {
         // Arrange
-        var logger = new FakeLogger<AuthController>();
+        var logger = new FakeSecurityLogger<AuthController>();
         var fakeAuthService = new FakeAuthService();
         var controller = new AuthController(fakeAuthService, logger);
 
@@ -51,7 +51,7 @@ public sealed class SensitiveLoggingRegressionTests
     public async Task AuthenticationService_ShouldNotLogSensitiveEmail_RegressionTest()
     {
         // Arrange
-        var logger = new FakeLogger<AuthenticationService>();
+        var logger = new FakeSecurityLogger<AuthenticationService>();
         var userRepo = new FakeUserRepository();
         var hasher = new FakePasswordHasher();
         var jwt = new FakeJwtTokenService();
@@ -80,7 +80,7 @@ public sealed class SensitiveLoggingRegressionTests
     public async Task AuthController_ShouldNotLogSensitiveData_OnLogin_RegressionTest()
     {
         // Arrange
-        var logger = new FakeLogger<AuthController>();
+        var logger = new FakeSecurityLogger<AuthController>();
         var fakeAuthService = new FakeAuthService();
         var controller = new AuthController(fakeAuthService, logger);
 
@@ -106,7 +106,7 @@ public sealed class SensitiveLoggingRegressionTests
     public async Task AuthenticationService_ShouldNotLogSensitiveData_OnSuccessfulLogin_RegressionTest()
     {
         // Arrange
-        var logger = new FakeLogger<AuthenticationService>();
+        var logger = new FakeSecurityLogger<AuthenticationService>();
         var userRepo = new FakeUserRepository();
         var hasher = new FakePasswordHasher();
         var jwt = new FakeJwtTokenService();
@@ -144,7 +144,7 @@ public sealed class SensitiveLoggingRegressionTests
     public async Task AuthenticationService_ShouldNotLogSensitiveData_OnFailedLogin_RegressionTest()
     {
         // Arrange
-        var logger = new FakeLogger<AuthenticationService>();
+        var logger = new FakeSecurityLogger<AuthenticationService>();
         var userRepo = new FakeUserRepository(); // Empty repo -> user is null -> login fails
         var hasher = new FakePasswordHasher();
         var jwt = new FakeJwtTokenService();
@@ -170,7 +170,7 @@ public sealed class SensitiveLoggingRegressionTests
 
     #region Fakes
 
-    private sealed class FakeLogger<T> : ILogger<T>
+    private sealed class FakeSecurityLogger<T> : ILogger<T>
     {
         private readonly List<string> _logs = new();
         public IReadOnlyList<string> Logs => _logs;

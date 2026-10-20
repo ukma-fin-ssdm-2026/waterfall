@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: лічильник викликів ClearAsync (Lab 06); перевірено: тест відновлення сесії без токена.
 
 using Waterfall.Client.Interfaces;
 
@@ -11,6 +12,8 @@ public sealed class InMemoryTokenStore : IAuthTokenStore
 {
     public string? Token { get; set; }
 
+    public int ClearCalls { get; private set; }
+
     public Task<string?> GetTokenAsync(CancellationToken ct = default) => Task.FromResult(Token);
 
     public Task SetTokenAsync(string token, CancellationToken ct = default)
@@ -21,6 +24,7 @@ public sealed class InMemoryTokenStore : IAuthTokenStore
 
     public Task ClearAsync(CancellationToken ct = default)
     {
+        ClearCalls++;
         Token = null;
         return Task.CompletedTask;
     }

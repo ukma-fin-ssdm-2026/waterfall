@@ -1,4 +1,5 @@
-// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: тести всіх гілок SalaryText/SourceText, CompanyLine, StatusText (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using System.Net;
 using CommunityToolkit.Mvvm.Messaging;
@@ -19,9 +20,16 @@ public class VacancyItemViewModelTests
         _messenger.Register<VacancySaveChangedMessage>(this, (_, m) => _sent.Add(m));
     }
 
-    private VacancyItemViewModel Item(bool isSaved = false, decimal? min = null, decimal? max = null) =>
-        new(new VacancyDto { Id = Guid.NewGuid(), IsSaved = isSaved, SalaryMin = min, SalaryMax = max, Currency = "USD" },
-            _gateway, _messenger, _errors.Add);
+    private VacancyItemViewModel Item(
+        bool isSaved = false, decimal? min = null, decimal? max = null,
+        JobSource source = JobSource.Unknown, bool isActive = true,
+        string company = "Genesis", string location = "", string title = "Senior .NET") =>
+        new(new VacancyDto
+        {
+            Id = Guid.NewGuid(), IsSaved = isSaved, SalaryMin = min, SalaryMax = max, Currency = "USD",
+            Source = source, IsActive = isActive, Company = company, Location = location, Title = title,
+            Description = "Опис", Skills = ["C#", "Kafka"]
+        }, _gateway, _messenger, _errors.Add);
 
     [Theory]
     [InlineData(4000, 5500, "4\u00A0000–5\u00A0500 USD")]
@@ -35,6 +43,37 @@ public class VacancyItemViewModelTests
 
         Assert.Equal(expected, item.SalaryText);
         Assert.Equal(expected is not null, item.HasSalary);
+    }
+
+    [Theory]
+    [InlineData(JobSource.WorkUa, "Work.ua")]
+    [InlineData(JobSource.RobotaUa, "Robota.ua")]
+    [InlineData(JobSource.Djinni, "Djinni")]
+    [InlineData(JobSource.Dou, "DOU")]
+    [InlineData(JobSource.Unknown, null)]
+    public void SourceText_MapsEverySource(JobSource source, string? expected)
+    {
+        Assert.Equal(expected, Item(source: source).SourceText);
+    }
+
+    [Theory]
+    [InlineData("", "Genesis")]
+    [InlineData("   ", "Genesis")]
+    [InlineData("Київ", "Genesis · Київ")]
+    public void CompanyLine_HandlesMissingLocation(string location, string expected)
+    {
+        Assert.Equal(expected, Item(location: location).CompanyLine);
+    }
+
+    [Theory]
+    [InlineData(true, "Активна")]
+    [InlineData(false, "Архівна")]
+    public void StatusText_ReflectsActivity(bool isActive, string expected)
+    {
+        VacancyItemViewModel item = Item(isActive: isActive);
+
+        Assert.Equal(expected, item.StatusText);
+        Assert.Equal(isActive, item.IsActive);
     }
 
     [Theory]
