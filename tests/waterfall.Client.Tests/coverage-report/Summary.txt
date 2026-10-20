@@ -1,0 +1,43 @@
+Summary
+  Generated on: 18/10/2026 - 2:48:01 PM
+  Coverage date: 18/10/2026 - 2:47:44 PM
+  Parser: Cobertura
+  Assemblies: 1
+  Classes: 21
+  Files: 16
+  Line coverage: 99.2%
+  Covered lines: 421
+  Uncovered lines: 3
+  Coverable lines: 424
+  Total lines: 1248
+  Branch coverage: 98.3% (177 of 180)
+  Covered branches: 177
+  Total branches: 180
+  Method coverage: 97.9% (142 of 145)
+  Full method coverage: 97.9% (142 of 145)
+  Covered methods: 142
+  Fully covered methods: 142
+  Total methods: 145
+
+waterfall.Client                                              99.2%
+  Waterfall.Client.ApiException                                100%
+  Waterfall.Client.Extensions.ServiceCollectionExtensions      100%
+  Waterfall.Client.Models.Auth.AuthResponse                    100%
+  Waterfall.Client.Models.Auth.AuthSession                     100%
+  Waterfall.Client.Models.Auth.LoginRequest                    100%
+  Waterfall.Client.Models.Auth.RegisterRequest                 100%
+  Waterfall.Client.Models.Common.ApiError                      100%
+  Waterfall.Client.Models.Common.ApiErrorResponse              100%
+  Waterfall.Client.Models.Common.ApiValidationError            100%
+  Waterfall.Client.Models.Common.PagedResult<T>                100%
+  Waterfall.Client.Models.SavedVacancies.SavedVacancyDto        80%
+  Waterfall.Client.Models.SavedVacancies.SaveVacancyRequest    100%
+  Waterfall.Client.Models.Vacancies.VacancyDto                 100%
+  Waterfall.Client.Services.AuthHeaderHandler                  100%
+  Waterfall.Client.Services.HttpGatewayService                 100%
+  Waterfall.Client.ViewModels.CatalogViewModel                 100%
+  Waterfall.Client.ViewModels.FavoritesViewModel               100%
+  Waterfall.Client.ViewModels.LoginViewModel                   100%
+  Waterfall.Client.ViewModels.RoleOption                       100%
+  Waterfall.Client.ViewModels.VacancyItemViewModel              96%
+  Waterfall.Client.ViewModels.VacancySaveChangedMessage        100%

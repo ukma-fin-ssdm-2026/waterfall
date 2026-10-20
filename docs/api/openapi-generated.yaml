@@ -486,7 +486,7 @@ components:
       properties:
         title:
           maxLength: 200
-          minLength: 3
+          minLength: 2
           type: string
           description: Назва посади / позиції.
           example: Middle .NET Developer
@@ -702,7 +702,7 @@ components:
       properties:
         title:
           maxLength: 200
-          minLength: 3
+          minLength: 2
           type: string
           description: Назва посади / позиції.
           nullable: true

@@ -1,0 +1,94 @@
+Summary
+  Generated on: 18.10.2026 - 17:25:02
+  Coverage date: 18.10.2026 - 17:22:28 - 18.10.2026 - 17:24:50
+  Parser: MultiReport (7x Cobertura)
+  Assemblies: 4
+  Classes: 66
+  Files: 83
+  Line coverage: 77.6%
+  Covered lines: 3548
+  Uncovered lines: 1019
+  Coverable lines: 4567
+  Total lines: 8359
+  Branch coverage: 70.1% (588 of 838)
+  Covered branches: 588
+  Total branches: 838
+  Method coverage: 86.2% (434 of 503)
+  Full method coverage: 76.9% (387 of 503)
+  Covered methods: 434
+  Fully covered methods: 387
+  Total methods: 503
+
+Waterfall.Api                                                   57.8%
+  Program                                                          0%
+  Waterfall.Api.Controllers.ApiControllerBase                    100%
+  Waterfall.Api.Controllers.AuthController                       100%
+  Waterfall.Api.Controllers.SavedVacanciesController            86.6%
+  Waterfall.Api.Controllers.VacanciesController                 86.6%
+  Waterfall.Api.Extensions.ServiceCollectionExtensions             0%
+  Waterfall.Api.Models.Common.ApiErrorResponse                   100%
+  Waterfall.Api.Models.Common.ErrorPayload                       100%
+  Waterfall.Api.Models.Common.ValidationErrorDetail             66.6%
+  Waterfall.Api.Options.JwtOptions                               100%
+  Waterfall.Api.Services.AspNetPasswordHasher                   94.1%
+  Waterfall.Api.Services.AuthenticationService                  98.5%
+  Waterfall.Api.Services.JwtTokenService                         100%
+  Waterfall.Api.Services.OpenApiGenerator                          0%
+  Waterfall.Api.Workers.IngestionOptions                         100%
+  Waterfall.Api.Workers.JobParserService                        98.2%
+
+waterfall.Client                                                  84%
+  Waterfall.Client.ApiException                                  100%
+  Waterfall.Client.Extensions.ServiceCollectionExtensions        100%
+  Waterfall.Client.Models.Auth.AuthResponse                      100%
+  Waterfall.Client.Models.Auth.AuthSession                       100%
+  Waterfall.Client.Models.Auth.LoginRequest                      100%
+  Waterfall.Client.Models.Auth.RegisterRequest                   100%
+  Waterfall.Client.Models.Common.ApiError                        100%
+  Waterfall.Client.Models.Common.ApiErrorResponse                100%
+  Waterfall.Client.Models.Common.ApiValidationError              100%
+  Waterfall.Client.Models.Common.PagedResult<T>                  100%
+  Waterfall.Client.Models.SavedVacancies.SavedVacancyDto          80%
+  Waterfall.Client.Models.SavedVacancies.SaveVacancyRequest      100%
+  Waterfall.Client.Models.Vacancies.VacancyDto                   100%
+  Waterfall.Client.Services.AuthHeaderHandler                    100%
+  Waterfall.Client.Services.ClientJsonContext                   82.5%
+  Waterfall.Client.Services.HttpGatewayService                  86.7%
+  Waterfall.Client.ViewModels.CatalogViewModel                  92.3%
+  Waterfall.Client.ViewModels.FavoritesViewModel                95.6%
+  Waterfall.Client.ViewModels.LoginViewModel                    88.4%
+  Waterfall.Client.ViewModels.RoleOption                          50%
+  Waterfall.Client.ViewModels.VacancyItemViewModel              74.5%
+  Waterfall.Client.ViewModels.VacancySaveChangedMessage          100%
+
+waterfall.Repository                                            51.4%
+  Waterfall.Repository.Data.WaterfallDbContext                   100%
+  Waterfall.Repository.Data.WaterfallDbSeeder                      0%
+  Waterfall.Repository.Entities.SavedVacancyDB                   100%
+  Waterfall.Repository.Entities.UserDB                           100%
+  Waterfall.Repository.Entities.VacancyDB                        100%
+  Waterfall.Repository.Extensions.ServiceCollectionExtensions      0%
+  Waterfall.Repository.Repositories.EfSavedVacancyRepository    96.2%
+  Waterfall.Repository.Repositories.EfUserRepository             100%
+  Waterfall.Repository.Repositories.EfVacancyRepository         78.2%
+
+waterfall.Services                                              88.6%
+  Waterfall.Services.Exceptions.DuplicateEmailException          100%
+  Waterfall.Services.Exceptions.InvalidCredentialsException      100%
+  Waterfall.Services.Extensions.ServiceCollectionExtensions        0%
+  Waterfall.Services.Interfaces.IngestionResult                  100%
+  Waterfall.Services.Interfaces.RawVacancy                       100%
+  Waterfall.Services.Models.Auth.AuthResponse                    100%
+  Waterfall.Services.Models.Auth.LoginRequest                    100%
+  Waterfall.Services.Models.Auth.RegisterRequest                 100%
+  Waterfall.Services.Models.Common.PagedResult<T>               57.1%
+  Waterfall.Services.Models.SavedVacancies.SavedVacancyDto       100%
+  Waterfall.Services.Models.SavedVacancies.SaveVacancyRequest     20%
+  Waterfall.Services.Models.Vacancies.CreateVacancyRequest      41.1%
+  Waterfall.Services.Models.Vacancies.UpdateVacancyRequest      42.8%
+  Waterfall.Services.Models.Vacancies.VacancyDto                 100%
+  Waterfall.Services.Models.Vacancies.VacancyFilterParameters   64.2%
+  Waterfall.Services.SavedVacancyService                         100%
+  Waterfall.Services.VacancyCacheService                        98.7%
+  Waterfall.Services.VacancyIngestionService                    99.3%
+  Waterfall.Services.VacancyService                             97.9%
