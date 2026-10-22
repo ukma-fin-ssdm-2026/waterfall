@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
+             x:Class="waterfall.UI.Views.AnalyticsPage"
+             x:DataType="vm:AnalyticsViewModel"
+             Title="Аналітика"
+             BackgroundColor="{StaticResource DarkBg2}">
+
+    <ScrollView>
+        <VerticalStackLayout Spacing="16" Padding="14">
+
+            <!-- Повідомлення про обмеження доступу для шукача (FR-008, US-006 AC-3) -->
+            <Border IsVisible="{Binding IsAccessDenied}"
+                    Style="{StaticResource VacancyCard}"
+                    BackgroundColor="{StaticResource DarkBg1}">
+                <VerticalStackLayout Spacing="10" Padding="16">
+                    <Label Text="Доступ обмежено 🔒"
+                           Style="{StaticResource CardTitle}"
+                           TextColor="{StaticResource Danger}" />
+                    <Label Text="{Binding AccessDeniedMessage}"
+                           Style="{StaticResource MutedLabel}" />
+                    <Label Text="Увійдіть під обліковим записом аналітика (наприклад, analyst@waterfall.com) у вкладці «Профіль» для перегляду аналітичних звітів."
+                           TextColor="{StaticResource TextSecondary}"
+                           FontSize="13" />
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Контент для Роботодавця / Аналітика (US-006, US-007) -->
+            <VerticalStackLayout Spacing="16" IsVisible="{Binding IsAnalyst}">
+
+                <!-- Панель фільтрації аналітики у стилі PointOfSale -->
+                <Border Style="{StaticResource VacancyCard}" Padding="16">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Параметри аналітичного звіту"
+                               FontFamily="OpenSansSemibold"
+                               FontSize="15"
+                               TextColor="{StaticResource White}" />
+                        <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="10">
+                            <Border StrokeShape="RoundRectangle 10"
+                                    Stroke="{StaticResource Secondary}"
+                                    BackgroundColor="{StaticResource DarkBg2}"
+                                    Padding="8,0">
+                                <Picker Title="Категорія / Стек"
+                                        ItemsSource="{Binding Categories}"
+                                        SelectedItem="{Binding SelectedCategory}"
+                                        FontSize="13"
+                                        BackgroundColor="Transparent" />
+                            </Border>
+
+                            <Border Grid.Column="1"
+                                    StrokeShape="RoundRectangle 10"
+                                    Stroke="{StaticResource Secondary}"
+                                    BackgroundColor="{StaticResource DarkBg2}"
+                                    Padding="8,0">
+                                <Picker Title="Період"
+                                        ItemsSource="{Binding Periods}"
+                                        SelectedItem="{Binding SelectedPeriod}"
+                                        FontSize="13"
+                                        BackgroundColor="Transparent" />
+                            </Border>
+
+                            <Button Grid.Column="2"
+                                    Text="Оновити"
+                                    Command="{Binding ApplyFiltersCommand}"
+                                    Style="{StaticResource CardActionPrimary}" />
+                        </Grid>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Стан «Недостатньо даних» за US-006 AC-2 та US-007 AC-3 -->
+                <Border IsVisible="{Binding IsInsufficientData}"
+                        Style="{StaticResource ErrorBanner}"
+                        Margin="0,4">
+                    <VerticalStackLayout Spacing="8" Padding="10">
+                        <Label Text="Недостатньо даних для розрахунку аналітики"
+                               FontFamily="OpenSansSemibold"
+                               Style="{StaticResource ErrorLabel}" />
+                        <Label Text="За обраними фільтрами у базі менше 5 вакансій або не вказано рівень заробітної плати. Спробуйте розширити період або категорію."
+                               Style="{StaticResource ErrorLabel}"
+                               FontSize="12" />
+                        <Button Text="Скинути фільтри аналітики"
+                                Command="{Binding ResetAnalyticsFiltersCommand}"
+                                Style="{StaticResource CardAction}"
+                                HorizontalOptions="Start"
+                                Margin="0,4,0,0" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Основні метрики (Картки показників PointOfSale StatCards) -->
+                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10" IsVisible="{Binding HasEnoughData}">
+
+                    <!-- Середня ЗП -->
+                    <Border Style="{StaticResource StatCard}">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Середня ЗП"
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="12" />
+                            <Label Text="{Binding AverageSalary}"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="22"
+                                   TextColor="{StaticResource Primary}" />
+                            <Label Text="ринковий медіан"
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="10" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Кількість вакансій -->
+                    <Border Grid.Column="1" Style="{StaticResource StatCard}">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Вакансій"
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="12" />
+                            <Label Text="{Binding TotalVacancies}"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="22"
+                                   TextColor="{StaticResource White}" />
+                            <Label Text="в обраній вибірці"
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="10" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Динаміка -->
+                    <Border Grid.Column="2" Style="{StaticResource StatCard}">
+                        <VerticalStackLayout Spacing="6">
+                            <Label Text="Динаміка"
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="12" />
+                            <Label Text="{Binding DynamicsPercent}"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="18"
+                                   TextColor="{StaticResource Accent}" />
+                            <Label Text="тренд публікацій"
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="10" />
+                        </VerticalStackLayout>
+                    </Border>
+                </Grid>
+
+                <!-- Графік: Попит на технології (Топ-5 стеків) -->
+                <Border Style="{StaticResource VacancyCard}" IsVisible="{Binding HasEnoughData}">
+                    <VerticalStackLayout Spacing="14">
+                        <Label Text="Попит на технології (Топ-5 стеків)"
+                               FontFamily="OpenSansSemibold"
+                               FontSize="15"
+                               TextColor="{StaticResource White}" />
+
+                        <VerticalStackLayout BindableLayout.ItemsSource="{Binding TopTechnologies}" Spacing="10">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TechDemandItem">
+                                    <Grid ColumnDefinitions="120,*,50" ColumnSpacing="12" VerticalOptions="Center">
+                                        <Label Text="{Binding Name}"
+                                               FontSize="13"
+                                               TextColor="{StaticResource White}"
+                                               VerticalOptions="Center" />
+
+                                        <!-- Візуальна смужка діаграми -->
+                                        <Grid Grid.Column="1" HeightRequest="12" VerticalOptions="Center">
+                                            <BoxView Color="{StaticResource Secondary}"
+                                                     CornerRadius="6" />
+                                            <BoxView Color="{StaticResource Primary}"
+                                                     HorizontalOptions="Start"
+                                                     WidthRequest="180"
+                                                     CornerRadius="6" />
+                                        </Grid>
+
+                                        <Label Grid.Column="2"
+                                               Text="{Binding DisplayShare}"
+                                               FontSize="12"
+                                               HorizontalOptions="End"
+                                               TextColor="{StaticResource Accent}"
+                                               FontFamily="OpenSansSemibold"
+                                               VerticalOptions="Center" />
+                                    </Grid>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Графік: Динаміка публікацій за місяцями -->
+                <Border Style="{StaticResource VacancyCard}" IsVisible="{Binding HasEnoughData}">
+                    <VerticalStackLayout Spacing="12">
+                        <Label Text="Динаміка публікацій нових вакансій"
+                               FontFamily="OpenSansSemibold"
+                               FontSize="15"
+                               TextColor="{StaticResource White}" />
+
+                        <HorizontalStackLayout BindableLayout.ItemsSource="{Binding Timeline}" Spacing="10">
+                            <BindableLayout.ItemTemplate>
+                                <DataTemplate x:DataType="vm:TimelinePoint">
+                                    <Border Padding="14,10"
+                                            StrokeShape="RoundRectangle 12"
+                                            StrokeThickness="1"
+                                            Stroke="{StaticResource Secondary}"
+                                            BackgroundColor="{StaticResource DarkBg2}">
+                                        <VerticalStackLayout Spacing="4">
+                                            <Label Text="{Binding Period}"
+                                                   Style="{StaticResource MutedLabel}"
+                                                   FontSize="11" />
+                                            <Label Text="{Binding VacanciesCount, StringFormat='{0} вакансій'}"
+                                                   FontFamily="OpenSansSemibold"
+                                                   TextColor="{StaticResource White}"
+                                                   FontSize="14" />
+                                        </VerticalStackLayout>
+                                    </Border>
+                                </DataTemplate>
+                            </BindableLayout.ItemTemplate>
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
+                </Border>
+
+            </VerticalStackLayout>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

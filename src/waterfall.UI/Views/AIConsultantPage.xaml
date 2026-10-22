@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
+             xmlns:controls="clr-namespace:waterfall.UI.Controls"
+             x:Class="waterfall.UI.Views.AIConsultantPage"
+             x:DataType="vm:AIConsultantViewModel"
+             Title="ШІ-консультант"
+             BackgroundColor="{StaticResource DarkBg2}">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
+
+        <!-- Підказка та очищення контексту (FR-009) -->
+        <Border Padding="14,10"
+                Margin="12,10,12,6"
+                StrokeShape="RoundRectangle 12"
+                StrokeThickness="1"
+                Stroke="{StaticResource Secondary}"
+                BackgroundColor="{StaticResource DarkBg1}">
+            <Grid ColumnDefinitions="*,Auto">
+                <Label Text="💬 Контекст діалогу зберігається протягом сесії"
+                       Style="{StaticResource MutedLabel}"
+                       VerticalOptions="Center" />
+                <Button Grid.Column="1"
+                        Text="Очистити чат"
+                        Command="{Binding ClearChatCommand}"
+                        Style="{StaticResource LinkButton}"
+                        FontSize="12" />
+            </Grid>
+        </Border>
+
+        <!-- Швидкі запити-підказки (Quick Prompts) -->
+        <ScrollView Grid.Row="1" Orientation="Horizontal" Margin="8,0,8,8">
+            <HorizontalStackLayout BindableLayout.ItemsSource="{Binding QuickPrompts}" Spacing="8" Padding="4,0">
+                <BindableLayout.ItemTemplate>
+                    <DataTemplate x:DataType="x:String">
+                        <Button Text="{Binding .}"
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:AIConsultantViewModel}}, Path=SendQuickPromptCommand}"
+                                CommandParameter="{Binding .}"
+                                Style="{StaticResource CardAction}"
+                                FontSize="12"
+                                Padding="12,6"
+                                CornerRadius="16" />
+                    </DataTemplate>
+                </BindableLayout.ItemTemplate>
+            </HorizontalStackLayout>
+        </ScrollView>
+
+        <!-- Список повідомлень діалогу (US-005) -->
+        <CollectionView Grid.Row="2"
+                        ItemsSource="{Binding Messages}"
+                        SelectionMode="None"
+                        Margin="12,0">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="vm:AIChatMessageViewModel">
+                    <Grid Margin="0,6" ColumnDefinitions="Auto,*,Auto">
+
+                        <!-- Повідомлення користувача (праворуч, фірмовий корал) -->
+                        <Border Grid.Column="1"
+                                Grid.ColumnSpan="2"
+                                IsVisible="{Binding IsUser}"
+                                HorizontalOptions="End"
+                                MaximumWidthRequest="480"
+                                StrokeShape="RoundRectangle 16"
+                                StrokeThickness="0"
+                                BackgroundColor="{StaticResource Primary}"
+                                Padding="14,10">
+                            <VerticalStackLayout Spacing="4">
+                                <Label Text="{Binding Text}"
+                                       TextColor="{StaticResource White}"
+                                       FontSize="14" />
+                                <Label Text="{Binding TimeText}"
+                                       TextColor="#FFE0DA"
+                                       FontSize="10"
+                                       HorizontalOptions="End" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <!-- Повідомлення ШІ-асистента (ліворуч, темна плашка) -->
+                        <Border Grid.Column="0"
+                                Grid.ColumnSpan="2"
+                                IsVisible="{Binding IsBot}"
+                                HorizontalOptions="Start"
+                                MaximumWidthRequest="540"
+                                StrokeShape="RoundRectangle 16"
+                                StrokeThickness="1"
+                                Stroke="{StaticResource Secondary}"
+                                BackgroundColor="{StaticResource DarkBg1}"
+                                Padding="14,12">
+                            <VerticalStackLayout Spacing="8">
+                                <HorizontalStackLayout Spacing="6">
+                                    <Label Text="🤖" FontSize="14" VerticalOptions="Center" />
+                                    <Label Text="ШІ-консультант Waterfall"
+                                           FontFamily="OpenSansSemibold"
+                                           FontSize="13"
+                                           TextColor="{StaticResource Primary}"
+                                           VerticalOptions="Center" />
+                                </HorizontalStackLayout>
+
+                                <Label Text="{Binding Text}"
+                                       TextColor="{StaticResource White}"
+                                       FontSize="14" />
+
+                                <!-- Позначка розбіжності за US-005 AC-3 (<100%) -->
+                                <Border IsVisible="{Binding HasDisclaimer}"
+                                        Style="{StaticResource ErrorBanner}"
+                                        Margin="0,4">
+                                    <Label Text="{Binding MatchDisclaimer}"
+                                           Style="{StaticResource ErrorLabel}"
+                                           FontSize="12" />
+                                </Border>
+
+                                <!-- Вкладені рекомендовані вакансії (US-005 AC-1) -->
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding MatchedVacancies}"
+                                                     IsVisible="{Binding HasVacancies}"
+                                                     Spacing="6"
+                                                     Margin="0,6,0,0">
+                                    <Label Text="Знайдені відповідні вакансії:"
+                                           FontFamily="OpenSansSemibold"
+                                           FontSize="13"
+                                           TextColor="{StaticResource Accent}" />
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="vm:VacancyItemViewModel">
+                                            <controls:VacancyCard />
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
+
+                                <Label Text="{Binding TimeText}"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="10"
+                                       HorizontalOptions="End" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+        <!-- Індикатор генерації відповіді (PERF-002: ≤ 1 сек індикатор) -->
+        <HorizontalStackLayout Grid.Row="3"
+                               IsVisible="{Binding IsThinking}"
+                               Spacing="8"
+                               Padding="16,8">
+            <ActivityIndicator IsRunning="{Binding IsThinking}"
+                               HeightRequest="16"
+                               WidthRequest="16" />
+            <Label Text="{Binding StatusHint}"
+                   Style="{StaticResource MutedLabel}"
+                   VerticalOptions="Center" />
+        </HorizontalStackLayout>
+
+        <!-- Панель введення повідомлення -->
+        <Border Grid.Row="4"
+                StrokeShape="Rectangle"
+                StrokeThickness="1"
+                Stroke="{StaticResource Secondary}"
+                BackgroundColor="{StaticResource DarkBg1}"
+                Padding="12,10">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                <Border StrokeShape="RoundRectangle 20"
+                        StrokeThickness="1"
+                        Stroke="{StaticResource Secondary}"
+                        BackgroundColor="{StaticResource DarkBg2}"
+                        Padding="12,0">
+                    <Entry Text="{Binding InputText}"
+                           Placeholder="Напишіть запит звичайною мовою..."
+                           BackgroundColor="Transparent"
+                           ReturnCommand="{Binding SendMessageCommand}" />
+                </Border>
+                <Button Grid.Column="1"
+                        Text="Надіслати"
+                        Command="{Binding SendMessageCommand}"
+                        CornerRadius="20"
+                        Style="{StaticResource CardActionPrimary}" />
+            </Grid>
+        </Border>
+
+    </Grid>
+</ContentPage>

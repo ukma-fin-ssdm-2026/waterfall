@@ -5,10 +5,12 @@
              xmlns:controls="clr-namespace:waterfall.UI.Controls"
              x:Class="waterfall.UI.Views.FavoritesPage"
              x:DataType="vm:FavoritesViewModel"
-             Title="Обране">
+             Title="Обране"
+             BackgroundColor="{StaticResource DarkBg2}">
 
     <Grid RowDefinitions="Auto,Auto,*">
 
+        <!-- Банер помилки -->
         <Border IsVisible="{Binding HasError}"
                 Style="{StaticResource ErrorBanner}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
@@ -18,14 +20,16 @@
                 <Button Grid.Column="1"
                         Text="Повторити"
                         Command="{Binding LoadCommand}"
-                        Style="{StaticResource CardAction}" />
+                        Style="{StaticResource CardActionPrimary}" />
             </Grid>
         </Border>
 
+        <!-- Підсумок збережених вакансій та спіннер -->
         <Grid Grid.Row="1" Padding="16,8" ColumnDefinitions="*,Auto">
             <Label Text="{Binding TotalText}"
                    IsVisible="{Binding ShowTotal}"
-                   Style="{StaticResource MutedLabel}" />
+                   Style="{StaticResource MutedLabel}"
+                   VerticalOptions="Center" />
             <ActivityIndicator Grid.Column="1"
                                IsRunning="{Binding IsLoading}"
                                IsVisible="{Binding IsLoading}"
@@ -33,6 +37,7 @@
                                WidthRequest="20" />
         </Grid>
 
+        <!-- Список збережених вакансій -->
         <RefreshView Grid.Row="2"
                      IsRefreshing="{Binding IsRefreshing}"
                      Command="{Binding RefreshCommand}">
@@ -47,12 +52,15 @@
 
                 <CollectionView.EmptyView>
                     <VerticalStackLayout Padding="32"
-                                         Spacing="4"
+                                         Spacing="10"
                                          IsVisible="{Binding IsEmpty}">
+                        <Label Text="⭐"
+                               FontSize="36"
+                               HorizontalOptions="Center" />
                         <Label Text="Тут поки порожньо"
                                HorizontalOptions="Center"
                                Style="{StaticResource CardTitle}" />
-                        <Label Text="Зберігайте вакансії кнопкою «☆ Зберегти» у каталозі"
+                        <Label Text="Зберігайте вакансії кнопкою «☆ Зберегти» у каталозі, щоб вони з'явилися тут"
                                HorizontalOptions="Center"
                                HorizontalTextAlignment="Center"
                                Style="{StaticResource MutedLabel}" />
