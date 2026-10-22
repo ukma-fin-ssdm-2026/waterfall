@@ -1,4 +1,4 @@
-﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: тести текстів режимів, SessionText, RoleOption, відсутнього токена і блокування входу під час запиту (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using System.Net;
@@ -100,7 +100,7 @@ public class LoginViewModelTests
     }
 
     [Fact]
-    public async Task SwitchMode_ClearsError() 
+    public async Task SwitchMode_ClearsError()
     {
         _vm.IsRegisterMode = true;
         _vm.Email = "a@b.c";

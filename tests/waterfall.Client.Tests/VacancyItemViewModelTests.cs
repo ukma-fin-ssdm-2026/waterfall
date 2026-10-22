@@ -1,4 +1,4 @@
-﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: тести всіх гілок SalaryText/SourceText, CompanyLine, StatusText (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using System.Net;
@@ -26,9 +26,18 @@ public class VacancyItemViewModelTests
         string company = "Genesis", string location = "", string title = "Senior .NET") =>
         new(new VacancyDto
         {
-            Id = Guid.NewGuid(), IsSaved = isSaved, SalaryMin = min, SalaryMax = max, Currency = "USD",
-            Source = source, IsActive = isActive, Company = company, Location = location, Title = title,
-            Description = "Опис", Skills = ["C#", "Kafka"]
+            Id = Guid.NewGuid(),
+            IsSaved = isSaved,
+            SalaryMin = min,
+            SalaryMax = max,
+            Currency = "USD",
+            Source = source,
+            IsActive = isActive,
+            Company = company,
+            Location = location,
+            Title = title,
+            Description = "Опис",
+            Skills = ["C#", "Kafka"]
         }, _gateway, _messenger, _errors.Add);
 
     [Theory]
