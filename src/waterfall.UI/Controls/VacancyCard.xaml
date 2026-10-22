@@ -57,7 +57,7 @@
                 <Label Text="{Binding SourceText}"
                        VerticalOptions="Center"
                        Style="{StaticResource MutedLabel}" />
-                <Button Text="Першоджерело ↗"
+                <Button Text="Посилання ↗"
                         Command="{Binding OpenSourceCommand}"
                         IsVisible="{Binding HasSourceUrl}"
                         Style="{StaticResource LinkButton}"
