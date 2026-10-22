@@ -127,4 +127,79 @@ public class VacancyItemViewModelTests
         Assert.Equal(["Вакансію не знайдено."], _errors);
         Assert.Empty(_sent);
     }
+
+    [Fact]
+    public async Task OpenSource_WithValidUrl_CallsLauncher()
+    {
+        FakeUrlLauncher launcher = new();
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Senior .NET",
+            Description = "Опис",
+            Company = "Tech",
+            SourceUrl = "https://djinni.co/jobs/720001-senior-net-developer/"
+        }, _gateway, _messenger, _errors.Add, launcher);
+
+        await item.OpenSourceCommand.ExecuteAsync(null);
+
+        Assert.Equal(new Uri("https://djinni.co/jobs/720001-senior-net-developer/"), launcher.LaunchedUri);
+        Assert.Empty(_errors);
+    }
+
+    [Fact]
+    public async Task OpenSource_WhenLauncherFails_ReportsError()
+    {
+        FakeUrlLauncher launcher = new() { ReturnResult = false };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Senior .NET",
+            Description = "Опис",
+            Company = "Tech",
+            SourceUrl = "https://djinni.co/jobs/720001-senior-net-developer/"
+        }, _gateway, _messenger, _errors.Add, launcher);
+
+        await item.OpenSourceCommand.ExecuteAsync(null);
+
+        Assert.Equal(["Не вдалося відкрити посилання у браузері."], _errors);
+    }
+
+    [Fact]
+    public async Task OpenSource_WhenNoUrl_DoesNotCallLauncher()
+    {
+        FakeUrlLauncher launcher = new();
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Senior .NET",
+            Description = "Опис",
+            Company = "Tech",
+            SourceUrl = ""
+        }, _gateway, _messenger, _errors.Add, launcher);
+
+        await item.OpenSourceCommand.ExecuteAsync(null);
+
+        Assert.Null(launcher.LaunchedUri);
+        Assert.Empty(_errors);
+    }
+
+    private sealed class FakeUrlLauncher : Waterfall.Client.Interfaces.IUrlLauncher
+    {
+        public Uri? LaunchedUri { get; private set; }
+        public bool ReturnResult { get; set; } = true;
+        public Exception? ExceptionToThrow { get; set; }
+
+        public Task<bool> OpenAsync(Uri uri)
+        {
+            if (ExceptionToThrow is not null)
+            {
+                throw ExceptionToThrow;
+            }
+
+            LaunchedUri = uri;
+            return Task.FromResult(ReturnResult);
+        }
+    }
 }
+
