@@ -12,11 +12,23 @@
             ContentTemplate="{DataTemplate views:CatalogPage}"
             Route="catalog" />
         <ShellContent
+            Title="Рекомендації"
+            ContentTemplate="{DataTemplate views:RecommendationsPage}"
+            Route="recommendations" />
+        <ShellContent
+            Title="ШІ-чат"
+            ContentTemplate="{DataTemplate views:AIConsultantPage}"
+            Route="aiconsultant" />
+        <ShellContent
+            Title="Аналітика"
+            ContentTemplate="{DataTemplate views:AnalyticsPage}"
+            Route="analytics" />
+        <ShellContent
             Title="Обране"
             ContentTemplate="{DataTemplate views:FavoritesPage}"
             Route="favorites" />
         <ShellContent
-            Title="Вхід"
+            Title="Профіль"
             ContentTemplate="{DataTemplate views:LoginPage}"
             Route="login" />
     </TabBar>

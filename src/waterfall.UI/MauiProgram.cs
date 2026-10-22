@@ -36,6 +36,12 @@ public static class MauiProgram
 
         builder.Services.AddTransient<CatalogViewModel>();
         builder.Services.AddTransient<CatalogPage>();
+        builder.Services.AddTransient<RecommendationsViewModel>();
+        builder.Services.AddTransient<RecommendationsPage>();
+        builder.Services.AddTransient<AIConsultantViewModel>();
+        builder.Services.AddTransient<AIConsultantPage>();
+        builder.Services.AddTransient<AnalyticsViewModel>();
+        builder.Services.AddTransient<AnalyticsPage>();
         builder.Services.AddTransient<FavoritesViewModel>();
         builder.Services.AddTransient<FavoritesPage>();
         builder.Services.AddTransient<LoginViewModel>();
