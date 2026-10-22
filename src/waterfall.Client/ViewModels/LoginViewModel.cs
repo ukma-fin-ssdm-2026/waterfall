@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -87,6 +88,60 @@ public partial class LoginViewModel : ObservableObject
     public string SessionText => Session is null
         ? string.Empty
         : $"Сесія дійсна до {Session.ExpiresAt.ToLocalTime().ToString("HH:mm", Uk)}";
+
+    // ===== Особиста статистика користувача (FR-007, US-008) =====
+    [ObservableProperty]
+    public partial int SavedVacanciesCount { get; set; } = 3;
+
+    public ObservableCollection<string> RecentSearches { get; } =
+    [
+        "Python remote junior",
+        ".NET backend Kyiv",
+        "React developer",
+        "DevOps AWS",
+        "QA manual"
+    ];
+
+    public ObservableCollection<string> TopTechnologies { get; } =
+    [
+        "Python (12)",
+        "C# / .NET (9)",
+        "Docker (5)",
+        "SQL (4)"
+    ];
+
+    public bool HasActivity => SavedVacanciesCount > 0 || RecentSearches.Count > 0;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStatusMessage))]
+    public partial string? StatusMessage { get; set; }
+
+    public bool HasStatusMessage => !string.IsNullOrEmpty(StatusMessage);
+
+    // ===== Імпорт та експорт прогресу/статистики (FR-013) =====
+    // # Mock
+    [RelayCommand]
+    private void ExportProgress()
+    {
+        StatusMessage = "Дані профілю (збережені вакансії, історія, статистика) успішно експортовано у profile_backup.json";
+    }
+
+    // # Mock
+    [RelayCommand]
+    private void ImportProgress()
+    {
+        SavedVacanciesCount++;
+        RecentSearches.Insert(0, "Imported search query");
+        StatusMessage = "Дані профілю успішно відновлено з резервного файлу. Статистику оновлено.";
+    }
+
+    // # Mock
+    [RelayCommand]
+    private void ClearRecentSearches()
+    {
+        RecentSearches.Clear();
+        OnPropertyChanged(nameof(HasActivity));
+    }
 
     /// <summary>
     /// Відкриття вкладки: відновити сесію зі збереженого токена (прострочений — видаляється).
