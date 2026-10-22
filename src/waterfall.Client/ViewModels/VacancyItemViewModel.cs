@@ -24,17 +24,25 @@ public partial class VacancyItemViewModel : ObservableObject
     private readonly IHttpGatewayService _gateway;
     private readonly IMessenger _messenger;
     private readonly Action<string> _reportError;
+    private readonly IUrlLauncher _urlLauncher;
 
     /// <param name="vacancy">Дані вакансії з API.</param>
     /// <param name="gateway">Шлюз для збереження / видалення з «Обраного».</param>
     /// <param name="messenger">Куди повідомити про зміну стану (<see cref="VacancySaveChangedMessage"/>).</param>
     /// <param name="reportError">Куди показати помилку перемикача (банер сторінки).</param>
-    public VacancyItemViewModel(VacancyDto vacancy, IHttpGatewayService gateway, IMessenger messenger, Action<string> reportError)
+    /// <param name="urlLauncher">Сервіс запуску посилань у браузері.</param>
+    public VacancyItemViewModel(
+        VacancyDto vacancy,
+        IHttpGatewayService gateway,
+        IMessenger messenger,
+        Action<string> reportError,
+        IUrlLauncher? urlLauncher = null)
     {
         Vacancy = vacancy;
         _gateway = gateway;
         _messenger = messenger;
         _reportError = reportError;
+        _urlLauncher = urlLauncher ?? new Waterfall.Client.Services.DefaultUrlLauncher();
         IsSaved = vacancy.IsSaved;
 
         List<string> skills = CleanSkills(vacancy.Skills);
@@ -100,7 +108,6 @@ public partial class VacancyItemViewModel : ObservableObject
     [RelayCommand]
     private void ToggleDetails() => IsDetailsExpanded = !IsDetailsExpanded;
 
-    // # Mock
     [RelayCommand]
     private async Task OpenSourceAsync()
     {
@@ -108,8 +115,11 @@ public partial class VacancyItemViewModel : ObservableObject
         {
             try
             {
-                // Використовує клієнтський Launcher якщо доступний або відкриває у браузері
-                await Task.Run(() => { });
+                bool success = await _urlLauncher.OpenAsync(uri);
+                if (!success)
+                {
+                    _reportError("Не вдалося відкрити посилання у браузері.");
+                }
             }
             catch (Exception ex)
             {
