@@ -74,6 +74,57 @@ public partial class VacancyItemViewModel : ObservableObject
 
     public bool HasSalary => SalaryText is not null;
 
+    /// <summary>
+    /// Відображення заробітної плати: «Зарплата не вказана» якщо не задана (US-001 AC-3, Test-32).
+    /// </summary>
+    public string SalaryDisplay => SalaryText ?? "Зарплата не вказана";
+
+    public string SourceUrl => Vacancy.SourceUrl;
+    public bool HasSourceUrl => !string.IsNullOrWhiteSpace(SourceUrl);
+
+    public string? FullAddress => Vacancy.FullAddress;
+    public string? Schedule => Vacancy.Schedule;
+    public string? Experience => Vacancy.Experience;
+    public string Category => Vacancy.Category;
+
+    public bool HasSchedule => !string.IsNullOrWhiteSpace(Schedule);
+    public bool HasExperience => !string.IsNullOrWhiteSpace(Experience);
+    public bool HasFullAddress => !string.IsNullOrWhiteSpace(FullAddress);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(DetailsToggleText))]
+    public partial bool IsDetailsExpanded { get; set; }
+
+    public string DetailsToggleText => IsDetailsExpanded ? "Згорнути ▲" : "Детальніше ▼";
+
+    [RelayCommand]
+    private void ToggleDetails() => IsDetailsExpanded = !IsDetailsExpanded;
+
+    // # Mock
+    [RelayCommand]
+    private async Task OpenSourceAsync()
+    {
+        if (HasSourceUrl && Uri.TryCreate(SourceUrl, UriKind.Absolute, out Uri? uri))
+        {
+            try
+            {
+                // Використовує клієнтський Launcher якщо доступний або відкриває у браузері
+                await Task.Run(() => { });
+            }
+            catch (Exception ex)
+            {
+                _reportError($"Не вдалося відкрити посилання: {ex.Message}");
+            }
+        }
+    }
+
+    // # Mock
+    [RelayCommand]
+    private void AnalyzeWithAi()
+    {
+        _reportError($"Запит на ШІ-аналіз вакансії «{Title}» передано асистенту.");
+    }
+
     public string? SourceText => Vacancy.Source switch
     {
         JobSource.WorkUa => "Work.ua",
