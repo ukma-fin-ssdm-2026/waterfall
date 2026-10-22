@@ -30,6 +30,7 @@ public static class MauiProgram
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton(SecureStorage.Default);
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.IUrlLauncher, MauiUrlLauncher>();
         // Синхронізація стану «Обраного» між вкладками (VacancySaveChangedMessage); слабкі посилання — без витоків сторінок.
         builder.Services.AddSingleton<IMessenger>(WeakReferenceMessenger.Default);
         builder.Services.AddWaterfallClient<SecureStorageTokenStore>(new Uri(ApiBaseUrl));

@@ -32,12 +32,14 @@ public partial class CatalogViewModel : ObservableObject
     private string? _loadedQuery;
     private int _page;
     private bool _hasNextPage;
+    private readonly IUrlLauncher? _urlLauncher;
 
-    public CatalogViewModel(IHttpGatewayService gateway, IMessenger messenger, TimeProvider time)
+    public CatalogViewModel(IHttpGatewayService gateway, IMessenger messenger, TimeProvider time, IUrlLauncher? urlLauncher = null)
     {
         _gateway = gateway;
         _messenger = messenger;
         _time = time;
+        _urlLauncher = urlLauncher;
 
         // Зміна «Обраного» з іншої вкладки: оновлюємо картку на місці, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
@@ -325,7 +327,7 @@ public partial class CatalogViewModel : ObservableObject
     {
         foreach (VacancyDto vacancy in page.Items)
         {
-            Vacancies.Add(new VacancyItemViewModel(vacancy, _gateway, _messenger, message => ErrorMessage = message));
+            Vacancies.Add(new VacancyItemViewModel(vacancy, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher));
         }
 
         _page = page.Page;
