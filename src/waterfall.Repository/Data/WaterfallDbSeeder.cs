@@ -14,10 +14,11 @@ public static class WaterfallDbSeeder
     public static async Task SeedAsync(WaterfallDbContext context)
     {
         await context.Database.EnsureCreatedAsync();
+        await EnsureTablesCreatedAsync(context);
 
         if (!await context.Vacancies.AnyAsync())
         {
-            List<VacancyDB> vacancies = new List<VacancyDB>
+            var vacancies = new List<VacancyDB>
             {
                 new VacancyDB
                 {
@@ -134,10 +135,31 @@ public static class WaterfallDbSeeder
             await context.Vacancies.AddRangeAsync(vacancies);
             await context.SaveChangesAsync();
         }
+        else
+        {
+            List<VacancyDB> missingAddresses = await context.Vacancies.Where(v => v.FullAddress == null || v.FullAddress == "").ToListAsync();
+            if (missingAddresses.Count > 0)
+            {
+                foreach (VacancyDB v in missingAddresses)
+                {
+                    string loc = (v.Location ?? string.Empty).ToLowerInvariant();
+                    v.FullAddress = loc.Contains("lviv") || loc.Contains("львів")
+                        ? "Львів, вул. Садова, 2а"
+                        : (loc.Contains("dnipro") || loc.Contains("дніпро")
+                            ? "Дніпро, проспект Дмитра Яворницького, 101"
+                            : (loc.Contains("odesa") || loc.Contains("одеса")
+                                ? "Одеса, вул. Дерибасівська, 1"
+                                : (loc.Contains("kharkiv") || loc.Contains("харків")
+                                    ? "Харків, вул. Сумська, 25"
+                                    : "Київ, вул. Мечникова, 2, БЦ Парус")));
+                }
+                await context.SaveChangesAsync();
+            }
+        }
 
         if (!await context.SavedVacancies.AnyAsync())
         {
-            List<SavedVacancyDB> sampleBookmarks = new List<SavedVacancyDB>
+            var sampleBookmarks = new List<SavedVacancyDB>
             {
                 new SavedVacancyDB
                 {
@@ -167,7 +189,7 @@ public static class WaterfallDbSeeder
         if (context.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite"
             && !await context.Users.AnyAsync())
         {
-            List<UserDB> devUsers = new List<UserDB>
+            var devUsers = new List<UserDB>
             {
                 new UserDB
                 {
@@ -200,6 +222,64 @@ public static class WaterfallDbSeeder
 
             await context.Users.AddRangeAsync(devUsers);
             await context.SaveChangesAsync();
+        }
+
+        try
+        {
+            if (!await context.UserPersonalData.AnyAsync())
+            {
+                await context.UserPersonalData.AddAsync(new UserPersonalDataDB
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
+                    Address = "вул. Хрещатик, 22, Київ",
+                    UpdatedAt = DateTimeOffset.UtcNow
+                });
+                await context.SaveChangesAsync();
+            }
+        }
+        catch
+        {
+            await EnsureTablesCreatedAsync(context);
+            if (!await context.UserPersonalData.AnyAsync())
+            {
+                await context.UserPersonalData.AddAsync(new UserPersonalDataDB
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
+                    Address = "вул. Хрещатик, 22, Київ",
+                    UpdatedAt = DateTimeOffset.UtcNow
+                });
+                await context.SaveChangesAsync();
+            }
+        }
+    }
+
+    private static async Task EnsureTablesCreatedAsync(WaterfallDbContext context)
+    {
+        if (context.Database.IsSqlite())
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                CREATE TABLE IF NOT EXISTS ""UserPersonalData"" (
+                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_UserPersonalData"" PRIMARY KEY,
+                    ""UserId"" TEXT NOT NULL,
+                    ""Address"" TEXT NULL,
+                    ""UpdatedAt"" INTEGER NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_UserPersonalData_UserId"" ON ""UserPersonalData"" (""UserId"");
+            ");
+        }
+        else if (context.Database.IsSqlServer())
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='UserPersonalData' and xtype='U')
+                CREATE TABLE [UserPersonalData] (
+                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                    [UserId] uniqueidentifier NOT NULL,
+                    [Address] nvarchar(300) NULL,
+                    [UpdatedAt] datetimeoffset NOT NULL
+                );
+            ");
         }
     }
 }
