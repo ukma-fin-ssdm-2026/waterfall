@@ -25,6 +25,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IVacancyService, VacancyService>();
         services.AddScoped<ISavedVacancyService, SavedVacancyService>();
         services.AddScoped<IVacancyIngestionService, VacancyIngestionService>();
+        services.AddScoped<IUserProfileService, UserProfileService>();
 
         return services;
     }
