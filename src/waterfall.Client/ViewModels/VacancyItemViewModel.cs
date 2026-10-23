@@ -115,7 +115,7 @@ public partial class VacancyItemViewModel : ObservableObject
     /// </summary>
     public string AddressDisplay => !string.IsNullOrWhiteSpace(FullAddress)
         ? FullAddress
-        : (!string.IsNullOrWhiteSpace(Vacancy.Location) ? Vacancy.Location : "Локація не вказана");
+        : (!string.IsNullOrWhiteSpace(Vacancy.Location) ? $"{Vacancy.Location}, не вказано точну адресу" : "Не вказано точну адресу");
 
     public bool HasAddress => !string.IsNullOrWhiteSpace(FullAddress) || !string.IsNullOrWhiteSpace(Vacancy.Location);
 
@@ -132,7 +132,10 @@ public partial class VacancyItemViewModel : ObservableObject
     {
         try
         {
-            if (_distanceService is null || !HasAddress || string.IsNullOrWhiteSpace(_distanceService.UserAddress))
+            if (_distanceService is null ||
+                !HasAddress ||
+                string.IsNullOrWhiteSpace(_distanceService.UserAddress) ||
+                FullAddress?.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase) == true)
             {
                 DistanceText = null;
                 return;
