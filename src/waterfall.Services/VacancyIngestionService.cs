@@ -101,6 +101,10 @@ public class VacancyIngestionService : IVacancyIngestionService
 
         (decimal? salaryMin, decimal? salaryMax, string currency) = ParseSalary(raw.Salary);
 
+        string? fullAddress = !string.IsNullOrWhiteSpace(raw.FullAddress)
+            ? Cut(CleanText(raw.FullAddress), 300)
+            : ResolveFullAddress(raw.Location);
+
         VacancyDB vacancy = new()
         {
             Id = Guid.NewGuid(),
@@ -112,6 +116,7 @@ public class VacancyIngestionService : IVacancyIngestionService
             Description = description,
             Category = Cut(OrDefault(CleanText(raw.Category), "Інше"), 100),
             Location = Cut(OrDefault(CleanText(raw.Location), "Не вказано"), 200),
+            FullAddress = fullAddress,
             Schedule = NullIfEmpty(Cut(CleanText(raw.Employment), 100)),
             Experience = NullIfEmpty(Cut(CleanText(raw.Experience), 100)),
             SalaryMin = salaryMin,
@@ -278,4 +283,42 @@ public class VacancyIngestionService : IVacancyIngestionService
 
     // Обрізаємо до довжини колонки в БД (MaxLength у VacancyDB)
     private static string Cut(string value, int maxLength) => value.Length <= maxLength ? value : value[..maxLength];
+
+    private static string? ResolveFullAddress(string? location)
+    {
+        string raw = (location ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return "Не вказано точну адресу";
+        }
+
+        string loc = raw.ToLowerInvariant();
+        if (loc.Contains("lviv") || loc.Contains("львів"))
+        {
+            return "Львів, не вказано точну адресу";
+        }
+        if (loc.Contains("dnipro") || loc.Contains("дніпро"))
+        {
+            return "Дніпро, не вказано точну адресу";
+        }
+        if (loc.Contains("odesa") || loc.Contains("одеса"))
+        {
+            return "Одеса, не вказано точну адресу";
+        }
+        if (loc.Contains("kharkiv") || loc.Contains("харків"))
+        {
+            return "Харків, не вказано точну адресу";
+        }
+        if (loc.Contains("kyiv") || loc.Contains("київ"))
+        {
+            return "Київ, не вказано точну адресу";
+        }
+        if (loc.Contains("remote") || loc.Contains("віддалено"))
+        {
+            return "Віддалено, не вказано точну адресу";
+        }
+
+        string firstPart = raw.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)[0];
+        return $"{firstPart}, не вказано точну адресу";
+    }
 }
