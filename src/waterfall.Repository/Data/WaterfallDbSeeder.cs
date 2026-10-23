@@ -137,21 +137,19 @@ public static class WaterfallDbSeeder
         }
         else
         {
-            List<VacancyDB> missingAddresses = await context.Vacancies.Where(v => v.FullAddress == null || v.FullAddress == "").ToListAsync();
+            List<VacancyDB> missingAddresses = await context.Vacancies.Where(v => v.FullAddress == null || v.FullAddress == "" || v.FullAddress.Contains("(Головний офіс)")).ToListAsync();
             if (missingAddresses.Count > 0)
             {
                 foreach (VacancyDB v in missingAddresses)
                 {
                     string loc = (v.Location ?? string.Empty).ToLowerInvariant();
-                    v.FullAddress = loc.Contains("lviv") || loc.Contains("львів")
-                        ? "Львів, вул. Садова, 2а"
-                        : (loc.Contains("dnipro") || loc.Contains("дніпро")
-                            ? "Дніпро, проспект Дмитра Яворницького, 101"
-                            : (loc.Contains("odesa") || loc.Contains("одеса")
-                                ? "Одеса, вул. Дерибасівська, 1"
-                                : (loc.Contains("kharkiv") || loc.Contains("харків")
-                                    ? "Харків, вул. Сумська, 25"
-                                    : "Київ, вул. Мечникова, 2, БЦ Парус")));
+                    string city = loc.Contains("lviv") || loc.Contains("львів") ? "Львів"
+                        : (loc.Contains("dnipro") || loc.Contains("дніпро") ? "Дніпро"
+                        : (loc.Contains("odesa") || loc.Contains("одеса") ? "Одеса"
+                        : (loc.Contains("kharkiv") || loc.Contains("харків") ? "Харків"
+                        : (loc.Contains("kyiv") || loc.Contains("київ") ? "Київ"
+                        : (loc.Contains("remote") || loc.Contains("віддалено") ? "Віддалено" : "Локація")))));
+                    v.FullAddress = $"{city}, не вказано точну адресу";
                 }
                 await context.SaveChangesAsync();
             }
