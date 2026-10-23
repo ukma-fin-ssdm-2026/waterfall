@@ -197,4 +197,21 @@ internal sealed class FakeGateway : IHttpGatewayService
             return Task.FromException<AuthResponse>(ex);
         }
     }
+
+    public string? ProfileAddress { get; set; } = "вул. Хрещатик, 22, Київ";
+
+    public List<string> SavedProfileAddresses { get; } = [];
+
+    public Task<string?> GetProfileAddressAsync(CancellationToken ct = default) =>
+        Task.FromResult(ProfileAddress);
+
+    public Task SaveProfileAddressAsync(string address, CancellationToken ct = default)
+    {
+        ProfileAddress = address;
+        SavedProfileAddresses.Add(address);
+        return Task.CompletedTask;
+    }
+
+    public Task<Waterfall.Client.Models.Geo.CoordinatesDto?> GetCoordinatesAsync(string address, CancellationToken ct = default) =>
+        Task.FromResult<Waterfall.Client.Models.Geo.CoordinatesDto?>(null);
 }
