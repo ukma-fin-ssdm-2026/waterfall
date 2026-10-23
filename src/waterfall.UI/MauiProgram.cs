@@ -31,7 +31,10 @@ public static class MauiProgram
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton(SecureStorage.Default);
         builder.Services.AddSingleton<Waterfall.Client.Interfaces.IUrlLauncher, MauiUrlLauncher>();
-        // Синхронізація стану «Обраного» між вкладками (VacancySaveChangedMessage); слабкі посилання — без витоків сторінок.
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.IDistanceCalculatorService>(sp =>
+            new Waterfall.Client.Services.GeoDistanceService(sp.GetService<Waterfall.Client.Interfaces.IHttpGatewayService>()));
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.IAddressAutocompleteService, Waterfall.Client.Services.PhotonAddressAutocompleteService>();
         builder.Services.AddSingleton<IMessenger>(WeakReferenceMessenger.Default);
         builder.Services.AddWaterfallClient<SecureStorageTokenStore>(new Uri(ApiBaseUrl));
 

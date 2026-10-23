@@ -128,14 +128,14 @@
                     </VerticalStackLayout>
                 </Border>
 
-                <!-- Моє місцезнаходження (Google Maps розрахунок) -->
+                <!-- Моє місцезнаходження (Автоматичний розрахунок відстані) -->
                 <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
                     <VerticalStackLayout Spacing="10">
                         <Label Text="📍 Моє місцезнаходження"
                                FontFamily="OpenSansSemibold"
                                FontSize="16"
                                TextColor="{StaticResource White}" />
-                        <Label Text="Вкажіть вашу домашню адресу для автоматичного розрахунку відстані до офісів вакансій через Google Maps."
+                        <Label Text="Вкажіть вашу домашню адресу для автоматичного розрахунку відстані до офісів вакансій."
                                Style="{StaticResource MutedLabel}"
                                FontSize="12" />
                         <Border StrokeShape="RoundRectangle 10"

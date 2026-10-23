@@ -32,7 +32,7 @@ public partial class VacancyItemViewModel : ObservableObject
     /// <param name="messenger">Куди повідомити про зміну стану (<see cref="VacancySaveChangedMessage"/>).</param>
     /// <param name="reportError">Куди показати помилку перемикача (банер сторінки).</param>
     /// <param name="urlLauncher">Сервіс запуску посилань у браузері.</param>
-    /// <param name="distanceService">Сервіс розрахунку відстані за Google Maps.</param>
+    /// <param name="distanceService">Сервіс розрахунку реальної відстані до офісу вакансії.</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
