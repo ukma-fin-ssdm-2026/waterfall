@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
+using Waterfall.Client.Models.Profile;
 using Waterfall.Client.Models.SavedVacancies;
 using Waterfall.Client.Models.Vacancies;
 
@@ -25,4 +26,5 @@ namespace Waterfall.Client.Services;
 [JsonSerializable(typeof(RegisterRequest))]
 [JsonSerializable(typeof(AuthResponse))]
 [JsonSerializable(typeof(ApiErrorResponse))]
+[JsonSerializable(typeof(UserAddressDto))]
 internal sealed partial class ClientJsonContext : JsonSerializerContext;
