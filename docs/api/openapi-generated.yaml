@@ -83,6 +83,93 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/geo/coordinates:
+    get:
+      tags:
+        - Geo
+      summary: Отримати географічні координати адреси.
+      description: Повертає широту й довготу з таблиці GeoLocationCache бази даних (або оновлює кеш із публічних геоданих).
+      operationId: GetCoordinates
+      parameters:
+        - name: address
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CoordinatesDto'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/profile/address:
+    get:
+      tags:
+        - Profile
+      summary: Отримати збережену адресу користувача для розрахунку відстаней.
+      description: Повертає збережену домашню/поточну адресу для розрахунку відстані до офісів.
+      operationId: GetProfileAddress
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAddressDto'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+    put:
+      tags:
+        - Profile
+      summary: Зберегти або оновити адресу користувача в базі даних.
+      description: Зберігає або оновлює адресу в таблиці UserPersonalData.
+      operationId: SaveProfileAddress
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserAddressDto'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UserAddressDto'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UserAddressDto'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserAddressDto'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/saved-vacancies:
     get:
       tags:
@@ -473,6 +560,17 @@ components:
           $ref: '#/components/schemas/UserRole'
       additionalProperties: false
       description: 'Відповідь автентифікації: access-JWT (15 хв, THR-02) та ідентифікатор користувача.'
+    CoordinatesDto:
+      type: object
+      properties:
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+      additionalProperties: false
+      description: DTO географічних координат (широта й довгота).
     CreateVacancyRequest:
       required:
         - category
@@ -794,6 +892,15 @@ components:
           nullable: true
       additionalProperties: false
       description: Модель запиту на оновлення існуючої вакансії (PUT/PATCH).
+    UserAddressDto:
+      type: object
+      properties:
+        address:
+          maxLength: 300
+          type: string
+          nullable: true
+      additionalProperties: false
+      description: DTO для передачі адреси користувача.
     UserRole:
       enum:
         - JobSeeker
@@ -968,6 +1075,10 @@ security:
 tags:
   - name: Auth
     description: Реєстрація та вхід користувачів платформи Waterfall (JWT)
+  - name: Geo
+    description: Геокодування та постійний геокеш адрес
+  - name: Profile
+    description: Керування персональними даними та локаційними налаштуваннями профілю
   - name: SavedVacancies
     description: Керування вподобаними («лайкнутими») вакансіями для рекомендацій та статистики
   - name: Vacancies
