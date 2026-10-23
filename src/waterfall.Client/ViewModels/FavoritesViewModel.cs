@@ -19,13 +19,19 @@ public partial class FavoritesViewModel : ObservableObject
     private readonly IHttpGatewayService _gateway;
     private readonly IMessenger _messenger;
     private readonly IUrlLauncher? _urlLauncher;
+    private readonly IDistanceCalculatorService? _distanceService;
     private CancellationTokenSource? _loadCts;
 
-    public FavoritesViewModel(IHttpGatewayService gateway, IMessenger messenger, IUrlLauncher? urlLauncher = null)
+    public FavoritesViewModel(
+        IHttpGatewayService gateway,
+        IMessenger messenger,
+        IUrlLauncher? urlLauncher = null,
+        IDistanceCalculatorService? distanceService = null)
     {
         _gateway = gateway;
         _messenger = messenger;
         _urlLauncher = urlLauncher;
+        _distanceService = distanceService;
 
         messenger.Register<FavoritesViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
         {
@@ -111,7 +117,7 @@ public partial class FavoritesViewModel : ObservableObject
             {
                 // Усе в цьому списку збережене за визначенням, незалежно від прапорця у вкладеній вакансії.
                 Vacancies.Add(new VacancyItemViewModel(
-                    entry.Vacancy! with { IsSaved = true }, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher));
+                    entry.Vacancy! with { IsSaved = true }, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher, _distanceService));
             }
 
             HasLoaded = true;

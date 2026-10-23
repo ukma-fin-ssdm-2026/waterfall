@@ -17,11 +17,19 @@ public partial class RecommendationsViewModel : ObservableObject
 {
     private readonly IHttpGatewayService _gateway;
     private readonly IMessenger _messenger;
+    private readonly IUrlLauncher? _urlLauncher;
+    private readonly IDistanceCalculatorService? _distanceService;
 
-    public RecommendationsViewModel(IHttpGatewayService gateway, IMessenger messenger)
+    public RecommendationsViewModel(
+        IHttpGatewayService gateway,
+        IMessenger messenger,
+        IUrlLauncher? urlLauncher = null,
+        IDistanceCalculatorService? distanceService = null)
     {
         _gateway = gateway;
         _messenger = messenger;
+        _urlLauncher = urlLauncher;
+        _distanceService = distanceService;
 
         _messenger.Register<RecommendationsViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
         {
@@ -76,7 +84,7 @@ public partial class RecommendationsViewModel : ObservableObject
             Recommendations.Clear();
             foreach (VacancyDto vacancy in page.Items.Where(v => !v.IsSaved))
             {
-                Recommendations.Add(new VacancyItemViewModel(vacancy, _gateway, _messenger, msg => ErrorMessage = msg));
+                Recommendations.Add(new VacancyItemViewModel(vacancy, _gateway, _messenger, msg => ErrorMessage = msg, _urlLauncher, _distanceService));
             }
             HasLoaded = true;
         }

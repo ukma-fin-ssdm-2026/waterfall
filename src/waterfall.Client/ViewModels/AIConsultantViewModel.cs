@@ -42,11 +42,19 @@ public partial class AIConsultantViewModel : ObservableObject
 {
     private readonly IHttpGatewayService _gateway;
     private readonly IMessenger _messenger;
+    private readonly IUrlLauncher? _urlLauncher;
+    private readonly IDistanceCalculatorService? _distanceService;
 
-    public AIConsultantViewModel(IHttpGatewayService gateway, IMessenger messenger)
+    public AIConsultantViewModel(
+        IHttpGatewayService gateway,
+        IMessenger messenger,
+        IUrlLauncher? urlLauncher = null,
+        IDistanceCalculatorService? distanceService = null)
     {
         _gateway = gateway;
         _messenger = messenger;
+        _urlLauncher = urlLauncher;
+        _distanceService = distanceService;
 
         // Початкове привітальне повідомлення
         Messages.Add(new AIChatMessageViewModel
@@ -116,7 +124,7 @@ public partial class AIConsultantViewModel : ObservableObject
 
             foreach (var item in page.Items)
             {
-                botResponse.MatchedVacancies.Add(new VacancyItemViewModel(item, _gateway, _messenger, _ => { }));
+                botResponse.MatchedVacancies.Add(new VacancyItemViewModel(item, _gateway, _messenger, _ => { }, _urlLauncher, _distanceService));
             }
 
             Messages.Add(botResponse);
