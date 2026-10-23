@@ -25,30 +25,41 @@ public partial class VacancyItemViewModel : ObservableObject
     private readonly IMessenger _messenger;
     private readonly Action<string> _reportError;
     private readonly IUrlLauncher _urlLauncher;
+    private readonly IDistanceCalculatorService? _distanceService;
 
     /// <param name="vacancy">Дані вакансії з API.</param>
     /// <param name="gateway">Шлюз для збереження / видалення з «Обраного».</param>
     /// <param name="messenger">Куди повідомити про зміну стану (<see cref="VacancySaveChangedMessage"/>).</param>
     /// <param name="reportError">Куди показати помилку перемикача (банер сторінки).</param>
     /// <param name="urlLauncher">Сервіс запуску посилань у браузері.</param>
+    /// <param name="distanceService">Сервіс розрахунку відстані за Google Maps.</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
         IMessenger messenger,
         Action<string> reportError,
-        IUrlLauncher? urlLauncher = null)
+        IUrlLauncher? urlLauncher = null,
+        IDistanceCalculatorService? distanceService = null)
     {
         Vacancy = vacancy;
         _gateway = gateway;
         _messenger = messenger;
         _reportError = reportError;
         _urlLauncher = urlLauncher ?? new Waterfall.Client.Services.DefaultUrlLauncher();
+        _distanceService = distanceService;
         IsSaved = vacancy.IsSaved;
 
         List<string> skills = CleanSkills(vacancy.Skills);
         VisibleSkills = skills.Take(MaxVisibleSkills).ToList();
         int hidden = skills.Count - VisibleSkills.Count;
         MoreSkillsText = hidden > 0 ? $"+{hidden}" : null;
+
+        messenger.Register<VacancyItemViewModel, UserAddressChangedMessage>(this, static (vm, message) =>
+        {
+            _ = vm.RefreshDistanceAsync();
+        });
+
+        _ = RefreshDistanceAsync();
     }
 
     public VacancyDto Vacancy { get; }
@@ -98,6 +109,53 @@ public partial class VacancyItemViewModel : ObservableObject
     public bool HasSchedule => !string.IsNullOrWhiteSpace(Schedule);
     public bool HasExperience => !string.IsNullOrWhiteSpace(Experience);
     public bool HasFullAddress => !string.IsNullOrWhiteSpace(FullAddress);
+
+    /// <summary>
+    /// Відображення повної адреси або локації вакансії під блоком компанії.
+    /// </summary>
+    public string AddressDisplay => !string.IsNullOrWhiteSpace(FullAddress)
+        ? FullAddress
+        : (!string.IsNullOrWhiteSpace(Vacancy.Location) ? Vacancy.Location : "Локація не вказана");
+
+    public bool HasAddress => !string.IsNullOrWhiteSpace(FullAddress) || !string.IsNullOrWhiteSpace(Vacancy.Location);
+
+    /// <summary>
+    /// Відстань від поточної адреси користувача до офісу (наприклад, «1.5 км від вас»).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasDistanceText))]
+    public partial string? DistanceText { get; set; }
+
+    public bool HasDistanceText => !string.IsNullOrWhiteSpace(DistanceText);
+
+    public async Task RefreshDistanceAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            if (_distanceService is null || !HasAddress || string.IsNullOrWhiteSpace(_distanceService.UserAddress))
+            {
+                DistanceText = null;
+                return;
+            }
+
+            string target = !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : Vacancy.Location;
+            double? km = await _distanceService.CalculateDistanceKmAsync(target, ct);
+            if (km.HasValue)
+            {
+                DistanceText = km.Value < 1.0
+                    ? $"{Math.Round(km.Value * 1000)} м від вас"
+                    : $"{km.Value.ToString("0.0", CultureInfo.InvariantCulture)} км від вас";
+            }
+            else
+            {
+                DistanceText = null;
+            }
+        }
+        catch
+        {
+            DistanceText = null;
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DetailsToggleText))]

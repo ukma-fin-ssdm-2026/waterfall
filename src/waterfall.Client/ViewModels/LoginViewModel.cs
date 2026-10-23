@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Auth;
 
@@ -27,13 +28,33 @@ public partial class LoginViewModel : ObservableObject
     private readonly IHttpGatewayService _gateway;
     private readonly IAuthTokenStore _tokens;
     private readonly TimeProvider _time;
+    private readonly IDistanceCalculatorService? _distanceService;
+    private readonly IMessenger? _messenger;
+    private readonly IAddressAutocompleteService? _autocompleteService;
+    private CancellationTokenSource? _autocompleteCts;
+    private bool _isSelectingSuggestion;
 
-    public LoginViewModel(IHttpGatewayService gateway, IAuthTokenStore tokens, TimeProvider time)
+    public LoginViewModel(
+        IHttpGatewayService gateway,
+        IAuthTokenStore tokens,
+        TimeProvider time,
+        IDistanceCalculatorService? distanceService = null,
+        IMessenger? messenger = null,
+        IAddressAutocompleteService? autocompleteService = null)
     {
         _gateway = gateway;
         _tokens = tokens;
         _time = time;
+        _distanceService = distanceService;
+        _messenger = messenger;
+        _autocompleteService = autocompleteService;
         SelectedRole = Roles[0];
+        // Адреса не відображається і не підтягується, поки користувач не увійшов у систему (завантажується з БД після входу)
+        UserAddress = string.Empty;
+        if (_distanceService is not null)
+        {
+            _distanceService.UserAddress = null;
+        }
     }
 
     /// <summary>
@@ -118,13 +139,144 @@ public partial class LoginViewModel : ObservableObject
 
     public bool HasStatusMessage => !string.IsNullOrEmpty(StatusMessage);
 
+    [ObservableProperty]
+    public partial string UserAddress { get; set; } = string.Empty;
+
+    public ObservableCollection<string> AddressSuggestions { get; } = new();
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSuggestions))]
+    public partial bool IsLoadingSuggestions { get; set; }
+
+    public bool HasSuggestions => AddressSuggestions.Count > 0;
+
+    partial void OnUserAddressChanged(string value)
+    {
+        if (_isSelectingSuggestion)
+        {
+            return;
+        }
+
+        _ = TriggerAutocompleteDebouncedAsync(value);
+    }
+
+    private async Task TriggerAutocompleteDebouncedAsync(string query)
+    {
+        _autocompleteCts?.Cancel();
+        _autocompleteCts?.Dispose();
+        _autocompleteCts = new CancellationTokenSource();
+        CancellationToken ct = _autocompleteCts.Token;
+
+        if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 3 || _autocompleteService is null)
+        {
+            AddressSuggestions.Clear();
+            OnPropertyChanged(nameof(HasSuggestions));
+            return;
+        }
+
+        try
+        {
+            await Task.Delay(350, ct);
+            IsLoadingSuggestions = true;
+            IReadOnlyList<string> suggestions = await _autocompleteService.GetSuggestionsAsync(query, ct);
+
+            AddressSuggestions.Clear();
+            foreach (string s in suggestions)
+            {
+                AddressSuggestions.Add(s);
+            }
+            OnPropertyChanged(nameof(HasSuggestions));
+        }
+        catch (OperationCanceledException)
+        {
+            // Скасовано новим вводом
+        }
+        catch
+        {
+            AddressSuggestions.Clear();
+            OnPropertyChanged(nameof(HasSuggestions));
+        }
+        finally
+        {
+            IsLoadingSuggestions = false;
+        }
+    }
+
+    [RelayCommand]
+    public void SelectAddressSuggestion(string suggestion)
+    {
+        _isSelectingSuggestion = true;
+        UserAddress = suggestion;
+        AddressSuggestions.Clear();
+        OnPropertyChanged(nameof(HasSuggestions));
+        _isSelectingSuggestion = false;
+    }
+
+    [RelayCommand]
+    public void CloseSuggestions()
+    {
+        AddressSuggestions.Clear();
+        OnPropertyChanged(nameof(HasSuggestions));
+    }
+
+    [RelayCommand]
+    private async Task SaveAddressAsync()
+    {
+        if (_distanceService is not null)
+        {
+            _distanceService.UserAddress = UserAddress;
+        }
+
+        if (IsLoggedIn)
+        {
+            try
+            {
+                await _gateway.SaveProfileAddressAsync(UserAddress);
+            }
+            catch
+            {
+                // Офлайн
+            }
+        }
+
+        _messenger?.Send(new UserAddressChangedMessage(UserAddress));
+        StatusMessage = "Адресу збережено! Відстань до вакансій оновлено.";
+    }
+
+    public async Task LoadProfileAddressAsync()
+    {
+        try
+        {
+            string? address = await _gateway.GetProfileAddressAsync();
+            if (!string.IsNullOrWhiteSpace(address))
+            {
+                UserAddress = address;
+                if (_distanceService is not null)
+                {
+                    _distanceService.UserAddress = address;
+                }
+                _messenger?.Send(new UserAddressChangedMessage(address));
+            }
+            else
+            {
+                UserAddress = string.Empty;
+                if (_distanceService is not null)
+                {
+                    _distanceService.UserAddress = null;
+                }
+                _messenger?.Send(new UserAddressChangedMessage(null));
+            }
+        }
+        catch
+        {
+            // Офлайн
+        }
+    }
+
     // ===== Імпорт та експорт прогресу/статистики (FR-013) =====
     // # Mock
     [RelayCommand]
-    private void ExportProgress()
-    {
-        StatusMessage = "Дані профілю (збережені вакансії, історія, статистика) успішно експортовано у profile_backup.json";
-    }
+    private void ExportProgress() => StatusMessage = "Дані профілю (збережені вакансії, історія, статистика) успішно експортовано у profile_backup.json";
 
     // # Mock
     [RelayCommand]
@@ -160,10 +312,17 @@ public partial class LoginViewModel : ObservableObject
             }
 
             Session = null;
+            UserAddress = string.Empty;
+            if (_distanceService is not null)
+            {
+                _distanceService.UserAddress = null;
+            }
+            _messenger?.Send(new UserAddressChangedMessage(null));
             return;
         }
 
         Session = session;
+        await LoadProfileAddressAsync();
     }
 
     [RelayCommand]
@@ -192,6 +351,7 @@ public partial class LoginViewModel : ObservableObject
 
             Session = AuthSession.FromResponse(response);
             Password = string.Empty;
+            await LoadProfileAddressAsync();
         }
         catch (ApiException ex)
         {
@@ -215,6 +375,12 @@ public partial class LoginViewModel : ObservableObject
         Session = null;
         Password = string.Empty;
         ErrorMessage = null;
+        UserAddress = string.Empty;
+        if (_distanceService is not null)
+        {
+            _distanceService.UserAddress = null;
+        }
+        _messenger?.Send(new UserAddressChangedMessage(null));
     }
 
     /// <returns>Повідомлення про першу порушену вимогу або null, якщо все гаразд.</returns>
