@@ -22,6 +22,7 @@ public sealed record RawVacancy
     public string? Company { get; init; }
     public string? Salary { get; init; }
     public string? Location { get; init; }
+    public string? FullAddress { get; init; }
     public string? Posted { get; init; }
     public string? Experience { get; init; }
     public string? Employment { get; init; }

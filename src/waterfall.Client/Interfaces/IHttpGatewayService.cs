@@ -43,4 +43,14 @@ public interface IHttpGatewayService
     /// Вихід: видаляє збережений токен (access-JWT без серверного відкликання).
     /// </summary>
     Task LogoutAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Отримати збережену в базі адресу поточного користувача.
+    /// </summary>
+    Task<string?> GetProfileAddressAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Зберегти адресу поточного користувача у базі даних (UserPersonalData).
+    /// </summary>
+    Task SaveProfileAddressAsync(string address, CancellationToken ct = default);
 }
