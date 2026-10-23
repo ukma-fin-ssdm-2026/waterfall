@@ -80,4 +80,107 @@ public class GeoDistanceServiceTests
         // Реальна відстань через міст Патона: ~9.2 - 9.5 км
         Assert.InRange(result.Value, 8.5, 10.5);
     }
+
+    [Fact]
+    public async Task CalculateDistanceKmAsync_ReturnsPointOne_ForIdenticalAddresses()
+    {
+        GeoDistanceService service = new() { UserAddress = "Київ, вул. Мечникова, 2" };
+        double? result = await service.CalculateDistanceKmAsync("Київ, вул. Мечникова, 2");
+
+        Assert.NotNull(result);
+        Assert.Equal(0.1, result.Value);
+    }
+
+    [Fact]
+    public async Task CalculateDistanceKmAsync_UsesServerCoordinates_WhenProvidedByGateway()
+    {
+        FakeGateway gateway = new();
+        gateway.CoordinatesHandler = addr => addr.Contains("хрещатик", StringComparison.OrdinalIgnoreCase)
+            ? new Waterfall.Client.Models.Geo.CoordinatesDto { Latitude = 50.4472, Longitude = 30.5226 }
+            : new Waterfall.Client.Models.Geo.CoordinatesDto { Latitude = 50.4372, Longitude = 30.5276 };
+
+        GeoDistanceService service = new(gateway);
+        service.UserAddress = "Київ, вул. Хрещатик, 22";
+
+        double? result = await service.CalculateDistanceKmAsync("Київ, вул. Мечникова, 2");
+
+        Assert.NotNull(result);
+        Assert.InRange(result.Value, 0.5, 5.0);
+    }
+
+    [Fact]
+    public async Task CalculateDistanceKmAsync_UsesOsrmRoute_WhenHttpSucceeds()
+    {
+        string osrmJson = """
+        {
+            "code": "Ok",
+            "routes": [
+                {
+                    "distance": 8500.0,
+                    "duration": 650.0
+                }
+            ]
+        }
+        """;
+
+        FakeHttpHandler handler = new(osrmJson);
+        HttpClient httpClient = new(handler);
+        GeoDistanceService service = new(null, httpClient) { UserAddress = "Київ, проспект Соборності" };
+
+        double? result = await service.CalculateDistanceKmAsync("Київ, Спортивна площа, 1а");
+
+        Assert.NotNull(result);
+        Assert.Equal(8.5, result.Value);
+    }
+
+    [Fact]
+    public async Task CalculateDistanceKmAsync_FallsBackToHaversine_WhenOsrmThrows()
+    {
+        FakeHttpHandler handler = new("", throwError: true);
+        HttpClient httpClient = new(handler);
+        GeoDistanceService service = new(null, httpClient) { UserAddress = "Київ, вул. Мечникова, 2" };
+
+        double? result = await service.CalculateDistanceKmAsync("Київ, Спортивна площа, 1а");
+
+        Assert.NotNull(result);
+        Assert.InRange(result.Value, 0.5, 3.0);
+    }
+
+    [Fact]
+    public async Task CalculateDistanceKmAsync_ResolvesCityCentroids_ForDifferentCities()
+    {
+        GeoDistanceService service = new() { UserAddress = "Одеса" };
+        double? result = await service.CalculateDistanceKmAsync("Харків");
+
+        Assert.NotNull(result);
+        // Відстань Одеса - Харків > 500 км
+        Assert.InRange(result.Value, 500.0, 900.0);
+    }
+
+    private sealed class FakeHttpHandler : HttpMessageHandler
+    {
+        private readonly string _response;
+        private readonly bool _throwError;
+
+        public FakeHttpHandler(string response, bool throwError = false)
+        {
+            _response = response;
+            _throwError = throwError;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (_throwError)
+            {
+                throw new HttpRequestException("Network failure");
+            }
+
+            HttpResponseMessage msg = new(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(_response)
+            };
+            return Task.FromResult(msg);
+        }
+    }
 }
+

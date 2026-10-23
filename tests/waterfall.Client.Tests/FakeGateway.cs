@@ -212,6 +212,8 @@ internal sealed class FakeGateway : IHttpGatewayService
         return Task.CompletedTask;
     }
 
+    public Func<string, Waterfall.Client.Models.Geo.CoordinatesDto?>? CoordinatesHandler { get; set; }
+
     public Task<Waterfall.Client.Models.Geo.CoordinatesDto?> GetCoordinatesAsync(string address, CancellationToken ct = default) =>
-        Task.FromResult<Waterfall.Client.Models.Geo.CoordinatesDto?>(null);
+        Task.FromResult(CoordinatesHandler != null ? CoordinatesHandler(address) : null);
 }
