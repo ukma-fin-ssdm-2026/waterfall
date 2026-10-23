@@ -53,4 +53,9 @@ public interface IHttpGatewayService
     /// Зберегти адресу поточного користувача у базі даних (UserPersonalData).
     /// </summary>
     Task SaveProfileAddressAsync(string address, CancellationToken ct = default);
+
+    /// <summary>
+    /// Отримати географічні координати адреси з постійного геокешу сервера (GeoLocationCache).
+    /// </summary>
+    Task<Waterfall.Client.Models.Geo.CoordinatesDto?> GetCoordinatesAsync(string address, CancellationToken ct = default);
 }

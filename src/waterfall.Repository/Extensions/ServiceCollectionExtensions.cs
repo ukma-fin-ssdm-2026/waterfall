@@ -45,6 +45,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IVacancyRepository, EfVacancyRepository>();
         services.AddScoped<ISavedVacancyRepository, EfSavedVacancyRepository>();
         services.AddScoped<IUserRepository, EfUserRepository>();
+        services.AddScoped<IGeoLocationCacheRepository, EfGeoLocationCacheRepository>();
 
         return services;
     }

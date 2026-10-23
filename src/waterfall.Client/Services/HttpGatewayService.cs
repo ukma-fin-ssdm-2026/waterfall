@@ -8,6 +8,7 @@ using System.Text.Json.Serialization.Metadata;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
+using Waterfall.Client.Models.Geo;
 using Waterfall.Client.Models.Profile;
 using Waterfall.Client.Models.SavedVacancies;
 using Waterfall.Client.Models.Vacancies;
@@ -88,6 +89,24 @@ public sealed class HttpGatewayService : IHttpGatewayService
             Content = JsonContent.Create(new UserAddressDto { Address = address }, Json.UserAddressDto)
         };
         await SendAsync(request, Json.UserAddressDto, ct);
+    }
+
+    public async Task<CoordinatesDto?> GetCoordinatesAsync(string address, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return null;
+        }
+
+        try
+        {
+            string url = "api/v1/geo/coordinates?address=" + Uri.EscapeDataString(address.Trim());
+            return await SendAsync(new HttpRequestMessage(HttpMethod.Get, url), Json.CoordinatesDto, ct);
+        }
+        catch (ApiException)
+        {
+            return null;
+        }
     }
 
     private async Task<AuthResponse> AuthenticateAsync(HttpRequestMessage request, CancellationToken ct)
