@@ -128,6 +128,88 @@
                     </VerticalStackLayout>
                 </Border>
 
+                <!-- Моє місцезнаходження (Google Maps розрахунок) -->
+                <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="📍 Моє місцезнаходження"
+                               FontFamily="OpenSansSemibold"
+                               FontSize="16"
+                               TextColor="{StaticResource White}" />
+                        <Label Text="Вкажіть вашу домашню адресу для автоматичного розрахунку відстані до офісів вакансій через Google Maps."
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="12" />
+                        <Border StrokeShape="RoundRectangle 10"
+                                Stroke="{StaticResource Secondary}"
+                                BackgroundColor="{StaticResource DarkBg2}"
+                                Padding="10,0">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Entry Text="{Binding UserAddress}"
+                                       Placeholder="Почніть вводити назву вулиці або міста..."
+                                       BackgroundColor="Transparent" />
+                                <ActivityIndicator Grid.Column="1"
+                                                   IsRunning="{Binding IsLoadingSuggestions}"
+                                                   IsVisible="{Binding IsLoadingSuggestions}"
+                                                   HeightRequest="18"
+                                                   WidthRequest="18"
+                                                   VerticalOptions="Center"
+                                                   Margin="4,0" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Випадаючий список автопідказок адрес -->
+                        <Border IsVisible="{Binding HasSuggestions}"
+                                StrokeShape="RoundRectangle 10"
+                                Stroke="{StaticResource Primary}"
+                                BackgroundColor="{StaticResource DarkBg1}"
+                                Padding="4"
+                                Margin="0,2,0,4">
+                            <VerticalStackLayout Spacing="2">
+                                <Grid ColumnDefinitions="*,Auto" Margin="8,4,8,2">
+                                    <Label Text="💡 Знайдені варіанти (натисніть для вибору):"
+                                           FontSize="11"
+                                           TextColor="{StaticResource Muted}"
+                                           VerticalOptions="Center" />
+                                    <Button Grid.Column="1"
+                                            Text="✕"
+                                            Command="{Binding CloseSuggestionsCommand}"
+                                            Style="{StaticResource LinkButton}"
+                                            HeightRequest="22"
+                                            FontSize="12"
+                                            Padding="6,0" />
+                                </Grid>
+                                <CollectionView ItemsSource="{Binding AddressSuggestions}"
+                                                SelectionMode="None">
+                                    <CollectionView.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Border StrokeThickness="0"
+                                                    BackgroundColor="Transparent"
+                                                    Padding="8,7">
+                                                <Border.GestureRecognizers>
+                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:LoginViewModel}}, Path=SelectAddressSuggestionCommand}"
+                                                                          CommandParameter="{Binding .}" />
+                                                </Border.GestureRecognizers>
+                                                <HorizontalStackLayout Spacing="8">
+                                                    <Label Text="📍" FontSize="13" VerticalOptions="Center" />
+                                                    <Label Text="{Binding .}"
+                                                           FontSize="13"
+                                                           TextColor="{StaticResource White}"
+                                                           LineBreakMode="TailTruncation"
+                                                           VerticalOptions="Center" />
+                                                </HorizontalStackLayout>
+                                            </Border>
+                                        </DataTemplate>
+                                    </CollectionView.ItemTemplate>
+                                </CollectionView>
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Button Text="Зберегти адресу 📍"
+                                Command="{Binding SaveAddressCommand}"
+                                Style="{StaticResource CardActionPrimary}"
+                                HorizontalOptions="Start" />
+                    </VerticalStackLayout>
+                </Border>
+
                 <!-- Розділ «Моя статистика» (FR-007, US-008) -->
                 <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
                     <VerticalStackLayout Spacing="12">

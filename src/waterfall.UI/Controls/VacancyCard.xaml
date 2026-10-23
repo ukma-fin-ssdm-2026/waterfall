@@ -12,7 +12,7 @@
             <TapGestureRecognizer Command="{Binding OpenSourceCommand}" />
         </Border.GestureRecognizers>
 
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto"
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
               ColumnDefinitions="*,Auto"
               RowSpacing="6"
               ColumnSpacing="10">
@@ -45,8 +45,44 @@
                    Style="{StaticResource MutedLabel}"
                    FontSize="12" />
 
+            <!-- Адреса офісу та відстань від поточного місцезнаходження (під Location) -->
+            <Grid Grid.Row="2"
+                  Grid.ColumnSpan="2"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8"
+                  IsVisible="{Binding HasAddress}">
+                <Grid ColumnDefinitions="Auto,*"
+                      ColumnSpacing="5"
+                      VerticalOptions="Center">
+                    <Label Grid.Column="0"
+                           Text="📍"
+                           FontSize="12"
+                           VerticalOptions="Center" />
+                    <Label Grid.Column="1"
+                           Text="{Binding AddressDisplay}"
+                           TextColor="{StaticResource TextSecondary}"
+                           FontFamily="OpenSansRegular"
+                           FontSize="12"
+                           LineBreakMode="TailTruncation"
+                           VerticalOptions="Center" />
+                </Grid>
+                <Border Grid.Column="1"
+                        IsVisible="{Binding HasDistanceText}"
+                        Style="{StaticResource SkillChip}"
+                        Stroke="{StaticResource Accent}"
+                        BackgroundColor="{StaticResource DarkBg2}"
+                        Padding="8,3"
+                        Margin="0"
+                        VerticalOptions="Center">
+                    <Label Text="{Binding DistanceText}"
+                           TextColor="{StaticResource Accent}"
+                           FontFamily="OpenSansSemibold"
+                           FontSize="11" />
+                </Border>
+            </Grid>
+
             <!-- Зарплата: показує діапазон або «Зарплата не вказана» (US-001 AC-3, Test-32) -->
-            <Label Grid.Row="2"
+            <Label Grid.Row="3"
                    Text="{Binding SalaryDisplay}"
                    Style="{StaticResource SalaryLabel}">
                 <Label.Triggers>
@@ -58,7 +94,7 @@
             </Label>
 
             <!-- Джерело та індикатор переходу за посиланням ↗ -->
-            <HorizontalStackLayout Grid.Row="2"
+            <HorizontalStackLayout Grid.Row="3"
                                    Grid.Column="1"
                                    Spacing="4"
                                    HorizontalOptions="End"
@@ -76,7 +112,7 @@
             </HorizontalStackLayout>
 
             <!-- Короткий опис (до 2 рядків) -->
-            <Label Grid.Row="3"
+            <Label Grid.Row="4"
                    Grid.ColumnSpan="2"
                    Text="{Binding Description}"
                    MaxLines="2"
@@ -85,7 +121,7 @@
                    FontSize="12" />
 
             <!-- Навички (чипи) -->
-            <FlexLayout Grid.Row="4"
+            <FlexLayout Grid.Row="5"
                         Wrap="Wrap"
                         VerticalOptions="Center">
                 <HorizontalStackLayout BindableLayout.ItemsSource="{Binding VisibleSkills}">
@@ -113,7 +149,7 @@
             </FlexLayout>
 
             <!-- Дії над карткою (Зберегти, ШІ-аналіз, Детальніше) -->
-            <HorizontalStackLayout Grid.Row="4"
+            <HorizontalStackLayout Grid.Row="5"
                                    Grid.Column="1"
                                    Spacing="6"
                                    VerticalOptions="Center"
@@ -144,7 +180,7 @@
             </HorizontalStackLayout>
 
             <!-- Розгорнутий детальний опис вакансії -->
-            <Border Grid.Row="5"
+            <Border Grid.Row="6"
                     Grid.ColumnSpan="2"
                     IsVisible="{Binding IsDetailsExpanded}"
                     StrokeShape="RoundRectangle 10"

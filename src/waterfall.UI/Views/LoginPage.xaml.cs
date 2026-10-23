@@ -13,11 +13,10 @@ public partial class LoginPage : ContentPage
     }
 
     /// <summary>
-    /// Кожне відкриття вкладки перевіряє збережений токен (міг спливти, поки вкладка була прихована).
+    /// Відкриття вкладки профілю (сесія не відновлюється автоматично, користувач входить явно).
     /// </summary>
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        _viewModel.RestoreSessionCommand.Execute(null);
     }
 }
