@@ -142,16 +142,35 @@ public partial class VacancyItemViewModel : ObservableObject
             }
 
             string target = !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : Vacancy.Location;
-            double? km = await _distanceService.CalculateDistanceKmAsync(target, ct);
-            if (km.HasValue)
-            {
-                DistanceText = km.Value < 1.0
-                    ? $"{Math.Round(km.Value * 1000)} м від вас"
-                    : $"{km.Value.ToString("0.0", CultureInfo.InvariantCulture)} км від вас";
-            }
-            else
+            if (target.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
+                target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase) ||
+                target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
             {
                 DistanceText = null;
+                return;
+            }
+
+            try
+            {
+                double? km = await _distanceService.CalculateDistanceKmAsync(target, ct);
+                if (km.HasValue)
+                {
+                    DistanceText = km.Value < 1.0
+                        ? $"{Math.Round(km.Value * 1000)} м від вас"
+                        : $"{km.Value.ToString("0.0", CultureInfo.InvariantCulture)} км від вас";
+                }
+                else
+                {
+                    DistanceText = "Не вдалося розрахувати";
+                }
+            }
+            catch (Exception ex) when (IsNetworkError(ex))
+            {
+                DistanceText = "Немає інтернету";
+            }
+            catch
+            {
+                DistanceText = "Не вдалося розрахувати";
             }
         }
         catch
@@ -159,6 +178,16 @@ public partial class VacancyItemViewModel : ObservableObject
             DistanceText = null;
         }
     }
+
+    private static bool IsNetworkError(Exception ex) =>
+        ex is HttpRequestException ||
+        ex is System.Net.Sockets.SocketException ||
+        (ex is TaskCanceledException tc && !tc.CancellationToken.IsCancellationRequested) ||
+        ex.InnerException is HttpRequestException ||
+        ex.InnerException is System.Net.Sockets.SocketException ||
+        ex.Message.Contains("інтернет", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("internet", StringComparison.OrdinalIgnoreCase) ||
+        ex.Message.Contains("network", StringComparison.OrdinalIgnoreCase);
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DetailsToggleText))]

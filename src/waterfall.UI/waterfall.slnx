@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/Solution Items/" />
+  <Project Path="../waterfall.Client/waterfall.Client.csproj" />
   <Project Path="../waterfall.Repository/waterfall.Repository.csproj" />
   <Project Path="../waterfall.Services/waterfall.Services.csproj" />
   <Project Path="../api/Waterfall.Api.csproj" />

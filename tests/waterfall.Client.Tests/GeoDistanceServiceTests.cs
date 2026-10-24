@@ -157,6 +157,35 @@ public class GeoDistanceServiceTests
         Assert.InRange(result.Value, 500.0, 900.0);
     }
 
+    [Fact]
+    public async Task CalculateDistanceKmAsync_ReturnsNull_WhenAddressUnknownAndNotNetworkError()
+    {
+        string emptyWikiJson = """
+        {
+            "query": {
+                "pages": {}
+            }
+        }
+        """;
+        FakeHttpHandler handler = new(emptyWikiJson);
+        HttpClient httpClient = new(handler);
+        GeoDistanceService service = new(null, httpClient) { UserAddress = "Київ" };
+
+        double? result = await service.CalculateDistanceKmAsync("Фантастична вул., 9999");
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task CalculateDistanceKmAsync_ThrowsHttpRequestException_WhenNetworkFailsDuringResolution()
+    {
+        FakeHttpHandler handler = new("", throwError: true);
+        HttpClient httpClient = new(handler);
+        GeoDistanceService service = new(null, httpClient) { UserAddress = "Київ" };
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => service.CalculateDistanceKmAsync("Невідома вул., 8888"));
+    }
+
     private sealed class FakeHttpHandler : HttpMessageHandler
     {
         private readonly string _response;

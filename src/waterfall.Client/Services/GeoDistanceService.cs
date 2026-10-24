@@ -61,36 +61,40 @@ public class GeoDistanceService : IDistanceCalculatorService
             return null;
         }
 
-        try
+        // Однакові адреси (наприклад, користувач знаходиться в тому ж офісі чи за тією ж адресою)
+        if (string.Equals(NormalizeAddressKey(UserAddress), NormalizeAddressKey(destinationAddress), StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(UserAddress.Trim(), destinationAddress.Trim(), StringComparison.OrdinalIgnoreCase))
         {
-            // 1. Отримуємо координати обох адрес через постійний геокеш сервера, відкритий довідник або OSRM
-            (double Lat, double Lon)? originCoord = await ResolveCoordinatesAsync(UserAddress, ct);
-            (double Lat, double Lon)? destCoord = await ResolveCoordinatesAsync(destinationAddress, ct);
+            return 0.1;
+        }
 
-            if (originCoord.HasValue && destCoord.HasValue && originCoord.Value != destCoord.Value)
+        // 1. Отримуємо координати обох адрес через постійний геокеш сервера, відкритий довідник або OSRM/Wikipedia
+        (double Lat, double Lon)? originCoord = await ResolveCoordinatesAsync(UserAddress, ct);
+        (double Lat, double Lon)? destCoord = await ResolveCoordinatesAsync(destinationAddress, ct);
+
+        if (originCoord.HasValue && destCoord.HasValue)
+        {
+            if (originCoord.Value == destCoord.Value)
             {
-                // 2. Отримуємо точну реальну дорожню відстань через публічний роутер OSRM (з урахуванням доріг, розв'язок і мостів)
-                double? routeKm = await TryOsrmRouteAsync(originCoord.Value, destCoord.Value, ct);
-                if (routeKm.HasValue)
-                {
-                    return routeKm.Value;
-                }
-
-                // 3. Fallback розрахунок за формулою гаверсинусів з дорожнім коефіцієнтом звивистості мережі
-                double haversine = CalculateHaversineRoadDistance(originCoord.Value, destCoord.Value);
-                if (haversine > 0.0)
-                {
-                    return haversine;
-                }
+                return 0.1;
             }
 
-            // 4. Fallback на випадок однакових міських центроїдів, недоступності мережі або невідомих назв
-            return CalculateFallbackDistance(UserAddress, destinationAddress);
+            // 2. Отримуємо точну реальну дорожню відстань через публічний роутер OSRM (з урахуванням доріг, розв'язок і мостів)
+            double? routeKm = await TryOsrmRouteAsync(originCoord.Value, destCoord.Value, ct);
+            if (routeKm.HasValue)
+            {
+                return routeKm.Value;
+            }
+
+            // 3. Fallback розрахунок за формулою гаверсинусів з дорожнім коефіцієнтом звивистості мережі
+            double haversine = CalculateHaversineRoadDistance(originCoord.Value, destCoord.Value);
+            if (haversine > 0.0)
+            {
+                return haversine;
+            }
         }
-        catch
-        {
-            return CalculateFallbackDistance(UserAddress, destinationAddress);
-        }
+
+        return null;
     }
 
     private async Task<(double Lat, double Lon)?> ResolveCoordinatesAsync(string address, CancellationToken ct)
@@ -100,6 +104,9 @@ public class GeoDistanceService : IDistanceCalculatorService
         {
             return cached;
         }
+
+        bool hadNetworkError = false;
+        Exception? networkException = null;
 
         // 1. Звернення до сервера: перевірка постійного кешу в базі даних (GeoLocationCache)
         if (_gateway != null)
@@ -114,9 +121,14 @@ public class GeoDistanceService : IDistanceCalculatorService
                     return res;
                 }
             }
+            catch (Exception ex) when (IsNetworkException(ex))
+            {
+                hadNetworkError = true;
+                networkException = ex;
+            }
             catch
             {
-                // Сервер недоступний або повернув помилку — переходимо до локального fallback
+                // Сервер повернув іншу помилку — переходимо до локального fallback
             }
         }
 
@@ -161,6 +173,11 @@ public class GeoDistanceService : IDistanceCalculatorService
                     }
                 }
             }
+            catch (Exception ex) when (IsNetworkException(ex))
+            {
+                hadNetworkError = true;
+                networkException = ex;
+            }
             catch
             {
                 // Продовжуємо
@@ -173,6 +190,12 @@ public class GeoDistanceService : IDistanceCalculatorService
         {
             GeoCache[norm] = cityCentroid.Value;
             return cityCentroid.Value;
+        }
+
+        // 5. Якщо координати не знайдено і виникла мережева помилка або немає мережі — кидаємо помилку мережі
+        if (hadNetworkError || !System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
+        {
+            throw new HttpRequestException("Немає підключення до інтернету.", networkException);
         }
 
         return null;
@@ -555,21 +578,11 @@ public class GeoDistanceService : IDistanceCalculatorService
         return null;
     }
 
-    private static double? CalculateFallbackDistance(string origin, string destination)
-    {
-        if (string.Equals(origin.Trim(), destination.Trim(), StringComparison.OrdinalIgnoreCase))
-        {
-            return 0.1;
-        }
-
-        unchecked
-        {
-            int hash = 17;
-            hash = hash * 31 + origin.Trim().ToLowerInvariant().GetHashCode();
-            hash = hash * 31 + destination.Trim().ToLowerInvariant().GetHashCode();
-            hash = Math.Abs(hash);
-            double km = 1.0 + (hash % 60) / 10.0;
-            return Math.Round(km, 1);
-        }
-    }
+    private static bool IsNetworkException(Exception ex) =>
+        ex is HttpRequestException ||
+        ex is System.Net.Sockets.SocketException ||
+        (ex is TaskCanceledException tc && !tc.CancellationToken.IsCancellationRequested) ||
+        ex.InnerException is HttpRequestException ||
+        ex.InnerException is System.Net.Sockets.SocketException ||
+        (ex is ApiException apiEx && apiEx.InnerException is HttpRequestException);
 }

@@ -221,7 +221,7 @@ public class VacancyItemViewModelTests
     [Theory]
     [InlineData(1.5, "1.5 км від вас")]
     [InlineData(0.8, "800 м від вас")]
-    [InlineData(null, null)]
+    [InlineData(null, "Не вдалося розрахувати")]
     public async Task RefreshDistance_FormatsDistanceCorrectly(double? km, string? expectedText)
     {
         FakeDistanceService service = new() { DistanceToReturn = km };
@@ -238,6 +238,44 @@ public class VacancyItemViewModelTests
 
         Assert.Equal(expectedText, item.DistanceText);
         Assert.Equal(expectedText is not null, item.HasDistanceText);
+    }
+
+    [Fact]
+    public async Task RefreshDistance_SetsNoInternetText_WhenNetworkThrows()
+    {
+        FakeDistanceService service = new() { ThrowNetworkError = true };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "вул. Мечникова, 2"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await item.RefreshDistanceAsync();
+
+        Assert.Equal("Немає інтернету", item.DistanceText);
+        Assert.True(item.HasDistanceText);
+    }
+
+    [Fact]
+    public async Task RefreshDistance_SetsNull_ForRemoteVacancies()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 5.0 };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Remote",
+            FullAddress = "Віддалено"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await item.RefreshDistanceAsync();
+
+        Assert.Null(item.DistanceText);
+        Assert.False(item.HasDistanceText);
     }
 
     [Fact]
@@ -274,9 +312,15 @@ public class VacancyItemViewModelTests
     {
         public string? UserAddress { get; set; } = "вул. Хрещатик, 22, Київ";
         public double? DistanceToReturn { get; set; } = 1.5;
+        public bool ThrowNetworkError { get; set; }
 
         public Task<double?> CalculateDistanceKmAsync(string destinationAddress, CancellationToken ct = default)
         {
+            if (ThrowNetworkError)
+            {
+                throw new HttpRequestException("Немає інтернету");
+            }
+
             return Task.FromResult(DistanceToReturn);
         }
     }
