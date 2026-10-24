@@ -103,6 +103,55 @@ public class GeoLocationServiceTests
         Assert.Null(result);
     }
 
+    [Fact]
+    public async Task GetCoordinatesAsync_PicksBestIndexAndAvoidsCityConflict_WhenWikipediaReturnsMultiplePages()
+    {
+        FakeGeoCacheRepository cache = new();
+
+        // Львів (вулиця Княгині Ольги, index 5) стоїть першим у словнику pages,
+        // але для адреси "Київ, Спортивна площа, 1а" сервіс має обрати "Спортивна площа (Київ)" (index 1).
+        string multiPageWikiJson = """
+        {
+            "query": {
+                "pages": {
+                    "1452521": {
+                        "pageid": 1452521,
+                        "title": "Вулиця Княгині Ольги (Львів)",
+                        "index": 5,
+                        "coordinates": [
+                            {
+                                "lat": 49.8266,
+                                "lon": 24.0103
+                            }
+                        ]
+                    },
+                    "934621": {
+                        "pageid": 934621,
+                        "title": "Спортивна площа (Київ)",
+                        "index": 1,
+                        "coordinates": [
+                            {
+                                "lat": 50.4378,
+                                "lon": 30.5220
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+        """;
+
+        FakeHttpHandler handler = new(multiPageWikiJson);
+        HttpClient httpClient = new(handler);
+        GeoLocationService service = new(cache, httpClient);
+
+        (double Latitude, double Longitude)? result = await service.GetCoordinatesAsync("Київ, Спортивна площа, 1а, БЦ Гулівер");
+
+        Assert.NotNull(result);
+        Assert.Equal(50.4378, result.Value.Latitude);
+        Assert.Equal(30.5220, result.Value.Longitude);
+    }
+
     private sealed class FakeGeoCacheRepository : IGeoLocationCacheRepository
     {
         private readonly List<GeoLocationCacheDB> _items = new();

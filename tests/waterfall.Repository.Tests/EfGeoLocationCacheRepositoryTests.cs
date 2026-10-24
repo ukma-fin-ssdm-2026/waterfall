@@ -97,4 +97,23 @@ public class EfGeoLocationCacheRepositoryTests : IClassFixture<SqliteTestFixture
         Assert.NotNull(matchOnlyStreet);
         Assert.Equal(50.3780, matchOnlyStreet.Latitude);
     }
+
+    [Fact]
+    public async Task GetByAddressAsync_DoesNotMatchCityCentroid_WhenStreetIsSpecified()
+    {
+        using WaterfallDbContext db = _fixture.CreateContext();
+        EfGeoLocationCacheRepository repository = new(db);
+
+        // У базі збережено центроїд міста: "київ"
+        await repository.SetCoordinatesAsync("київ", 50.4501, 30.5234);
+
+        // Пошук конкретної вулиці у цьому місті не повинен помилково повертати центроїд Майдану
+        GeoLocationCacheDB? matchStreet = await repository.GetByAddressAsync("київ, березнева");
+        Assert.Null(matchStreet);
+
+        // Пошук суто міста без вулиці повертає центроїд за точним збігом
+        GeoLocationCacheDB? matchCity = await repository.GetByAddressAsync("київ");
+        Assert.NotNull(matchCity);
+        Assert.Equal(50.4501, matchCity.Latitude);
+    }
 }

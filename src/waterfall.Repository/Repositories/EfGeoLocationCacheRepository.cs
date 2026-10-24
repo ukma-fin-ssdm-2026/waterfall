@@ -44,16 +44,6 @@ public class EfGeoLocationCacheRepository : IGeoLocationCacheRepository
             return exact;
         }
 
-        // 2. Збіг за прямим входженням підрядка (наприклад, "васильківська" в "київ велика васильківська" або навпаки)
-        GeoLocationCacheDB? substring = await _context.GeoLocationCache
-            .FirstOrDefaultAsync(c => norm.Contains(c.NormalizedAddress) || c.NormalizedAddress.Contains(norm), ct);
-
-        if (substring != null)
-        {
-            return substring;
-        }
-
-        // 3. Збіг за окремими значущими словами (наприклад, "київ глушкова" знаходить "київ академіка глушкова")
         string[] queryWords = ExtractKeywords(norm);
         if (queryWords.Length == 0)
         {
@@ -62,7 +52,22 @@ public class EfGeoLocationCacheRepository : IGeoLocationCacheRepository
 
         List<GeoLocationCacheDB> cachedList = await _context.GeoLocationCache.ToListAsync(ct);
 
-        // Пріоритет: запис у базі, який містить усі слова пошукового запиту
+        // 2. Збіг за прямим входженням підрядка (наприклад, збережено "київ велика васильківська", а шукають "васильківська")
+        // Якщо в запиті є назва вулиці, суто місто (напр. "київ") не повинно перехоплювати пошук конкретної вулиці
+        foreach (GeoLocationCacheDB entry in cachedList)
+        {
+            if (entry.NormalizedAddress.Contains(norm, StringComparison.OrdinalIgnoreCase))
+            {
+                return entry;
+            }
+
+            if (norm.Contains(entry.NormalizedAddress, StringComparison.OrdinalIgnoreCase) && !IsCityOnly(entry.NormalizedAddress))
+            {
+                return entry;
+            }
+        }
+
+        // 3. Збіг за окремими значущими словами (наприклад, "київ глушкова" знаходить "київ академіка глушкова")
         foreach (GeoLocationCacheDB entry in cachedList)
         {
             if (ContainsAllKeywords(entry.NormalizedAddress, queryWords))
@@ -86,6 +91,16 @@ public class EfGeoLocationCacheRepository : IGeoLocationCacheRepository
 
         return null;
     }
+
+    private static readonly string[] KnownCities =
+    [
+        "київ", "львів", "харків", "дніпро", "одеса", "запоріж", "вінниц", "полтав",
+        "чернівц", "тернопіль", "івано-франківськ", "ужгород", "луцьк", "рівне",
+        "житомир", "черкас", "суми", "чернігів", "миколаїв", "херсон"
+    ];
+
+    private static bool IsCityOnly(string normalizedAddress) =>
+        KnownCities.Any(city => string.Equals(normalizedAddress.Trim(), city, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Перевіряє, чи містить збережена адреса всі ключові слова запиту.

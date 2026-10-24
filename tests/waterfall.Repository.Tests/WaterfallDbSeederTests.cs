@@ -35,6 +35,7 @@ public class WaterfallDbSeederTests : IDisposable
             Assert.True(await db.SavedVacancies.AnyAsync());
             Assert.True(await db.Users.AnyAsync());
             Assert.True(await db.UserPersonalData.AnyAsync());
+            Assert.True(await db.GeoLocationCache.AnyAsync());
         }
     }
 

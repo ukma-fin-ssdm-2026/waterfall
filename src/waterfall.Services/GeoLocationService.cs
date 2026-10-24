@@ -52,8 +52,16 @@ public class GeoLocationService : IGeoLocationService
                     queryElem.TryGetProperty("pages", out JsonElement pagesElem) &&
                     pagesElem.ValueKind == JsonValueKind.Object)
                 {
+                    var matches = new List<(int Index, string Title, double Lat, double Lon)>();
                     foreach (JsonProperty pageProp in pagesElem.EnumerateObject())
                     {
+                        int index = pageProp.Value.TryGetProperty("index", out JsonElement idxElem) && idxElem.TryGetInt32(out int idxVal)
+                            ? idxVal
+                            : int.MaxValue;
+                        string title = pageProp.Value.TryGetProperty("title", out JsonElement titleElem)
+                            ? (titleElem.GetString() ?? string.Empty)
+                            : string.Empty;
+
                         if (pageProp.Value.TryGetProperty("coordinates", out JsonElement coordsArr) &&
                             coordsArr.ValueKind == JsonValueKind.Array &&
                             coordsArr.GetArrayLength() > 0)
@@ -62,15 +70,20 @@ public class GeoLocationService : IGeoLocationService
                             if (firstCoord.TryGetProperty("lat", out JsonElement latElem) &&
                                 firstCoord.TryGetProperty("lon", out JsonElement lonElem))
                             {
-                                double lat = latElem.GetDouble();
-                                double lon = lonElem.GetDouble();
-
-
-                                await _cacheRepository.SetCoordinatesAsync(address, lat, lon, ct);
-
-                                return (lat, lon);
+                                matches.Add((index, title, latElem.GetDouble(), lonElem.GetDouble()));
                             }
                         }
+                    }
+
+                    if (matches.Count > 0)
+                    {
+                        var best = matches
+                            .OrderBy(m => IsCityConflict(address, m.Title) ? 1 : 0)
+                            .ThenBy(m => m.Index)
+                            .First();
+
+                        await _cacheRepository.SetCoordinatesAsync(address, best.Lat, best.Lon, ct);
+                        return (best.Lat, best.Lon);
                     }
                 }
             }
@@ -81,6 +94,24 @@ public class GeoLocationService : IGeoLocationService
         }
 
         return null;
+    }
+
+    private static bool IsCityConflict(string address, string pageTitle)
+    {
+        string[] knownCities = ["київ", "львів", "харків", "дніпро", "одеса", "запоріж", "вінниц", "полтав", "чернівц", "тернопіль", "івано-франківськ", "ужгород", "луцьк", "рівне", "житомир", "черкас", "суми", "чернігів", "миколаїв", "херсон"];
+        string normAddr = address.ToLowerInvariant();
+        string normTitle = pageTitle.ToLowerInvariant();
+
+        string? addrCity = knownCities.FirstOrDefault(c => normAddr.Contains(c));
+        if (addrCity == null)
+        {
+            return false;
+        }
+
+        bool titleHasOtherCity = knownCities.Any(c => c != addrCity && normTitle.Contains(c));
+        bool titleHasSameCity = normTitle.Contains(addrCity);
+
+        return titleHasOtherCity && !titleHasSameCity;
     }
 
     private static IEnumerable<string> GenerateQueryCandidates(string address)

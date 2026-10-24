@@ -201,9 +201,9 @@ public static class WaterfallDbSeeder
                 new UserDB
                 {
                     Id = Guid.Parse("66666666-6666-6666-6666-66666666666b"),
-                    Email = "seeker2@waterfall.com",
-                    // Пароль: DevSeeker1234
-                    PasswordHash = "AQAAAAIAAYagAAAAELS0tART4w8CokOL0gSzcJAqi4a6nUzSZ1EUrjXd9NCvtkgXpXLMayG5mhBYhvqR3w==",
+                    Email = "123@123",
+                    // Пароль: 123@123123@123
+                    PasswordHash = "AQAAAAIAAYagAAAAED+/zVB86tdUugHC7i0xTTVLx9I2SbiMKpfOlYVxiv9d5RKskh8jhFCoE6HnwQHjEw==",
                     Role = "JobSeeker",
                     CreatedAt = DateTimeOffset.UtcNow.AddDays(-31)
                 },
@@ -250,39 +250,60 @@ public static class WaterfallDbSeeder
                 });
                 await context.SaveChangesAsync();
             }
+        }
+
+        try
+        {
+            // Видаляємо суто назви міст без вулиць, щоб вони не перехоплювали конкретні вулиці
+            List<GeoLocationCacheDB> cityOnlyEntries = await context.GeoLocationCache
+                .Where(c => c.NormalizedAddress == "київ" || c.NormalizedAddress == "львів" ||
+                            c.NormalizedAddress == "харків" || c.NormalizedAddress == "дніпро" ||
+                            c.NormalizedAddress == "одеса")
+                .ToListAsync();
+
+            if (cityOnlyEntries.Count > 0)
+            {
+                context.GeoLocationCache.RemoveRange(cityOnlyEntries);
+                await context.SaveChangesAsync();
+            }
 
             if (!await context.GeoLocationCache.AnyAsync())
             {
-                var baseLocations = new List<GeoLocationCacheDB>
-                {
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "соборност", Latitude = 50.4421, Longitude = 30.6250 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "спортивна", Latitude = 50.4378, Longitude = 30.5220 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "гулівер", Latitude = 50.4378, Longitude = 30.5220 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "мечников", Latitude = 50.4372, Longitude = 30.5276 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "парус", Latitude = 50.4372, Longitude = 30.5276 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "скляренк", Latitude = 50.4851, Longitude = 30.4721 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "глушков", Latitude = 50.3780, Longitude = 30.4682 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "васильківськ", Latitude = 50.4320, Longitude = 30.5165 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "хрещатик", Latitude = 50.4472, Longitude = 30.5226 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "саксаганськ", Latitude = 50.4360, Longitude = 30.5050 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "володимирськ", Latitude = 50.4460, Longitude = 30.5160 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "польов", Latitude = 50.4430, Longitude = 30.4480 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "позняк", Latitude = 50.4020, Longitude = 30.6350 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "садов", Latitude = 49.8225, Longitude = 23.9855 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "яворницьк", Latitude = 48.4715, Longitude = 35.0310 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "дерибасівськ", Latitude = 46.4850, Longitude = 30.7420 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "сумськ", Latitude = 50.0010, Longitude = 36.2340 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "київ", Latitude = 50.4501, Longitude = 30.5234 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "львів", Latitude = 49.8397, Longitude = 24.0297 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "харків", Latitude = 49.9935, Longitude = 36.2304 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "дніпро", Latitude = 48.4647, Longitude = 35.0462 },
-                    new() { Id = Guid.NewGuid(), NormalizedAddress = "одеса", Latitude = 46.4825, Longitude = 30.7233 }
-                };
-                await context.GeoLocationCache.AddRangeAsync(baseLocations);
+                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
+                await context.SaveChangesAsync();
+            }
+        }
+        catch
+        {
+            await EnsureTablesCreatedAsync(context);
+            if (!await context.GeoLocationCache.AnyAsync())
+            {
+                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
                 await context.SaveChangesAsync();
             }
         }
     }
+
+    private static List<GeoLocationCacheDB> GetBaseLocations() =>
+    [
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "соборност", Latitude = 50.4421, Longitude = 30.6250 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "спортивна", Latitude = 50.4378, Longitude = 30.5220 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "гулівер", Latitude = 50.4378, Longitude = 30.5220 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "мечников", Latitude = 50.4372, Longitude = 30.5276 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "парус", Latitude = 50.4372, Longitude = 30.5276 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "скляренк", Latitude = 50.4851, Longitude = 30.4721 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "глушков", Latitude = 50.3780, Longitude = 30.4682 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "васильківськ", Latitude = 50.4320, Longitude = 30.5165 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "хрещатик", Latitude = 50.4472, Longitude = 30.5226 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "саксаганськ", Latitude = 50.4360, Longitude = 30.5050 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "володимирськ", Latitude = 50.4460, Longitude = 30.5160 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "польов", Latitude = 50.4430, Longitude = 30.4480 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "позняк", Latitude = 50.4020, Longitude = 30.6350 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "садов", Latitude = 49.8225, Longitude = 23.9855 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "яворницьк", Latitude = 48.4715, Longitude = 35.0310 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "дерибасівськ", Latitude = 46.4850, Longitude = 30.7420 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "сумськ", Latitude = 50.0010, Longitude = 36.2340 }
+    ];
 
     private static async Task EnsureTablesCreatedAsync(WaterfallDbContext context)
     {
