@@ -1,0 +1,48 @@
+name: SonarQube Cloud
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: sonar-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  sonar:
+    name: Build and analyze
+    # Separate from ci.yml, so the 5-minute MAINT-001 limit of the build and test jobs is unaffected
+    timeout-minutes: 15
+    runs-on: [self-hosted, linux]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Exact version: the 10.0.x lookup goes through an aka.ms link that returned HTTP 409 on 2026-10-25
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.403
+
+      # The build runs between "begin" and "end"; as in ci.yml, MAUI projects are left out on Linux.
+      # scanAll keeps the web and TypeScript files in the analysis next to the C# code.
+      - name: Build and analyze
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          dotnet tool install --global dotnet-sonarscanner
+          export PATH="$PATH:$HOME/.dotnet/tools"
+          dotnet-sonarscanner begin /k:"ukma-fin-ssdm-2026_waterfall" /o:"ukma-fin-ssdm-2026" \
+            /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.scanner.scanAll=true
+          dotnet build src/api/Waterfall.Api.csproj -c Release --nologo
+          for p in tests/*/*.csproj; do dotnet build "$p" -c Release --nologo; done
+          dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
