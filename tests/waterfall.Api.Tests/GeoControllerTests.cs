@@ -21,6 +21,14 @@ public class FakeGeoLocationService : IGeoLocationService
 
         return Task.FromResult<(double Latitude, double Longitude)?>(null);
     }
+
+    public Task<GeoSyncResponseDto> SyncCacheAsync(GeoSyncRequestDto request, CancellationToken ct = default)
+    {
+        return Task.FromResult(new GeoSyncResponseDto
+        {
+            ServerItems = new List<GeoSyncItemDto>()
+        });
+    }
 }
 
 public class GeoControllerTests
@@ -65,5 +73,24 @@ public class GeoControllerTests
         CoordinatesDto dto = Assert.IsType<CoordinatesDto>(ok.Value);
         Assert.Equal(50.4472, dto.Latitude);
         Assert.Equal(30.5226, dto.Longitude);
+    }
+
+    [Fact]
+    public async Task SyncCache_ReturnsOkWithResponse()
+    {
+        GeoController controller = CreateController();
+        GeoSyncRequestDto request = new()
+        {
+            ClientItems = new List<GeoSyncItemDto>
+            {
+                new() { Address = "Київ", Latitude = 50.45, Longitude = 30.52 }
+            }
+        };
+
+        ActionResult<GeoSyncResponseDto> result = await controller.SyncCoordinates(request, CancellationToken.None);
+
+        OkObjectResult ok = Assert.IsType<OkObjectResult>(result.Result);
+        GeoSyncResponseDto response = Assert.IsType<GeoSyncResponseDto>(ok.Value);
+        Assert.NotNull(response);
     }
 }

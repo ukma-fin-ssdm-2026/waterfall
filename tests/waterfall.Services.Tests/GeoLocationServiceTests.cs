@@ -4,6 +4,7 @@ using System.Net;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Services;
+using Waterfall.Services.Models.Geo;
 
 namespace Waterfall.Services.Tests;
 
@@ -198,6 +199,36 @@ public class GeoLocationServiceTests
         Assert.Empty(await cache.GetAllCachedAsync());
     }
 
+    [Fact]
+    public async Task SyncCacheAsync_UpsertsIncomingAndReturnsAll()
+    {
+        FakeGeoCacheRepository cache = new();
+        await cache.SetCoordinatesAsync("Київ, Хрещатик", 50.4472, 30.5226);
+
+        GeoLocationService service = new(cache);
+        GeoSyncRequestDto request = new()
+        {
+            ClientItems = new List<GeoSyncItemDto>
+            {
+                new()
+                {
+                    Id = Guid.NewGuid(),
+                    Address = "Львів, Ринок",
+                    Latitude = 49.8419,
+                    Longitude = 24.0315,
+                    CreatedAt = DateTimeOffset.UtcNow
+                }
+            }
+        };
+
+        GeoSyncResponseDto response = await service.SyncCacheAsync(request);
+
+        Assert.NotNull(response);
+        Assert.Equal(2, response.ServerItems.Count);
+        Assert.Contains(response.ServerItems, x => x.Address == "Київ, Хрещатик");
+        Assert.Contains(response.ServerItems, x => x.Address == "Львів, Ринок");
+    }
+
     private sealed class FakeGeoCacheRepository : IGeoLocationCacheRepository
     {
         private readonly List<GeoLocationCacheDB> _items = new();
@@ -227,6 +258,25 @@ public class GeoLocationServiceTests
             };
             _items.Add(item);
             return Task.FromResult(item);
+        }
+
+        public Task UpsertRangeAsync(IEnumerable<GeoLocationCacheDB> items, CancellationToken ct = default)
+        {
+            foreach (GeoLocationCacheDB item in items)
+            {
+                GeoLocationCacheDB? existing = _items.FirstOrDefault(x => string.Equals(x.NormalizedAddress, item.NormalizedAddress, StringComparison.OrdinalIgnoreCase));
+                if (existing != null)
+                {
+                    existing.Latitude = item.Latitude;
+                    existing.Longitude = item.Longitude;
+                    existing.CreatedAt = item.CreatedAt;
+                }
+                else
+                {
+                    _items.Add(item);
+                }
+            }
+            return Task.CompletedTask;
         }
     }
 
