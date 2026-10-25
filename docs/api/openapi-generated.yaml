@@ -114,6 +114,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/geo/sync:
+    post:
+      tags:
+        - Geo
+      summary: Двостороння синхронізація геокешу з клієнтом.
+      description: Приймає знайдені офлайн координати з клієнта та повертає всі актуальні збережені координати з сервера.
+      operationId: SyncCoordinates
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GeoSyncRequestDto'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/GeoSyncRequestDto'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/GeoSyncRequestDto'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GeoSyncResponseDto'
   /api/v1/profile/address:
     get:
       tags:
@@ -698,6 +723,46 @@ components:
           type: string
           nullable: true
       additionalProperties: false
+    GeoSyncItemDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        address:
+          type: string
+          nullable: true
+        latitude:
+          type: number
+          format: double
+        longitude:
+          type: number
+          format: double
+        createdAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+      description: Елемент синхронізації геокешу між клієнтом та сервером.
+    GeoSyncRequestDto:
+      type: object
+      properties:
+        clientItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeoSyncItemDto'
+          nullable: true
+      additionalProperties: false
+      description: 'Запит двосторонньої синхронізації геокешу: передача знайдених офлайн координат із клієнта на сервер.'
+    GeoSyncResponseDto:
+      type: object
+      properties:
+        serverItems:
+          type: array
+          items:
+            $ref: '#/components/schemas/GeoSyncItemDto'
+          nullable: true
+      additionalProperties: false
+      description: 'Відповідь двосторонньої синхронізації геокешу: повертає актуальні записи бази сервера.'
     JobSource:
       enum:
         - Unknown

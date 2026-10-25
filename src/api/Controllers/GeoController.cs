@@ -53,4 +53,16 @@ public class GeoController : ApiControllerBase
             Longitude = coords.Value.Longitude
         });
     }
+
+    /// <summary>
+    /// Двостороння синхронізація геокешу з клієнтом.
+    /// </summary>
+    [HttpPost("sync")]
+    [SwaggerOperation(Summary = "Синхронізувати геокеш", Description = "Приймає знайдені офлайн координати з клієнта та повертає всі актуальні збережені координати з сервера.", OperationId = "SyncCoordinates")]
+    [ProducesResponseType(typeof(GeoSyncResponseDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<GeoSyncResponseDto>> SyncCoordinates([FromBody] GeoSyncRequestDto request, CancellationToken ct)
+    {
+        GeoSyncResponseDto response = await _geoService.SyncCacheAsync(request, ct);
+        return Ok(response);
+    }
 }
