@@ -26,10 +26,11 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Exact version: the 10.0.x lookup goes through an aka.ms link that returned HTTP 409 on 2026-10-25
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 10.0.403
 
       # The build runs between "begin" and "end"; as in ci.yml, MAUI projects are left out on Linux.
       # scanAll keeps the web and TypeScript files in the analysis next to the C# code.
