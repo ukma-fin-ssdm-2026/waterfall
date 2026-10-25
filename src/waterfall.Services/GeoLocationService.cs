@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Services.Interfaces;
+using Waterfall.Services.Models.Geo;
 
 namespace Waterfall.Services;
 
@@ -68,6 +69,35 @@ public class GeoLocationService : IGeoLocationService
         }
 
         return null;
+    }
+
+    public async Task<GeoSyncResponseDto> SyncCacheAsync(GeoSyncRequestDto request, CancellationToken ct = default)
+    {
+        if (request?.ClientItems != null && request.ClientItems.Count > 0)
+        {
+            foreach (var item in request.ClientItems)
+            {
+                if (!string.IsNullOrWhiteSpace(item.Address))
+                {
+                    await _cacheRepository.SetCoordinatesAsync(item.Address, item.Latitude, item.Longitude, ct);
+                }
+            }
+        }
+
+        IReadOnlyList<GeoLocationCacheDB> allServerCached = await _cacheRepository.GetAllCachedAsync(ct);
+        List<GeoSyncItemDto> responseItems = allServerCached.Select(c => new GeoSyncItemDto
+        {
+            Id = c.Id,
+            Address = c.NormalizedAddress,
+            Latitude = c.Latitude,
+            Longitude = c.Longitude,
+            CreatedAt = c.CreatedAt
+        }).ToList();
+
+        return new GeoSyncResponseDto
+        {
+            ServerItems = responseItems
+        };
     }
 
     private async Task<(double Lat, double Lon)?> TryPhotonGeocodeAsync(
