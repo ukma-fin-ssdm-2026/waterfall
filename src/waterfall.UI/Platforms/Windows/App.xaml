@@ -1,8 +1,45 @@
-﻿<maui:MauiWinUIApplication
+<maui:MauiWinUIApplication
     x:Class="waterfall.UI.WinUI.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:maui="using:Microsoft.Maui"
     xmlns:local="using:waterfall.UI.WinUI">
+
+    <maui:MauiWinUIApplication.Resources>
+        <ResourceDictionary>
+            <!-- TextBox (Entry) - прибираємо нативну рамку та фон Windows, щоб показувався лише зовнішній Border -->
+            <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
+            <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
+            <Thickness x:Key="TextControlBorderThemeThicknessPointerOver">0</Thickness>
+            <SolidColorBrush x:Key="TextControlBorderBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="Transparent" />
+
+            <!-- AutoSuggestBox (SearchBar) -->
+            <Thickness x:Key="AutoSuggestBoxBorderThemeThickness">0</Thickness>
+            <Thickness x:Key="AutoSuggestBoxBorderThemeThicknessFocused">0</Thickness>
+            <Thickness x:Key="AutoSuggestBoxBorderThemeThicknessPointerOver">0</Thickness>
+            <SolidColorBrush x:Key="AutoSuggestBoxBorderBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="AutoSuggestBoxBorderBrushPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="AutoSuggestBoxBorderBrushFocused" Color="Transparent" />
+            <SolidColorBrush x:Key="AutoSuggestBoxBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="AutoSuggestBoxBackgroundPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="AutoSuggestBoxBackgroundFocused" Color="Transparent" />
+
+            <!-- ComboBox (Picker) -->
+            <Thickness x:Key="ComboBoxBorderThemeThickness">0</Thickness>
+            <Thickness x:Key="ComboBoxBorderThemeThicknessFocused">0</Thickness>
+            <Thickness x:Key="ComboBoxBorderThemeThicknessPointerOver">0</Thickness>
+            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBorderBrushFocused" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBackground" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="Transparent" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundFocused" Color="Transparent" />
+        </ResourceDictionary>
+    </maui:MauiWinUIApplication.Resources>
 
 </maui:MauiWinUIApplication>
