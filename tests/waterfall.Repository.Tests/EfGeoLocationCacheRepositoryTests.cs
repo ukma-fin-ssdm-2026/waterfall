@@ -116,4 +116,30 @@ public class EfGeoLocationCacheRepositoryTests : IClassFixture<SqliteTestFixture
         Assert.NotNull(matchCity);
         Assert.Equal(50.4501, matchCity.Latitude);
     }
+
+    [Fact]
+    public async Task UpsertRangeAsync_InsertsNewAndUpdatesExisting()
+    {
+        using WaterfallDbContext db = _fixture.CreateContext();
+        EfGeoLocationCacheRepository repository = new(db);
+
+        await repository.SetCoordinatesAsync("Київ, вул. Хрещатик", 50.4472, 30.5226);
+
+        List<GeoLocationCacheDB> items = new()
+        {
+            new() { Id = Guid.NewGuid(), NormalizedAddress = "Київ, вул. Хрещатик", Latitude = 50.4475, Longitude = 30.5230, CreatedAt = DateTimeOffset.UtcNow },
+            new() { Id = Guid.NewGuid(), NormalizedAddress = "Львів, пл. Ринок", Latitude = 49.8419, Longitude = 24.0315, CreatedAt = DateTimeOffset.UtcNow }
+        };
+
+        await repository.UpsertRangeAsync(items);
+
+        IReadOnlyList<GeoLocationCacheDB> all = await repository.GetAllCachedAsync();
+        GeoLocationCacheDB? kiev = all.FirstOrDefault(x => x.NormalizedAddress == "київ хрещатик");
+        Assert.NotNull(kiev);
+        Assert.Equal(50.4475, kiev.Latitude);
+
+        GeoLocationCacheDB? lviv = all.FirstOrDefault(x => x.NormalizedAddress == "львів ринок");
+        Assert.NotNull(lviv);
+        Assert.Equal(49.8419, lviv.Latitude);
+    }
 }

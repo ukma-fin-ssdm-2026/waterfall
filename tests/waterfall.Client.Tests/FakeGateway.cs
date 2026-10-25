@@ -216,4 +216,9 @@ internal sealed class FakeGateway : IHttpGatewayService
 
     public Task<Waterfall.Client.Models.Geo.CoordinatesDto?> GetCoordinatesAsync(string address, CancellationToken ct = default) =>
         Task.FromResult(CoordinatesHandler != null ? CoordinatesHandler(address) : null);
+
+    public Func<Waterfall.Client.Models.Geo.GeoSyncRequestDto, Waterfall.Client.Models.Geo.GeoSyncResponseDto?>? SyncHandler { get; set; }
+
+    public Task<Waterfall.Client.Models.Geo.GeoSyncResponseDto?> SyncGeoCacheAsync(Waterfall.Client.Models.Geo.GeoSyncRequestDto request, CancellationToken ct = default) =>
+        Task.FromResult(SyncHandler != null ? SyncHandler(request) : new Waterfall.Client.Models.Geo.GeoSyncResponseDto());
 }
