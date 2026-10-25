@@ -18,4 +18,14 @@ public interface IGeoLocationCacheRepository
     /// Збереження або оновлення координат адреси в базі даних.
     /// </summary>
     Task<GeoLocationCacheDB> SetCoordinatesAsync(string address, double latitude, double longitude, CancellationToken ct = default);
+
+    /// <summary>
+    /// Отримання всіх збережених записів кешу геокоординат.
+    /// </summary>
+    Task<IReadOnlyList<GeoLocationCacheDB>> GetAllCachedAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Масове збереження або оновлення записів координат через Entity Framework Core.
+    /// </summary>
+    Task UpsertRangeAsync(IEnumerable<GeoLocationCacheDB> items, CancellationToken ct = default);
 }

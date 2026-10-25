@@ -177,6 +177,54 @@ public class EfGeoLocationCacheRepository : IGeoLocationCacheRepository
         return entry;
     }
 
+    public async Task<IReadOnlyList<GeoLocationCacheDB>> GetAllCachedAsync(CancellationToken ct = default)
+    {
+        return await _context.GeoLocationCache
+            .AsNoTracking()
+            .ToListAsync(ct);
+    }
+
+    public async Task UpsertRangeAsync(IEnumerable<GeoLocationCacheDB> items, CancellationToken ct = default)
+    {
+        foreach (GeoLocationCacheDB item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.NormalizedAddress))
+            {
+                continue;
+            }
+
+            string norm = NormalizeKey(item.NormalizedAddress);
+            if (string.IsNullOrWhiteSpace(norm))
+            {
+                norm = item.NormalizedAddress.Trim().ToLowerInvariant();
+            }
+
+            GeoLocationCacheDB? existing = await _context.GeoLocationCache
+                .FirstOrDefaultAsync(c => c.NormalizedAddress == norm, ct);
+
+            if (existing != null)
+            {
+                existing.Latitude = item.Latitude;
+                existing.Longitude = item.Longitude;
+                existing.CreatedAt = item.CreatedAt;
+            }
+            else
+            {
+                GeoLocationCacheDB entry = new()
+                {
+                    Id = item.Id != Guid.Empty ? item.Id : Guid.NewGuid(),
+                    NormalizedAddress = norm,
+                    Latitude = item.Latitude,
+                    Longitude = item.Longitude,
+                    CreatedAt = item.CreatedAt
+                };
+                _context.GeoLocationCache.Add(entry);
+            }
+        }
+
+        await _context.SaveChangesAsync(ct);
+    }
+
     /// <summary>
     /// Нормалізація адреси: видаляє номери будинків, поверхи, офіси та службові слова (вул, проспект, тощо).
     /// Залишає лише чисті назви міста та вулиці для максимальної гнучкості зіставлення.
