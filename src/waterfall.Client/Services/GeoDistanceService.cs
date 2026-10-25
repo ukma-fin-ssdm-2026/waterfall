@@ -10,30 +10,37 @@ using Waterfall.Client.Models.Geo;
 namespace Waterfall.Client.Services;
 
 /// <summary>
-/// Сервіс розрахунку реальної дорожньої відстані між адресами на базі відкритих геоданих
-/// OpenStreetMap, Wikimedia Geocoding та OSRM (Open Source Routing Machine).
-/// Працює повністю автономно без комерційних / платних API-ключів, забезпечуючи
-/// точність до 100 метрів (субкілометрова точність) для будь-яких міст та вулиць.
+/// Сервіс розрахунку реальної дорожньої відстані між адресами:
+/// 1. Основний пошук координат — через Photon API із затримкою ~1 секунда (щоб не йти в таймаут)
+///    та збереженням усіх результатів Photon у кеш бази даних.
+/// 2. Запасний варіант (fallback) пошуку координат — через Wikipedia API (результати Вікіпедії не кешуються).
+/// 3. Побудова маршруту та розрахунок відстані між точками — через OSRM (Open Source Routing Machine),
+///    а в офлайн-режимі — стандартним алгоритмом C# (формула гаверсинусів із дорожнім коефіцієнтом).
 /// </summary>
 public class GeoDistanceService : IDistanceCalculatorService
 {
     private static readonly ConcurrentDictionary<string, (double Lat, double Lon)> GeoCache = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly SemaphoreSlim PhotonSemaphore = new(1, 1);
+    private static readonly SemaphoreSlim OsrmSemaphore = new(2, 2);
 
+    private readonly ConcurrentDictionary<string, double> _routeCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly IHttpGatewayService? _gateway;
     private readonly HttpClient _httpClient;
+    private readonly TimeSpan _photonDelay;
 
-    public GeoDistanceService() : this(null, null)
+    public GeoDistanceService() : this(null, null, null)
     {
     }
 
-    public GeoDistanceService(IHttpGatewayService? gateway) : this(gateway, null)
+    public GeoDistanceService(IHttpGatewayService? gateway) : this(gateway, null, null)
     {
     }
 
-    public GeoDistanceService(IHttpGatewayService? gateway, HttpClient? httpClient)
+    public GeoDistanceService(IHttpGatewayService? gateway, HttpClient? httpClient, TimeSpan? photonDelay = null)
     {
         _gateway = gateway;
-        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(2.5) };
+        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15.0) };
+        _photonDelay = photonDelay ?? TimeSpan.FromSeconds(1.0);
         if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))
         {
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "WaterfallApp/1.0 (contact@waterfall-app.local)");
@@ -68,7 +75,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             return 0.1;
         }
 
-        // 1. Отримуємо координати обох адрес через постійний геокеш сервера, відкритий довідник або OSRM/Wikipedia
+        // 1. Отримуємо координати обох адрес (Photon як основний із кешуванням у БД, Wikipedia як запасний без кешування)
         (double Lat, double Lon)? originCoord = await ResolveCoordinatesAsync(UserAddress, ct);
         (double Lat, double Lon)? destCoord = await ResolveCoordinatesAsync(destinationAddress, ct);
 
@@ -79,14 +86,14 @@ public class GeoDistanceService : IDistanceCalculatorService
                 return 0.1;
             }
 
-            // 2. Отримуємо точну реальну дорожню відстань через публічний роутер OSRM (з урахуванням доріг, розв'язок і мостів)
+            // 2. З'єднуємо точки та шукаємо маршрут і реальну дорожню відстань через роутер OSRM
             double? routeKm = await TryOsrmRouteAsync(originCoord.Value, destCoord.Value, ct);
             if (routeKm.HasValue)
             {
                 return routeKm.Value;
             }
 
-            // 3. Fallback розрахунок за формулою гаверсинусів з дорожнім коефіцієнтом звивистості мережі
+            // 3. Якщо офлайн або роутер недоступний — розрахунок стандартним алгоритмом C# (формула гаверсинусів)
             double haversine = CalculateHaversineRoadDistance(originCoord.Value, destCoord.Value);
             if (haversine > 0.0)
             {
@@ -108,7 +115,7 @@ public class GeoDistanceService : IDistanceCalculatorService
         bool hadNetworkError = false;
         Exception? networkException = null;
 
-        // 1. Звернення до сервера: перевірка постійного кешу в базі даних (GeoLocationCache)
+        // 1. Звернення до сервера: перевірка БД (GeoLocationCache) або геокодування через Photon (з кешуванням у БД) / Wikipedia (fallback без кешування)
         if (_gateway != null)
         {
             try
@@ -116,9 +123,7 @@ public class GeoDistanceService : IDistanceCalculatorService
                 CoordinatesDto? serverCoords = await _gateway.GetCoordinatesAsync(address, ct);
                 if (serverCoords != null)
                 {
-                    (double Lat, double Lon) res = (serverCoords.Latitude, serverCoords.Longitude);
-                    GeoCache[norm] = res;
-                    return res;
+                    return (serverCoords.Latitude, serverCoords.Longitude);
                 }
             }
             catch (Exception ex) when (IsNetworkException(ex))
@@ -128,11 +133,11 @@ public class GeoDistanceService : IDistanceCalculatorService
             }
             catch
             {
-                // Сервер повернув іншу помилку — переходимо до локального fallback
+                // Сервер повернув іншу помилку — переходимо до локального пошуку
             }
         }
 
-        // 2. Локальний швидкий довідник (на випадок автономної роботи або тестів)
+        // 2. Локальний швидкий довідник відомих бізнес-центрів та вулиць (для офлайн-режиму та швидкої роботи)
         (double Lat, double Lon)? localMatch = LookupKnownLocation(norm);
         if (localMatch.HasValue)
         {
@@ -140,8 +145,101 @@ public class GeoDistanceService : IDistanceCalculatorService
             return localMatch.Value;
         }
 
-        // 3. Пошук координат через відкритий Wikimedia / Wikipedia Geocoding API (прямий клієнтський fallback)
-        foreach (string candidate in GenerateQueryCandidates(address))
+        List<string> candidates = GenerateQueryCandidates(address).ToList();
+
+        // 3. Основний пошук координат через Photon API із затримкою ~1 секунда (результати кешуються)
+        foreach (string candidate in candidates)
+        {
+            try
+            {
+                string json;
+                await PhotonSemaphore.WaitAsync(ct);
+                try
+                {
+                    if (_photonDelay > TimeSpan.Zero)
+                    {
+                        await Task.Delay(_photonDelay, ct);
+                    }
+
+                    string url = $"https://photon.komoot.io/api/?q={Uri.EscapeDataString(candidate)}&limit=5";
+                    json = await _httpClient.GetStringAsync(url, ct);
+                }
+                finally
+                {
+                    PhotonSemaphore.Release();
+                }
+
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("features", out JsonElement featuresElem) &&
+                    featuresElem.ValueKind == JsonValueKind.Array)
+                {
+                    var matches = new List<(int Index, string Title, double Lat, double Lon)>();
+                    int idx = 0;
+
+                    foreach (JsonElement feature in featuresElem.EnumerateArray())
+                    {
+                        idx++;
+                        if (!feature.TryGetProperty("geometry", out JsonElement geomElem) ||
+                            !geomElem.TryGetProperty("coordinates", out JsonElement coordsElem) ||
+                            coordsElem.ValueKind != JsonValueKind.Array ||
+                            coordsElem.GetArrayLength() < 2)
+                        {
+                            continue;
+                        }
+
+                        if (!coordsElem[0].TryGetDouble(out double lon) ||
+                            !coordsElem[1].TryGetDouble(out double lat))
+                        {
+                            continue;
+                        }
+
+                        string title = string.Empty;
+                        if (feature.TryGetProperty("properties", out JsonElement propsElem) &&
+                            propsElem.ValueKind == JsonValueKind.Object)
+                        {
+                            string? name = GetStringProperty(propsElem, "name");
+                            string? street = GetStringProperty(propsElem, "street");
+                            string? city = GetStringProperty(propsElem, "city")
+                                ?? GetStringProperty(propsElem, "town")
+                                ?? GetStringProperty(propsElem, "village")
+                                ?? GetStringProperty(propsElem, "state");
+
+                            title = $"{city} {street} {name}".Trim();
+                        }
+
+                        matches.Add((idx, title, lat, lon));
+                    }
+
+                    if (matches.Count > 0)
+                    {
+                        var best = matches
+                            .OrderBy(m => IsCityConflict(address, m.Title) ? 1 : 0)
+                            .ThenBy(m => m.Index)
+                            .First();
+
+                        (double Lat, double Lon) res = (best.Lat, best.Lon);
+                        GeoCache[norm] = res;
+                        return res;
+                    }
+                }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex) when (IsNetworkException(ex))
+            {
+                hadNetworkError = true;
+                networkException = ex;
+            }
+            catch
+            {
+                // Переходимо до наступного кандидата або Wikipedia fallback
+            }
+        }
+
+        // 4. Запасний варіант (fallback): пошук координат через Wikipedia API (результати Вікіпедії НЕ кешуються!)
+        foreach (string candidate in candidates)
         {
             try
             {
@@ -183,11 +281,14 @@ public class GeoDistanceService : IDistanceCalculatorService
                             .ThenBy(m => m.Index)
                             .First();
 
-                        (double Lat, double Lon) res = (best.Lat, best.Lon);
-                        GeoCache[norm] = res;
-                        return res;
+                        // Результати Вікіпедії НЕ кешуємо
+                        return (best.Lat, best.Lon);
                     }
                 }
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                throw;
             }
             catch (Exception ex) when (IsNetworkException(ex))
             {
@@ -200,7 +301,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             }
         }
 
-        // 4. Офлайн-довідник обласних центрів для міського рівня
+        // 5. Офлайн-довідник обласних центрів для міського рівня
         (double Lat, double Lon)? cityCentroid = LookupCityCentroid(norm);
         if (cityCentroid.HasValue)
         {
@@ -208,7 +309,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             return cityCentroid.Value;
         }
 
-        // 5. Якщо координати не знайдено і виникла мережева помилка або немає мережі — кидаємо помилку мережі
+        // 6. Якщо координати не знайдено і виникла мережева помилка або немає мережі — кидаємо помилку мережі
         if (hadNetworkError || !System.Net.NetworkInformation.NetworkInterface.GetIsNetworkAvailable())
         {
             throw new HttpRequestException("Немає підключення до інтернету.", networkException);
@@ -219,27 +320,60 @@ public class GeoDistanceService : IDistanceCalculatorService
 
     private async Task<double?> TryOsrmRouteAsync((double Lat, double Lon) origin, (double Lat, double Lon) destination, CancellationToken ct)
     {
+        string oLat = origin.Lat.ToString("0.00000", CultureInfo.InvariantCulture);
+        string oLon = origin.Lon.ToString("0.00000", CultureInfo.InvariantCulture);
+        string dLat = destination.Lat.ToString("0.00000", CultureInfo.InvariantCulture);
+        string dLon = destination.Lon.ToString("0.00000", CultureInfo.InvariantCulture);
+
+        string routeKey = $"{oLat},{oLon};{dLat},{dLon}";
+        if (_routeCache.TryGetValue(routeKey, out double cachedKm))
+        {
+            return cachedKm;
+        }
+
+        await OsrmSemaphore.WaitAsync(ct);
         try
         {
-            string oLat = origin.Lat.ToString("0.00000", CultureInfo.InvariantCulture);
-            string oLon = origin.Lon.ToString("0.00000", CultureInfo.InvariantCulture);
-            string dLat = destination.Lat.ToString("0.00000", CultureInfo.InvariantCulture);
-            string dLon = destination.Lon.ToString("0.00000", CultureInfo.InvariantCulture);
+            if (_routeCache.TryGetValue(routeKey, out cachedKm))
+            {
+                return cachedKm;
+            }
 
             string url = $"https://router.project-osrm.org/route/v1/driving/{oLon},{oLat};{dLon},{dLat}?overview=false";
             string json = await _httpClient.GetStringAsync(url, ct);
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("routes", out JsonElement routes) &&
+                routes.ValueKind == JsonValueKind.Array &&
                 routes.GetArrayLength() > 0 &&
                 routes[0].TryGetProperty("distance", out JsonElement distanceElem))
             {
                 double meters = distanceElem.GetDouble();
-                return Math.Round(meters / 1000.0, 1);
+                double km = Math.Round(meters / 1000.0, 1);
+                _routeCache[routeKey] = km;
+                return km;
             }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
-            // Офлайн розрахунок нижче
+            // Офлайн-розрахунок стандартним алгоритмом C# нижче
+        }
+        finally
+        {
+            OsrmSemaphore.Release();
+        }
+
+        return null;
+    }
+
+    private static string? GetStringProperty(JsonElement element, string propName)
+    {
+        if (element.TryGetProperty(propName, out JsonElement val) && val.ValueKind == JsonValueKind.String)
+        {
+            return val.GetString();
         }
 
         return null;

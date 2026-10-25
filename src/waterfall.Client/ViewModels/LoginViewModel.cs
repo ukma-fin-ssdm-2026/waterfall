@@ -176,7 +176,7 @@ public partial class LoginViewModel : ObservableObject
 
         try
         {
-            await Task.Delay(350, ct);
+            await Task.Delay(1000, ct);
             IsLoadingSuggestions = true;
             IReadOnlyList<string> suggestions = await _autocompleteService.GetSuggestionsAsync(query, ct);
 

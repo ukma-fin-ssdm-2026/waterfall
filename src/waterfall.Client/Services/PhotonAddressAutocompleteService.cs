@@ -12,16 +12,19 @@ namespace Waterfall.Client.Services;
 /// </summary>
 public class PhotonAddressAutocompleteService : IAddressAutocompleteService
 {
+    private static readonly SemaphoreSlim PhotonSemaphore = new(1, 1);
 
     private readonly HttpClient _httpClient;
+    private readonly TimeSpan _photonDelay;
 
-    public PhotonAddressAutocompleteService() : this(null)
+    public PhotonAddressAutocompleteService() : this(null, null)
     {
     }
 
-    public PhotonAddressAutocompleteService(HttpClient? httpClient)
+    public PhotonAddressAutocompleteService(HttpClient? httpClient, TimeSpan? photonDelay = null)
     {
-        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
+        _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        _photonDelay = photonDelay ?? TimeSpan.FromSeconds(1.0);
         if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))
         {
             _httpClient.DefaultRequestHeaders.Add("User-Agent", "WaterfallApp/1.0 (contact@waterfall-app.local)");
@@ -119,8 +122,22 @@ public class PhotonAddressAutocompleteService : IAddressAutocompleteService
 
     private async Task<List<string>> QueryPhotonAsync(string query, CancellationToken ct)
     {
-        string url = $"https://photon.komoot.io/api/?q={Uri.EscapeDataString(query)}&limit=5";
-        string json = await _httpClient.GetStringAsync(url, ct);
+        string json;
+        await PhotonSemaphore.WaitAsync(ct);
+        try
+        {
+            if (_photonDelay > TimeSpan.Zero)
+            {
+                await Task.Delay(_photonDelay, ct);
+            }
+
+            string url = $"https://photon.komoot.io/api/?q={Uri.EscapeDataString(query)}&limit=5";
+            json = await _httpClient.GetStringAsync(url, ct);
+        }
+        finally
+        {
+            PhotonSemaphore.Release();
+        }
 
         List<string> list = new();
         HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);

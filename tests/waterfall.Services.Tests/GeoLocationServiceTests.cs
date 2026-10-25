@@ -39,7 +39,51 @@ public class GeoLocationServiceTests
     }
 
     [Fact]
-    public async Task GetCoordinatesAsync_CallsHttpAndCaches_WhenNotInCache()
+    public async Task GetCoordinatesAsync_UsesPhotonPrimary_AndCachesAllPhotonResultsInDatabase()
+    {
+        FakeGeoCacheRepository cache = new();
+
+        string photonJson = """
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "coordinates": [30.5276, 50.4372],
+                        "type": "Point"
+                    },
+                    "properties": {
+                        "name": "БЦ Парус",
+                        "street": "вулиця Мечникова",
+                        "housenumber": "2",
+                        "city": "Київ",
+                        "countrycode": "UA"
+                    }
+                }
+            ]
+        }
+        """;
+
+        FakeHttpHandler handler = new(photonJson);
+        HttpClient httpClient = new(handler);
+        GeoLocationService service = new(cache, httpClient, TimeSpan.FromMilliseconds(10));
+
+        (double Latitude, double Longitude)? result = await service.GetCoordinatesAsync("вул. Мечникова, 2 (БЦ Парус)");
+
+        Assert.NotNull(result);
+        Assert.Equal(50.4372, result.Value.Latitude);
+        Assert.Equal(30.5276, result.Value.Longitude);
+
+        // Перевіряємо, що результат Photon закешовано в базу даних
+        GeoLocationCacheDB? inCache = await cache.GetByAddressAsync("вул. Мечникова, 2 (БЦ Парус)");
+        Assert.NotNull(inCache);
+        Assert.Equal(50.4372, inCache.Latitude);
+        Assert.Equal(30.5276, inCache.Longitude);
+    }
+
+    [Fact]
+    public async Task GetCoordinatesAsync_FallsBackToWikipedia_WhenPhotonFails_AndDoesNotCacheWikipediaResults()
     {
         FakeGeoCacheRepository cache = new();
 
@@ -61,9 +105,9 @@ public class GeoLocationServiceTests
         }
         """;
 
-        FakeHttpHandler handler = new(wikiJson);
+        FakeHttpHandler handler = new(wikiJson, failPhoton: true);
         HttpClient httpClient = new(handler);
-        GeoLocationService service = new(cache, httpClient);
+        GeoLocationService service = new(cache, httpClient, TimeSpan.FromMilliseconds(10));
 
         (double Latitude, double Longitude)? result = await service.GetCoordinatesAsync("вул. Мечникова, 2 (БЦ Парус)");
 
@@ -71,14 +115,13 @@ public class GeoLocationServiceTests
         Assert.Equal(50.4372, result.Value.Latitude);
         Assert.Equal(30.5276, result.Value.Longitude);
 
-        // Verify it was cached in repository
-        GeoLocationCacheDB? inCache = await cache.GetByAddressAsync("вул. Мечникова, 2 (БЦ Парус)");
-        Assert.NotNull(inCache);
-        Assert.Equal(50.4372, inCache.Latitude);
+        // Результати Вікіпедії НЕ повинні кешуватися в базу даних
+        IReadOnlyList<GeoLocationCacheDB> cachedItems = await cache.GetAllCachedAsync();
+        Assert.Empty(cachedItems);
     }
 
     [Fact]
-    public async Task GetCoordinatesAsync_ReturnsNull_WhenWikipediaHasNoCoordinates()
+    public async Task GetCoordinatesAsync_ReturnsNull_WhenNeitherPhotonNorWikipediaHasCoordinates()
     {
         FakeGeoCacheRepository cache = new();
 
@@ -96,7 +139,7 @@ public class GeoLocationServiceTests
 
         FakeHttpHandler handler = new(emptyWikiJson);
         HttpClient httpClient = new(handler);
-        GeoLocationService service = new(cache, httpClient);
+        GeoLocationService service = new(cache, httpClient, TimeSpan.FromMilliseconds(10));
 
         (double Latitude, double Longitude)? result = await service.GetCoordinatesAsync("Невідома локація 123456");
 
@@ -141,15 +184,18 @@ public class GeoLocationServiceTests
         }
         """;
 
-        FakeHttpHandler handler = new(multiPageWikiJson);
+        FakeHttpHandler handler = new(multiPageWikiJson, failPhoton: true);
         HttpClient httpClient = new(handler);
-        GeoLocationService service = new(cache, httpClient);
+        GeoLocationService service = new(cache, httpClient, TimeSpan.FromMilliseconds(10));
 
         (double Latitude, double Longitude)? result = await service.GetCoordinatesAsync("Київ, Спортивна площа, 1а, БЦ Гулівер");
 
         Assert.NotNull(result);
         Assert.Equal(50.4378, result.Value.Latitude);
         Assert.Equal(30.5220, result.Value.Longitude);
+
+        // Оскільки результат отримано з Вікіпедії (fallback), кеш бази залишається порожнім
+        Assert.Empty(await cache.GetAllCachedAsync());
     }
 
     private sealed class FakeGeoCacheRepository : IGeoLocationCacheRepository
@@ -187,14 +233,21 @@ public class GeoLocationServiceTests
     private sealed class FakeHttpHandler : HttpMessageHandler
     {
         private readonly string _response;
+        private readonly bool _failPhoton;
 
-        public FakeHttpHandler(string response)
+        public FakeHttpHandler(string response, bool failPhoton = false)
         {
             _response = response;
+            _failPhoton = failPhoton;
         }
 
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            if (_failPhoton && request.RequestUri != null && request.RequestUri.Host.Contains("photon"))
+            {
+                throw new HttpRequestException("Photon error");
+            }
+
             HttpResponseMessage msg = new(HttpStatusCode.OK)
             {
                 Content = new StringContent(_response)

@@ -169,7 +169,7 @@ public class GeoDistanceServiceTests
         """;
         FakeHttpHandler handler = new(emptyWikiJson);
         HttpClient httpClient = new(handler);
-        GeoDistanceService service = new(null, httpClient) { UserAddress = "Київ" };
+        GeoDistanceService service = new(null, httpClient, TimeSpan.FromMilliseconds(10)) { UserAddress = "Київ" };
 
         double? result = await service.CalculateDistanceKmAsync("Фантастична вул., 9999");
 
@@ -181,9 +181,78 @@ public class GeoDistanceServiceTests
     {
         FakeHttpHandler handler = new("", throwError: true);
         HttpClient httpClient = new(handler);
-        GeoDistanceService service = new(null, httpClient) { UserAddress = "Київ" };
+        GeoDistanceService service = new(null, httpClient, TimeSpan.FromMilliseconds(10)) { UserAddress = "Київ" };
 
         await Assert.ThrowsAsync<HttpRequestException>(() => service.CalculateDistanceKmAsync("Невідома вул., 8888"));
+    }
+
+    [Fact]
+    public async Task CalculateDistanceKmAsync_ResolvesViaPhotonAndRoutesViaOsrm()
+    {
+        string photonJson = """
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "coordinates": [30.5100, 50.4500],
+                        "type": "Point"
+                    },
+                    "properties": {
+                        "name": "Нова локація",
+                        "city": "Київ"
+                    }
+                }
+            ]
+        }
+        """;
+
+        string osrmJson = """
+        {
+            "code": "Ok",
+            "routes": [
+                {
+                    "distance": 4200.0,
+                    "duration": 300.0
+                }
+            ]
+        }
+        """;
+
+        RoutingFakeHttpHandler handler = new(photonJson, osrmJson);
+        HttpClient httpClient = new(handler);
+        GeoDistanceService service = new(null, httpClient, TimeSpan.FromMilliseconds(10)) { UserAddress = "Київ, вул. Мечникова, 2" };
+
+        double? result = await service.CalculateDistanceKmAsync("Нова тестова локація 777");
+
+        Assert.NotNull(result);
+        Assert.Equal(4.2, result.Value);
+    }
+
+    private sealed class RoutingFakeHttpHandler : HttpMessageHandler
+    {
+        private readonly string _photonResponse;
+        private readonly string _osrmResponse;
+
+        public RoutingFakeHttpHandler(string photonResponse, string osrmResponse)
+        {
+            _photonResponse = photonResponse;
+            _osrmResponse = osrmResponse;
+        }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            string body = request.RequestUri != null && request.RequestUri.Host.Contains("router.project-osrm.org")
+                ? _osrmResponse
+                : _photonResponse;
+
+            HttpResponseMessage msg = new(System.Net.HttpStatusCode.OK)
+            {
+                Content = new StringContent(body)
+            };
+            return Task.FromResult(msg);
+        }
     }
 
     private sealed class FakeHttpHandler : HttpMessageHandler
