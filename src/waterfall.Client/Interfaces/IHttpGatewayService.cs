@@ -43,4 +43,24 @@ public interface IHttpGatewayService
     /// Вихід: видаляє збережений токен (access-JWT без серверного відкликання).
     /// </summary>
     Task LogoutAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Отримати збережену в базі адресу поточного користувача.
+    /// </summary>
+    Task<string?> GetProfileAddressAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Зберегти адресу поточного користувача у базі даних (UserPersonalData).
+    /// </summary>
+    Task SaveProfileAddressAsync(string address, CancellationToken ct = default);
+
+    /// <summary>
+    /// Отримати географічні координати адреси з постійного геокешу сервера (GeoLocationCache).
+    /// </summary>
+    Task<Waterfall.Client.Models.Geo.CoordinatesDto?> GetCoordinatesAsync(string address, CancellationToken ct = default);
+
+    /// <summary>
+    /// Двостороння синхронізація геокешу з сервером (вивантаження офлайн знайдених координат та отримання нових).
+    /// </summary>
+    Task<Waterfall.Client.Models.Geo.GeoSyncResponseDto?> SyncGeoCacheAsync(Waterfall.Client.Models.Geo.GeoSyncRequestDto request, CancellationToken ct = default);
 }

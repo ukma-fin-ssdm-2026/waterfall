@@ -1,4 +1,4 @@
-﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: тести текстів режимів, SessionText, RoleOption, відсутнього токена і блокування входу під час запиту (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using System.Net;
@@ -100,7 +100,7 @@ public class LoginViewModelTests
     }
 
     [Fact]
-    public async Task SwitchMode_ClearsError() 
+    public async Task SwitchMode_ClearsError()
     {
         _vm.IsRegisterMode = true;
         _vm.Email = "a@b.c";
@@ -273,5 +273,97 @@ public class LoginViewModelTests
         Assert.True(_vm.IsLoggedIn);
         Assert.True(_vm.SubmitCommand.CanExecute(null));
         Assert.False(_vm.IsBusy);
+    }
+
+    [Fact]
+    public void SaveAddress_UpdatesDistanceServiceAndBroadcastsMessenger()
+    {
+        CommunityToolkit.Mvvm.Messaging.StrongReferenceMessenger messenger = new();
+        UserAddressChangedMessage? received = null;
+        CommunityToolkit.Mvvm.Messaging.IMessengerExtensions.Register<UserAddressChangedMessage>(messenger, this, (_, msg) => received = msg);
+
+        Waterfall.Client.Services.GeoDistanceService distanceService = new();
+        LoginViewModel vm = new(_gateway, _tokens, _time, distanceService, messenger);
+
+        Assert.Equal(string.Empty, vm.UserAddress);
+
+        vm.UserAddress = "вул. Володимирська, 10, Київ";
+        vm.SaveAddressCommand.Execute(null);
+
+        Assert.Equal("вул. Володимирська, 10, Київ", distanceService.UserAddress);
+        Assert.NotNull(received);
+        Assert.Equal("вул. Володимирська, 10, Київ", received.Address);
+        Assert.Equal("Адресу збережено! Відстань до вакансій оновлено.", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task Logout_ClearsUserAddressAndResetsDistanceService()
+    {
+        CommunityToolkit.Mvvm.Messaging.StrongReferenceMessenger messenger = new();
+        UserAddressChangedMessage? received = null;
+        CommunityToolkit.Mvvm.Messaging.IMessengerExtensions.Register<UserAddressChangedMessage>(messenger, this, (_, msg) => received = msg);
+
+        Waterfall.Client.Services.GeoDistanceService distanceService = new() { UserAddress = "вул. Хрещатик, 22, Київ" };
+        LoginViewModel vm = new(_gateway, _tokens, _time, distanceService, messenger);
+
+        _gateway.Auth = () => new AuthResponse { Token = Jwt("""{"sub":"66666666-6666-6666-6666-66666666666a","email":"a@b.c","role":"JobSeeker"}"""), Email = "a@b.c", ExpiresAt = Now.AddHours(1) };
+        vm.Email = "a@b.c";
+        vm.Password = "anypassword";
+        await vm.SubmitCommand.ExecuteAsync(null);
+
+        vm.UserAddress = "вул. Володимирська, 10, Київ";
+        vm.SaveAddressCommand.Execute(null);
+
+        await vm.LogoutCommand.ExecuteAsync(null);
+
+        Assert.Equal(string.Empty, vm.UserAddress);
+        Assert.Null(distanceService.UserAddress);
+        Assert.NotNull(received);
+        Assert.Null(received.Address);
+    }
+
+    [Fact]
+    public async Task SaveAddress_WhenLoggedIn_PersistsAddressToServerDatabase()
+    {
+        Waterfall.Client.Services.GeoDistanceService distanceService = new();
+        LoginViewModel vm = new(_gateway, _tokens, _time, distanceService);
+
+        _gateway.Auth = () => new AuthResponse { Token = Jwt("""{"sub":"66666666-6666-6666-6666-66666666666a","email":"a@b.c","role":"JobSeeker"}"""), Email = "a@b.c", ExpiresAt = Now.AddHours(1) };
+        vm.Email = "a@b.c";
+        vm.Password = "anypassword";
+        await vm.SubmitCommand.ExecuteAsync(null);
+
+        vm.UserAddress = "Київ, вул. Польова, 15";
+        await vm.SaveAddressCommand.ExecuteAsync(null);
+
+        Assert.Contains("Київ, вул. Польова, 15", _gateway.SavedProfileAddresses);
+    }
+
+    [Fact]
+    public void SelectAddressSuggestion_UpdatesAddressAndClearsSuggestions()
+    {
+        LoginViewModel vm = new(_gateway, _tokens, _time);
+        vm.AddressSuggestions.Add("Київ, вул. Мечникова, 2");
+        vm.AddressSuggestions.Add("Київ, Спортивна площа, 1а");
+        Assert.True(vm.HasSuggestions);
+
+        vm.SelectAddressSuggestionCommand.Execute("Київ, Спортивна площа, 1а");
+
+        Assert.Equal("Київ, Спортивна площа, 1а", vm.UserAddress);
+        Assert.False(vm.HasSuggestions);
+        Assert.Empty(vm.AddressSuggestions);
+    }
+
+    [Fact]
+    public void CloseSuggestions_ClearsSuggestionsList()
+    {
+        LoginViewModel vm = new(_gateway, _tokens, _time);
+        vm.AddressSuggestions.Add("Київ, вул. Мечникова, 2");
+        Assert.True(vm.HasSuggestions);
+
+        vm.CloseSuggestionsCommand.Execute(null);
+
+        Assert.False(vm.HasSuggestions);
+        Assert.Empty(vm.AddressSuggestions);
     }
 }

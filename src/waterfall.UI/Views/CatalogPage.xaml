@@ -5,16 +5,145 @@
              xmlns:controls="clr-namespace:waterfall.UI.Controls"
              x:Class="waterfall.UI.Views.CatalogPage"
              x:DataType="vm:CatalogViewModel"
-             Title="Каталог">
+             Title="Каталог"
+             BackgroundColor="{StaticResource DarkBg2}">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,*">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
 
-        <SearchBar Text="{Binding SearchText}"
-                   SearchCommand="{Binding SearchCommand}"
-                   Placeholder="Посада, компанія або навичка"
-                   Margin="8,8,8,0" />
+        <!-- Верхній рядок: Пошук та кнопки дій у стилі PointOfSale -->
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto"
+              ColumnSpacing="8"
+              Padding="12,12,12,6">
+            
+            <Border StrokeShape="RoundRectangle 12"
+                    StrokeThickness="1"
+                    Stroke="{StaticResource Secondary}"
+                    BackgroundColor="{StaticResource DarkBg1}"
+                    Padding="4,0">
+                <SearchBar Text="{Binding SearchText}"
+                           SearchCommand="{Binding SearchCommand}"
+                           Placeholder="Посада, компанія або навичка..."
+                           BackgroundColor="Transparent" />
+            </Border>
 
+            <Button Grid.Column="1"
+                    Text="{Binding FilterToggleText}"
+                    Command="{Binding ToggleFilterPanelCommand}"
+                    Style="{StaticResource CardAction}"
+                    SemanticProperties.Hint="Відкрити або сховати панель детальної фільтрації" />
+
+            <Button Grid.Column="2"
+                    Text="Експорт 📥"
+                    Command="{Binding ExportVacanciesCommand}"
+                    Style="{StaticResource CardAction}"
+                    SemanticProperties.Hint="Експортувати список вакансій у файл (FR-012)" />
+
+            <Button Grid.Column="3"
+                    Text="Імпорт 📤"
+                    Command="{Binding ImportVacanciesCommand}"
+                    Style="{StaticResource CardAction}"
+                    SemanticProperties.Hint="Імпортувати вакансії з файлу (FR-012)" />
+        </Grid>
+
+        <!-- Розширена панель фільтрації (US-002, FR-004) -->
         <Border Grid.Row="1"
+                IsVisible="{Binding IsFilterPanelVisible}"
+                Style="{StaticResource VacancyCard}"
+                Margin="12,4,12,6"
+                Padding="16">
+            <VerticalStackLayout Spacing="12">
+                <Label Text="Фільтрація каталогу вакансій"
+                       FontFamily="OpenSansSemibold"
+                       FontSize="15"
+                       TextColor="{StaticResource White}" />
+
+                <Grid ColumnDefinitions="*,*" ColumnSpacing="10" RowDefinitions="Auto,Auto" RowSpacing="10">
+                    <Border StrokeShape="RoundRectangle 10"
+                            Stroke="{StaticResource Secondary}"
+                            BackgroundColor="{StaticResource DarkBg2}"
+                            Padding="8,0">
+                        <Entry Text="{Binding SkillFilter}"
+                               Placeholder="Стек технологій (напр. Python)"
+                               FontSize="13"
+                               BackgroundColor="Transparent" />
+                    </Border>
+
+                    <Border Grid.Column="1"
+                            StrokeShape="RoundRectangle 10"
+                            Stroke="{StaticResource Secondary}"
+                            BackgroundColor="{StaticResource DarkBg2}"
+                            Padding="8,0">
+                        <Picker Title="Формат роботи"
+                                ItemsSource="{Binding FormatOptions}"
+                                SelectedItem="{Binding SelectedFormat}"
+                                FontSize="13"
+                                BackgroundColor="Transparent" />
+                    </Border>
+
+                    <Border Grid.Row="1"
+                            StrokeShape="RoundRectangle 10"
+                            Stroke="{StaticResource Secondary}"
+                            BackgroundColor="{StaticResource DarkBg2}"
+                            Padding="8,0">
+                        <Picker Title="Категорія"
+                                ItemsSource="{Binding CategoryOptions}"
+                                SelectedItem="{Binding SelectedCategory}"
+                                FontSize="13"
+                                BackgroundColor="Transparent" />
+                    </Border>
+
+                    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="6">
+                        <Border StrokeShape="RoundRectangle 10"
+                                Stroke="{StaticResource Secondary}"
+                                BackgroundColor="{StaticResource DarkBg2}"
+                                Padding="8,0">
+                            <Entry Text="{Binding MinSalaryFilter}"
+                                   Placeholder="ЗП від ($)"
+                                   Keyboard="Numeric"
+                                   FontSize="13"
+                                   BackgroundColor="Transparent" />
+                        </Border>
+                        <Border Grid.Column="1"
+                                StrokeShape="RoundRectangle 10"
+                                Stroke="{StaticResource Secondary}"
+                                BackgroundColor="{StaticResource DarkBg2}"
+                                Padding="8,0">
+                            <Entry Text="{Binding MaxSalaryFilter}"
+                                   Placeholder="ЗП до ($)"
+                                   Keyboard="Numeric"
+                                   FontSize="13"
+                                   BackgroundColor="Transparent" />
+                        </Border>
+                    </Grid>
+                </Grid>
+
+                <HorizontalStackLayout Spacing="10" HorizontalOptions="End" Margin="0,4,0,0">
+                    <Button Text="Скинути фільтри"
+                            Command="{Binding ResetFiltersCommand}"
+                            Style="{StaticResource CardAction}" />
+                    <Button Text="Застосувати"
+                            Command="{Binding ApplyFiltersCommand}"
+                            Style="{StaticResource CardActionPrimary}" />
+                </HorizontalStackLayout>
+            </VerticalStackLayout>
+        </Border>
+
+        <!-- Інформаційний банер про застарілий кеш або результат експорту/імпорту (REL-001) -->
+        <Border Grid.Row="2"
+                IsVisible="{Binding HasStaleCache}"
+                StrokeShape="RoundRectangle 10"
+                StrokeThickness="1"
+                Stroke="{StaticResource Accent}"
+                BackgroundColor="{StaticResource DarkBg1}"
+                Padding="14,8"
+                Margin="12,4,12,4">
+            <Label Text="{Binding StaleCacheText}"
+                   FontSize="12"
+                   TextColor="{StaticResource Accent}" />
+        </Border>
+
+        <!-- Банер помилки сервера/мережі -->
+        <Border Grid.Row="3"
                 IsVisible="{Binding HasError}"
                 Style="{StaticResource ErrorBanner}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
@@ -24,14 +153,16 @@
                 <Button Grid.Column="1"
                         Text="Повторити"
                         Command="{Binding RetryCommand}"
-                        Style="{StaticResource CardAction}" />
+                        Style="{StaticResource CardActionPrimary}" />
             </Grid>
         </Border>
 
-        <Grid Grid.Row="2" Padding="16,8" ColumnDefinitions="*,Auto">
+        <!-- Підсумок і спіннер -->
+        <Grid Grid.Row="4" Padding="16,6" ColumnDefinitions="*,Auto">
             <Label Text="{Binding TotalText}"
                    IsVisible="{Binding ShowTotal}"
-                   Style="{StaticResource MutedLabel}" />
+                   Style="{StaticResource MutedLabel}"
+                   VerticalOptions="Center" />
             <ActivityIndicator Grid.Column="1"
                                IsRunning="{Binding IsLoading}"
                                IsVisible="{Binding IsLoading}"
@@ -39,7 +170,8 @@
                                WidthRequest="20" />
         </Grid>
 
-        <RefreshView Grid.Row="3"
+        <!-- Список вакансій із пагінацією та pull-to-refresh -->
+        <RefreshView Grid.Row="5"
                      IsRefreshing="{Binding IsRefreshing}"
                      Command="{Binding RefreshCommand}">
             <CollectionView ItemsSource="{Binding Vacancies}"
@@ -53,16 +185,27 @@
                     </DataTemplate>
                 </CollectionView.ItemTemplate>
 
+                <!-- Порожній стан за критеріями US-002 AC-2, Test-07 -->
                 <CollectionView.EmptyView>
                     <VerticalStackLayout Padding="32"
-                                         Spacing="4"
+                                         Spacing="10"
                                          IsVisible="{Binding IsEmpty}">
-                        <Label Text="Нічого не знайдено"
+                        <Label Text="🔍"
+                               FontSize="36"
+                               HorizontalOptions="Center" />
+                        <Label Text="За обраними фільтрами вакансій не знайдено"
                                HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center"
                                Style="{StaticResource CardTitle}" />
-                        <Label Text="Спробуйте інший запит"
+                        <Label Text="Спробуйте змінити критерії пошуку або скиньте активні фільтри"
                                HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center"
                                Style="{StaticResource MutedLabel}" />
+                        <Button Text="Скинути фільтри"
+                                Command="{Binding ResetFiltersCommand}"
+                                HorizontalOptions="Center"
+                                Margin="0,8,0,0"
+                                Style="{StaticResource CardActionPrimary}" />
                     </VerticalStackLayout>
                 </CollectionView.EmptyView>
 

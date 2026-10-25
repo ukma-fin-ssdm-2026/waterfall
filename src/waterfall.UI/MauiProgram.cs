@@ -30,12 +30,25 @@ public static class MauiProgram
 
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton(SecureStorage.Default);
-        // Синхронізація стану «Обраного» між вкладками (VacancySaveChangedMessage); слабкі посилання — без витоків сторінок.
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.IUrlLauncher, MauiUrlLauncher>();
+        builder.Services.AddHttpClient();
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.ILocalGeoCacheService, Waterfall.Client.Services.EfLocalGeoCacheService>();
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.IDistanceCalculatorService>(sp =>
+            new Waterfall.Client.Services.GeoDistanceService(
+                sp.GetService<Waterfall.Client.Interfaces.IHttpGatewayService>(),
+                sp.GetService<Waterfall.Client.Interfaces.ILocalGeoCacheService>()));
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.IAddressAutocompleteService, Waterfall.Client.Services.PhotonAddressAutocompleteService>();
         builder.Services.AddSingleton<IMessenger>(WeakReferenceMessenger.Default);
         builder.Services.AddWaterfallClient<SecureStorageTokenStore>(new Uri(ApiBaseUrl));
 
         builder.Services.AddTransient<CatalogViewModel>();
         builder.Services.AddTransient<CatalogPage>();
+        builder.Services.AddTransient<RecommendationsViewModel>();
+        builder.Services.AddTransient<RecommendationsPage>();
+        builder.Services.AddTransient<AIConsultantViewModel>();
+        builder.Services.AddTransient<AIConsultantPage>();
+        builder.Services.AddTransient<AnalyticsViewModel>();
+        builder.Services.AddTransient<AnalyticsPage>();
         builder.Services.AddTransient<FavoritesViewModel>();
         builder.Services.AddTransient<FavoritesPage>();
         builder.Services.AddTransient<LoginViewModel>();
@@ -45,7 +58,40 @@ public static class MauiProgram
         builder.Logging.AddDebug();
 #endif
 
-        return builder.Build();
+        // Прибираємо внутрішні нативні рамки з Entry, Editor, SearchBar,
+        // щоб показувалася лише стилізована зовнішня рамка MAUI Border.
+        Microsoft.Maui.Handlers.EntryHandler.Mapper.AppendToMapping("RemoveNativeBorder", (handler, view) =>
+        {
+#if WINDOWS
+            handler.PlatformView.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+#elif ANDROID
+            handler.PlatformView.Background = null;
+            handler.PlatformView.SetBackgroundColor(Android.Graphics.Color.Transparent);
+#elif IOS || MACCATALYST
+            handler.PlatformView.BorderStyle = UIKit.UITextBorderStyle.None;
+#endif
+        });
 
+        Microsoft.Maui.Handlers.EditorHandler.Mapper.AppendToMapping("RemoveNativeBorder", (handler, view) =>
+        {
+#if WINDOWS
+            handler.PlatformView.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+#elif ANDROID
+            handler.PlatformView.Background = null;
+            handler.PlatformView.SetBackgroundColor(Android.Graphics.Color.Transparent);
+#endif
+        });
+
+        Microsoft.Maui.Handlers.SearchBarHandler.Mapper.AppendToMapping("RemoveNativeBorder", (handler, view) =>
+        {
+#if WINDOWS
+            handler.PlatformView.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+#elif ANDROID
+            handler.PlatformView.Background = null;
+            handler.PlatformView.SetBackgroundColor(Android.Graphics.Color.Transparent);
+#endif
+        });
+
+        return builder.Build();
     }
 }

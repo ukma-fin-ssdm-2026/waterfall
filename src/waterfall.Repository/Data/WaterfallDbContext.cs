@@ -19,6 +19,8 @@ public class WaterfallDbContext : DbContext
     public DbSet<VacancyDB> Vacancies => Set<VacancyDB>();
     public DbSet<SavedVacancyDB> SavedVacancies => Set<SavedVacancyDB>();
     public DbSet<UserDB> Users => Set<UserDB>();
+    public DbSet<UserPersonalDataDB> UserPersonalData => Set<UserPersonalDataDB>();
+    public DbSet<GeoLocationCacheDB> GeoLocationCache => Set<GeoLocationCacheDB>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

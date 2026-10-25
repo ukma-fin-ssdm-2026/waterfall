@@ -8,6 +8,8 @@ using System.Text.Json.Serialization.Metadata;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
+using Waterfall.Client.Models.Geo;
+using Waterfall.Client.Models.Profile;
 using Waterfall.Client.Models.SavedVacancies;
 using Waterfall.Client.Models.Vacancies;
 
@@ -66,6 +68,59 @@ public sealed class HttpGatewayService : IHttpGatewayService
         AuthenticateAsync(Post("api/v1/auth/register", request, Json.RegisterRequest), ct);
 
     public Task LogoutAsync(CancellationToken ct = default) => _tokens.ClearAsync(ct);
+
+    public async Task<string?> GetProfileAddressAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            UserAddressDto dto = await SendAsync(new HttpRequestMessage(HttpMethod.Get, "api/v1/profile/address"), Json.UserAddressDto, ct);
+            return dto.Address;
+        }
+        catch (ApiException)
+        {
+            return null;
+        }
+    }
+
+    public async Task SaveProfileAddressAsync(string address, CancellationToken ct = default)
+    {
+        HttpRequestMessage request = new(HttpMethod.Put, "api/v1/profile/address")
+        {
+            Content = JsonContent.Create(new UserAddressDto { Address = address }, Json.UserAddressDto)
+        };
+        await SendAsync(request, Json.UserAddressDto, ct);
+    }
+
+    public async Task<CoordinatesDto?> GetCoordinatesAsync(string address, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return null;
+        }
+
+        try
+        {
+            string url = "api/v1/geo/coordinates?address=" + Uri.EscapeDataString(address.Trim());
+            return await SendAsync(new HttpRequestMessage(HttpMethod.Get, url), Json.CoordinatesDto, ct);
+        }
+        catch (ApiException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<GeoSyncResponseDto?> SyncGeoCacheAsync(GeoSyncRequestDto request, CancellationToken ct = default)
+    {
+        try
+        {
+            HttpRequestMessage msg = Post("api/v1/geo/sync", request, Json.GeoSyncRequestDto);
+            return await SendAsync(msg, Json.GeoSyncResponseDto, ct);
+        }
+        catch (ApiException)
+        {
+            return null;
+        }
+    }
 
     private async Task<AuthResponse> AuthenticateAsync(HttpRequestMessage request, CancellationToken ct)
     {

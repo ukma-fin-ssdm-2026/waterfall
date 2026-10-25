@@ -1,4 +1,4 @@
-﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: тести EnsureLoaded/LoadMore/ShowTotal, скасованого застарілого завантаження і гілок debounce (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using System.Net;
@@ -190,7 +190,7 @@ public class CatalogViewModelTests
     }
 
     [Fact]
-    public async Task ShowTotal_HiddenBeforeLoad_AndOnError() 
+    public async Task ShowTotal_HiddenBeforeLoad_AndOnError()
     {
         Task load = _vm.EnsureLoadedCommand.ExecuteAsync(null);
         Assert.False(_vm.ShowTotal);

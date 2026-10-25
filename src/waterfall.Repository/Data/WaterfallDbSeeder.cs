@@ -14,10 +14,11 @@ public static class WaterfallDbSeeder
     public static async Task SeedAsync(WaterfallDbContext context)
     {
         await context.Database.EnsureCreatedAsync();
+        await EnsureTablesCreatedAsync(context);
 
         if (!await context.Vacancies.AnyAsync())
         {
-            List<VacancyDB> vacancies = new List<VacancyDB>
+            var vacancies = new List<VacancyDB>
             {
                 new VacancyDB
                 {
@@ -134,10 +135,29 @@ public static class WaterfallDbSeeder
             await context.Vacancies.AddRangeAsync(vacancies);
             await context.SaveChangesAsync();
         }
+        else
+        {
+            List<VacancyDB> missingAddresses = await context.Vacancies.Where(v => v.FullAddress == null || v.FullAddress == "" || v.FullAddress.Contains("(Головний офіс)")).ToListAsync();
+            if (missingAddresses.Count > 0)
+            {
+                foreach (VacancyDB v in missingAddresses)
+                {
+                    string loc = (v.Location ?? string.Empty).ToLowerInvariant();
+                    string city = loc.Contains("lviv") || loc.Contains("львів") ? "Львів"
+                        : (loc.Contains("dnipro") || loc.Contains("дніпро") ? "Дніпро"
+                        : (loc.Contains("odesa") || loc.Contains("одеса") ? "Одеса"
+                        : (loc.Contains("kharkiv") || loc.Contains("харків") ? "Харків"
+                        : (loc.Contains("kyiv") || loc.Contains("київ") ? "Київ"
+                        : (loc.Contains("remote") || loc.Contains("віддалено") ? "Віддалено" : "Локація")))));
+                    v.FullAddress = $"{city}, не вказано точну адресу";
+                }
+                await context.SaveChangesAsync();
+            }
+        }
 
         if (!await context.SavedVacancies.AnyAsync())
         {
-            List<SavedVacancyDB> sampleBookmarks = new List<SavedVacancyDB>
+            var sampleBookmarks = new List<SavedVacancyDB>
             {
                 new SavedVacancyDB
                 {
@@ -167,7 +187,7 @@ public static class WaterfallDbSeeder
         if (context.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite"
             && !await context.Users.AnyAsync())
         {
-            List<UserDB> devUsers = new List<UserDB>
+            var devUsers = new List<UserDB>
             {
                 new UserDB
                 {
@@ -181,9 +201,9 @@ public static class WaterfallDbSeeder
                 new UserDB
                 {
                     Id = Guid.Parse("66666666-6666-6666-6666-66666666666b"),
-                    Email = "seeker2@waterfall.com",
-                    // Пароль: DevSeeker1234
-                    PasswordHash = "AQAAAAIAAYagAAAAELS0tART4w8CokOL0gSzcJAqi4a6nUzSZ1EUrjXd9NCvtkgXpXLMayG5mhBYhvqR3w==",
+                    Email = "123@123",
+                    // Пароль: 123@123123@123
+                    PasswordHash = "AQAAAAIAAYagAAAAED+/zVB86tdUugHC7i0xTTVLx9I2SbiMKpfOlYVxiv9d5RKskh8jhFCoE6HnwQHjEw==",
                     Role = "JobSeeker",
                     CreatedAt = DateTimeOffset.UtcNow.AddDays(-31)
                 },
@@ -200,6 +220,136 @@ public static class WaterfallDbSeeder
 
             await context.Users.AddRangeAsync(devUsers);
             await context.SaveChangesAsync();
+        }
+
+        try
+        {
+            if (!await context.UserPersonalData.AnyAsync())
+            {
+                await context.UserPersonalData.AddAsync(new UserPersonalDataDB
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
+                    Address = "вул. Хрещатик, 22, Київ",
+                    UpdatedAt = DateTimeOffset.UtcNow
+                });
+                await context.SaveChangesAsync();
+            }
+        }
+        catch
+        {
+            await EnsureTablesCreatedAsync(context);
+            if (!await context.UserPersonalData.AnyAsync())
+            {
+                await context.UserPersonalData.AddAsync(new UserPersonalDataDB
+                {
+                    Id = Guid.NewGuid(),
+                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
+                    Address = "вул. Хрещатик, 22, Київ",
+                    UpdatedAt = DateTimeOffset.UtcNow
+                });
+                await context.SaveChangesAsync();
+            }
+        }
+
+        try
+        {
+            // Видаляємо суто назви міст без вулиць, щоб вони не перехоплювали конкретні вулиці
+            List<GeoLocationCacheDB> cityOnlyEntries = await context.GeoLocationCache
+                .Where(c => c.NormalizedAddress == "київ" || c.NormalizedAddress == "львів" ||
+                            c.NormalizedAddress == "харків" || c.NormalizedAddress == "дніпро" ||
+                            c.NormalizedAddress == "одеса")
+                .ToListAsync();
+
+            if (cityOnlyEntries.Count > 0)
+            {
+                context.GeoLocationCache.RemoveRange(cityOnlyEntries);
+                await context.SaveChangesAsync();
+            }
+
+            if (!await context.GeoLocationCache.AnyAsync())
+            {
+                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
+                await context.SaveChangesAsync();
+            }
+        }
+        catch
+        {
+            await EnsureTablesCreatedAsync(context);
+            if (!await context.GeoLocationCache.AnyAsync())
+            {
+                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
+                await context.SaveChangesAsync();
+            }
+        }
+    }
+
+    private static List<GeoLocationCacheDB> GetBaseLocations() =>
+    [
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "соборност", Latitude = 50.4421, Longitude = 30.6250 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "спортивна", Latitude = 50.4378, Longitude = 30.5220 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "гулівер", Latitude = 50.4378, Longitude = 30.5220 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "мечников", Latitude = 50.4372, Longitude = 30.5276 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "парус", Latitude = 50.4372, Longitude = 30.5276 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "скляренк", Latitude = 50.4851, Longitude = 30.4721 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "глушков", Latitude = 50.3780, Longitude = 30.4682 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "васильківськ", Latitude = 50.4320, Longitude = 30.5165 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "хрещатик", Latitude = 50.4472, Longitude = 30.5226 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "саксаганськ", Latitude = 50.4360, Longitude = 30.5050 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "володимирськ", Latitude = 50.4460, Longitude = 30.5160 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "польов", Latitude = 50.4430, Longitude = 30.4480 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "позняк", Latitude = 50.4020, Longitude = 30.6350 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "садов", Latitude = 49.8225, Longitude = 23.9855 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "яворницьк", Latitude = 48.4715, Longitude = 35.0310 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "дерибасівськ", Latitude = 46.4850, Longitude = 30.7420 },
+        new() { Id = Guid.NewGuid(), NormalizedAddress = "сумськ", Latitude = 50.0010, Longitude = 36.2340 }
+    ];
+
+    private static async Task EnsureTablesCreatedAsync(WaterfallDbContext context)
+    {
+        if (context.Database.IsSqlite())
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                CREATE TABLE IF NOT EXISTS ""UserPersonalData"" (
+                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_UserPersonalData"" PRIMARY KEY,
+                    ""UserId"" TEXT NOT NULL,
+                    ""Address"" TEXT NULL,
+                    ""UpdatedAt"" INTEGER NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_UserPersonalData_UserId"" ON ""UserPersonalData"" (""UserId"");
+
+                CREATE TABLE IF NOT EXISTS ""GeoLocationCache"" (
+                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_GeoLocationCache"" PRIMARY KEY,
+                    ""NormalizedAddress"" TEXT NOT NULL,
+                    ""Latitude"" REAL NOT NULL,
+                    ""Longitude"" REAL NOT NULL,
+                    ""CreatedAt"" INTEGER NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_GeoLocationCache_NormalizedAddress"" ON ""GeoLocationCache"" (""NormalizedAddress"");
+            ");
+        }
+        else if (context.Database.IsSqlServer())
+        {
+            await context.Database.ExecuteSqlRawAsync(@"
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='UserPersonalData' and xtype='U')
+                CREATE TABLE [UserPersonalData] (
+                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                    [UserId] uniqueidentifier NOT NULL,
+                    [Address] nvarchar(300) NULL,
+                    [UpdatedAt] datetimeoffset NOT NULL
+                );
+
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='GeoLocationCache' and xtype='U')
+                CREATE TABLE [GeoLocationCache] (
+                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                    [NormalizedAddress] nvarchar(300) NOT NULL,
+                    [Latitude] float NOT NULL,
+                    [Longitude] float NOT NULL,
+                    [CreatedAt] datetimeoffset NOT NULL
+                );
+                IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_GeoLocationCache_NormalizedAddress')
+                CREATE UNIQUE INDEX [IX_GeoLocationCache_NormalizedAddress] ON [GeoLocationCache] ([NormalizedAddress]);
+            ");
         }
     }
 }

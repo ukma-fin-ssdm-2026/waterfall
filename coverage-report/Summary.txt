@@ -1,94 +1,127 @@
 Summary
-  Generated on: 18.10.2026 - 17:25:02
-  Coverage date: 18.10.2026 - 17:22:28 - 18.10.2026 - 17:24:50
-  Parser: MultiReport (7x Cobertura)
+  Generated on: 26.10.2026 - 0:28:01
+  Coverage date: 26.10.2026 - 0:10:40 - 26.10.2026 - 0:27:58
+  Parser: MultiReport (16x Cobertura)
   Assemblies: 4
-  Classes: 66
-  Files: 83
-  Line coverage: 77.6%
-  Covered lines: 3548
-  Uncovered lines: 1019
-  Coverable lines: 4567
-  Total lines: 8359
-  Branch coverage: 70.1% (588 of 838)
-  Covered branches: 588
-  Total branches: 838
-  Method coverage: 86.2% (434 of 503)
-  Full method coverage: 76.9% (387 of 503)
-  Covered methods: 434
-  Fully covered methods: 387
-  Total methods: 503
+  Classes: 99
+  Files: 114
+  Line coverage: 75.8%
+  Covered lines: 4407
+  Uncovered lines: 1400
+  Coverable lines: 5807
+  Total lines: 12502
+  Branch coverage: 70.3% (1320 of 1876)
+  Covered branches: 1320
+  Total branches: 1876
+  Method coverage: 79% (585 of 740)
+  Full method coverage: 69.1% (512 of 740)
+  Covered methods: 585
+  Fully covered methods: 512
+  Total methods: 740
 
-Waterfall.Api                                                   57.8%
-  Program                                                          0%
-  Waterfall.Api.Controllers.ApiControllerBase                    100%
-  Waterfall.Api.Controllers.AuthController                       100%
-  Waterfall.Api.Controllers.SavedVacanciesController            86.6%
-  Waterfall.Api.Controllers.VacanciesController                 86.6%
-  Waterfall.Api.Extensions.ServiceCollectionExtensions             0%
-  Waterfall.Api.Models.Common.ApiErrorResponse                   100%
-  Waterfall.Api.Models.Common.ErrorPayload                       100%
-  Waterfall.Api.Models.Common.ValidationErrorDetail             66.6%
-  Waterfall.Api.Options.JwtOptions                               100%
-  Waterfall.Api.Services.AspNetPasswordHasher                   94.1%
-  Waterfall.Api.Services.AuthenticationService                  98.5%
-  Waterfall.Api.Services.JwtTokenService                         100%
-  Waterfall.Api.Services.OpenApiGenerator                          0%
-  Waterfall.Api.Workers.IngestionOptions                         100%
-  Waterfall.Api.Workers.JobParserService                        98.2%
+Waterfall.Api                                                      83.9%
+  System.Runtime.CompilerServices                                     0%
+  Waterfall.Api.Controllers.ApiControllerBase                       100%
+  Waterfall.Api.Controllers.AuthController                          100%
+  Waterfall.Api.Controllers.GeoController                           100%
+  Waterfall.Api.Controllers.ProfileController                      88.2%
+  Waterfall.Api.Controllers.SavedVacanciesController               91.4%
+  Waterfall.Api.Controllers.VacanciesController                    91.1%
+  Waterfall.Api.Extensions.ServiceCollectionExtensions                0%
+  Waterfall.Api.Models.Common.ApiErrorResponse                      100%
+  Waterfall.Api.Models.Common.ErrorPayload                          100%
+  Waterfall.Api.Models.Common.ValidationErrorDetail                66.6%
+  Waterfall.Api.Options.JwtOptions                                  100%
+  Waterfall.Api.Services.AspNetPasswordHasher                      91.6%
+  Waterfall.Api.Services.AuthenticationService                     96.6%
+  Waterfall.Api.Services.JwtTokenService                            100%
+  Waterfall.Api.Services.OpenApiGenerator                             0%
+  Waterfall.Api.Workers.IngestionOptions                            100%
+  Waterfall.Api.Workers.JobParserService                           97.6%
 
-waterfall.Client                                                  84%
-  Waterfall.Client.ApiException                                  100%
-  Waterfall.Client.Extensions.ServiceCollectionExtensions        100%
-  Waterfall.Client.Models.Auth.AuthResponse                      100%
-  Waterfall.Client.Models.Auth.AuthSession                       100%
-  Waterfall.Client.Models.Auth.LoginRequest                      100%
-  Waterfall.Client.Models.Auth.RegisterRequest                   100%
-  Waterfall.Client.Models.Common.ApiError                        100%
-  Waterfall.Client.Models.Common.ApiErrorResponse                100%
-  Waterfall.Client.Models.Common.ApiValidationError              100%
-  Waterfall.Client.Models.Common.PagedResult<T>                  100%
-  Waterfall.Client.Models.SavedVacancies.SavedVacancyDto          80%
-  Waterfall.Client.Models.SavedVacancies.SaveVacancyRequest      100%
-  Waterfall.Client.Models.Vacancies.VacancyDto                   100%
-  Waterfall.Client.Services.AuthHeaderHandler                    100%
-  Waterfall.Client.Services.ClientJsonContext                   82.5%
-  Waterfall.Client.Services.HttpGatewayService                  86.7%
-  Waterfall.Client.ViewModels.CatalogViewModel                  92.3%
-  Waterfall.Client.ViewModels.FavoritesViewModel                95.6%
-  Waterfall.Client.ViewModels.LoginViewModel                    88.4%
-  Waterfall.Client.ViewModels.RoleOption                          50%
-  Waterfall.Client.ViewModels.VacancyItemViewModel              74.5%
-  Waterfall.Client.ViewModels.VacancySaveChangedMessage          100%
+waterfall.Client                                                     71%
+  Waterfall.Client.ApiException                                     100%
+  Waterfall.Client.Data.ClientWaterfallDbContext                   71.4%
+  Waterfall.Client.Entities.ClientGeoLocationCacheDB                100%
+  Waterfall.Client.Extensions.ServiceCollectionExtensions           100%
+  Waterfall.Client.Models.Auth.AuthResponse                         100%
+  Waterfall.Client.Models.Auth.AuthSession                          100%
+  Waterfall.Client.Models.Auth.LoginRequest                         100%
+  Waterfall.Client.Models.Auth.RegisterRequest                      100%
+  Waterfall.Client.Models.Common.ApiError                           100%
+  Waterfall.Client.Models.Common.ApiErrorResponse                   100%
+  Waterfall.Client.Models.Common.ApiValidationError                 100%
+  Waterfall.Client.Models.Common.PagedResult<T>                     100%
+  Waterfall.Client.Models.Geo.CoordinatesDto                        100%
+  Waterfall.Client.Models.Geo.GeoSyncItemDto                        100%
+  Waterfall.Client.Models.Geo.GeoSyncRequestDto                     100%
+  Waterfall.Client.Models.Geo.GeoSyncResponseDto                    100%
+  Waterfall.Client.Models.Geo.LocalGeoCacheItem                       0%
+  Waterfall.Client.Models.Profile.UserAddressDto                      0%
+  Waterfall.Client.Models.SavedVacancies.SavedVacancyDto             80%
+  Waterfall.Client.Models.SavedVacancies.SaveVacancyRequest         100%
+  Waterfall.Client.Models.Vacancies.VacancyDto                      100%
+  Waterfall.Client.Services.AuthHeaderHandler                       100%
+  Waterfall.Client.Services.ClientJsonContext                      68.7%
+  Waterfall.Client.Services.DefaultUrlLauncher                        0%
+  Waterfall.Client.Services.EfLocalGeoCacheService                 85.6%
+  Waterfall.Client.Services.GeoDistanceService                     75.8%
+  Waterfall.Client.Services.HttpGatewayService                     72.9%
+  Waterfall.Client.Services.PhotonAddressAutocompleteService       95.1%
+  Waterfall.Client.ViewModels.AIChatMessageViewModel                  0%
+  Waterfall.Client.ViewModels.AIConsultantViewModel                   0%
+  Waterfall.Client.ViewModels.AnalyticsViewModel                      0%
+  Waterfall.Client.ViewModels.CatalogViewModel                     85.8%
+  Waterfall.Client.ViewModels.FavoritesViewModel                    100%
+  Waterfall.Client.ViewModels.LoginViewModel                       80.6%
+  Waterfall.Client.ViewModels.RecommendationsViewModel              100%
+  Waterfall.Client.ViewModels.RoleOption                            100%
+  Waterfall.Client.ViewModels.TechDemandItem                          0%
+  Waterfall.Client.ViewModels.TimelinePoint                           0%
+  Waterfall.Client.ViewModels.UserAddressChangedMessage             100%
+  Waterfall.Client.ViewModels.VacancyItemViewModel                 84.3%
+  Waterfall.Client.ViewModels.VacancySaveChangedMessage             100%
 
-waterfall.Repository                                            51.4%
-  Waterfall.Repository.Data.WaterfallDbContext                   100%
-  Waterfall.Repository.Data.WaterfallDbSeeder                      0%
-  Waterfall.Repository.Entities.SavedVacancyDB                   100%
-  Waterfall.Repository.Entities.UserDB                           100%
-  Waterfall.Repository.Entities.VacancyDB                        100%
-  Waterfall.Repository.Extensions.ServiceCollectionExtensions      0%
-  Waterfall.Repository.Repositories.EfSavedVacancyRepository    96.2%
-  Waterfall.Repository.Repositories.EfUserRepository             100%
-  Waterfall.Repository.Repositories.EfVacancyRepository         78.2%
+waterfall.Repository                                               83.4%
+  Waterfall.Repository.Data.WaterfallDbContext                      100%
+  Waterfall.Repository.Data.WaterfallDbSeeder                      83.4%
+  Waterfall.Repository.Entities.GeoLocationCacheDB                  100%
+  Waterfall.Repository.Entities.SavedVacancyDB                      100%
+  Waterfall.Repository.Entities.UserDB                              100%
+  Waterfall.Repository.Entities.UserPersonalDataDB                  100%
+  Waterfall.Repository.Entities.VacancyDB                           100%
+  Waterfall.Repository.Extensions.ServiceCollectionExtensions         0%
+  Waterfall.Repository.Repositories.EfGeoLocationCacheRepository   85.4%
+  Waterfall.Repository.Repositories.EfSavedVacancyRepository       98.3%
+  Waterfall.Repository.Repositories.EfUserRepository                100%
+  Waterfall.Repository.Repositories.EfVacancyRepository            77.3%
 
-waterfall.Services                                              88.6%
-  Waterfall.Services.Exceptions.DuplicateEmailException          100%
-  Waterfall.Services.Exceptions.InvalidCredentialsException      100%
-  Waterfall.Services.Extensions.ServiceCollectionExtensions        0%
-  Waterfall.Services.Interfaces.IngestionResult                  100%
-  Waterfall.Services.Interfaces.RawVacancy                       100%
-  Waterfall.Services.Models.Auth.AuthResponse                    100%
-  Waterfall.Services.Models.Auth.LoginRequest                    100%
-  Waterfall.Services.Models.Auth.RegisterRequest                 100%
-  Waterfall.Services.Models.Common.PagedResult<T>               57.1%
-  Waterfall.Services.Models.SavedVacancies.SavedVacancyDto       100%
-  Waterfall.Services.Models.SavedVacancies.SaveVacancyRequest     20%
-  Waterfall.Services.Models.Vacancies.CreateVacancyRequest      41.1%
-  Waterfall.Services.Models.Vacancies.UpdateVacancyRequest      42.8%
-  Waterfall.Services.Models.Vacancies.VacancyDto                 100%
-  Waterfall.Services.Models.Vacancies.VacancyFilterParameters   64.2%
-  Waterfall.Services.SavedVacancyService                         100%
-  Waterfall.Services.VacancyCacheService                        98.7%
-  Waterfall.Services.VacancyIngestionService                    99.3%
-  Waterfall.Services.VacancyService                             97.9%
+waterfall.Services                                                 90.8%
+  waterfall.Services.Common.SalaryRange                             100%
+  waterfall.Services.Common.SalaryRangeParser                       100%
+  Waterfall.Services.Exceptions.DuplicateEmailException             100%
+  Waterfall.Services.Exceptions.InvalidCredentialsException         100%
+  Waterfall.Services.Extensions.ServiceCollectionExtensions           0%
+  Waterfall.Services.GeoLocationService                            93.4%
+  Waterfall.Services.Interfaces.IngestionResult                     100%
+  Waterfall.Services.Interfaces.RawVacancy                          100%
+  Waterfall.Services.Models.Auth.AuthResponse                       100%
+  Waterfall.Services.Models.Auth.LoginRequest                       100%
+  Waterfall.Services.Models.Auth.RegisterRequest                    100%
+  Waterfall.Services.Models.Common.PagedResult<T>                  57.1%
+  Waterfall.Services.Models.Geo.CoordinatesDto                      100%
+  Waterfall.Services.Models.Geo.GeoSyncItemDto                      100%
+  Waterfall.Services.Models.Geo.GeoSyncRequestDto                   100%
+  Waterfall.Services.Models.Geo.GeoSyncResponseDto                  100%
+  Waterfall.Services.Models.Profile.UserAddressDto                  100%
+  Waterfall.Services.Models.SavedVacancies.SavedVacancyDto          100%
+  Waterfall.Services.Models.SavedVacancies.SaveVacancyRequest      28.5%
+  Waterfall.Services.Models.Vacancies.CreateVacancyRequest         51.8%
+  Waterfall.Services.Models.Vacancies.UpdateVacancyRequest         53.5%
+  Waterfall.Services.Models.Vacancies.VacancyDto                    100%
+  Waterfall.Services.Models.Vacancies.VacancyFilterParameters        72%
+  Waterfall.Services.SavedVacancyService                            100%
+  Waterfall.Services.UserProfileService                             100%
+  Waterfall.Services.VacancyCacheService                            100%
+  Waterfall.Services.VacancyIngestionService                       93.9%
+  Waterfall.Services.VacancyService                                98.7%

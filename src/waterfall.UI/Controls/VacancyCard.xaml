@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Картка вакансії: спільна для «Каталогу» та «Обраного». BindingContext — VacancyItemViewModel. -->
-<!-- AI: чипи навичок обмежено трьома з чипом «+N» (Lab 06); перевірено: збірка net10.0-windows, перегляд у запущеному застосунку. -->
+<!-- Картка вакансії: спільна для «Каталогу», «Обраного» та рекомендацій. BindingContext — VacancyItemViewModel. -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
@@ -8,74 +7,219 @@
              x:DataType="vm:VacancyItemViewModel">
 
     <Border Style="{StaticResource VacancyCard}">
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto"
+        <!-- Натискання на вільне місце картки відкриває посилання у браузері -->
+        <Border.GestureRecognizers>
+            <TapGestureRecognizer Command="{Binding OpenSourceCommand}" />
+        </Border.GestureRecognizers>
+
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
               ColumnDefinitions="*,Auto"
               RowSpacing="6"
-              ColumnSpacing="12">
+              ColumnSpacing="10">
 
+            <!-- Заголовок вакансії -->
             <Label Text="{Binding Title}"
-                   Style="{StaticResource CardTitle}" />
+                   Style="{StaticResource CardTitle}"
+                   LineBreakMode="TailTruncation"
+                   MaxLines="1" />
 
+            <!-- Бейдж активності (Активна / Архівна) -->
             <Border Grid.Column="1"
-                    Style="{StaticResource StatusBadge}">
+                    Style="{StaticResource StatusBadge}"
+                    Padding="8,2">
                 <Border.Triggers>
                     <DataTrigger TargetType="Border" Binding="{Binding IsActive}" Value="False">
-                        <Setter Property="BackgroundColor" Value="{AppThemeBinding Light={StaticResource Gray100}, Dark={StaticResource Gray600}}" />
+                        <Setter Property="BackgroundColor" Value="{StaticResource DarkBg2}" />
+                        <Setter Property="Stroke" Value="{StaticResource Gray400}" />
                     </DataTrigger>
                 </Border.Triggers>
                 <Label Text="{Binding StatusText}"
-                       Style="{StaticResource BadgeLabel}" />
+                       Style="{StaticResource BadgeLabel}"
+                       FontSize="11" />
             </Border>
 
+            <!-- Компанія та локація -->
             <Label Grid.Row="1"
                    Grid.ColumnSpan="2"
                    Text="{Binding CompanyLine}"
-                   Style="{StaticResource MutedLabel}" />
+                   Style="{StaticResource MutedLabel}"
+                   FontSize="12" />
 
-            <Label Grid.Row="2"
-                   Text="{Binding SalaryText}"
-                   IsVisible="{Binding HasSalary}"
-                   Style="{StaticResource SalaryLabel}" />
+            <!-- Адреса офісу та відстань від поточного місцезнаходження (під Location) -->
+            <Grid Grid.Row="2"
+                  Grid.ColumnSpan="2"
+                  ColumnDefinitions="*,Auto"
+                  ColumnSpacing="8"
+                  IsVisible="{Binding HasAddress}">
+                <Grid ColumnDefinitions="Auto,*"
+                      ColumnSpacing="5"
+                      VerticalOptions="Center">
+                    <Label Grid.Column="0"
+                           Text="📍"
+                           FontSize="12"
+                           VerticalOptions="Center" />
+                    <Label Grid.Column="1"
+                           Text="{Binding AddressDisplay}"
+                           TextColor="{StaticResource TextSecondary}"
+                           FontFamily="OpenSansRegular"
+                           FontSize="12"
+                           LineBreakMode="TailTruncation"
+                           VerticalOptions="Center" />
+                </Grid>
+                <Border Grid.Column="1"
+                        IsVisible="{Binding HasDistanceText}"
+                        Style="{StaticResource SkillChip}"
+                        Stroke="{StaticResource Accent}"
+                        BackgroundColor="{StaticResource DarkBg2}"
+                        Padding="8,3"
+                        Margin="0"
+                        VerticalOptions="Center">
+                    <Label Text="{Binding DistanceText}"
+                           TextColor="{StaticResource Accent}"
+                           FontFamily="OpenSansSemibold"
+                           FontSize="11" />
+                </Border>
+            </Grid>
 
-            <Label Grid.Row="2"
-                   Grid.Column="1"
-                   Text="{Binding SourceText}"
-                   HorizontalOptions="End"
-                   Style="{StaticResource MutedLabel}" />
-
+            <!-- Зарплата: показує діапазон або «Зарплата не вказана» (US-001 AC-3, Test-32) -->
             <Label Grid.Row="3"
+                   Text="{Binding SalaryDisplay}"
+                   Style="{StaticResource SalaryLabel}">
+                <Label.Triggers>
+                    <DataTrigger TargetType="Label" Binding="{Binding HasSalary}" Value="False">
+                        <Setter Property="TextColor" Value="{StaticResource TextSecondary}" />
+                        <Setter Property="FontFamily" Value="OpenSansRegular" />
+                    </DataTrigger>
+                </Label.Triggers>
+            </Label>
+
+            <!-- Джерело та індикатор переходу за посиланням ↗ -->
+            <HorizontalStackLayout Grid.Row="3"
+                                   Grid.Column="1"
+                                   Spacing="4"
+                                   HorizontalOptions="End"
+                                   VerticalOptions="Center">
+                <Label Text="{Binding SourceText}"
+                       VerticalOptions="Center"
+                       Style="{StaticResource MutedLabel}"
+                       FontSize="11" />
+                <Label Text="↗"
+                       IsVisible="{Binding HasSourceUrl}"
+                       TextColor="{StaticResource Primary}"
+                       FontSize="12"
+                       FontFamily="OpenSansSemibold"
+                       VerticalOptions="Center" />
+            </HorizontalStackLayout>
+
+            <!-- Короткий опис (до 2 рядків) -->
+            <Label Grid.Row="4"
                    Grid.ColumnSpan="2"
                    Text="{Binding Description}"
-                   MaxLines="3"
-                   LineBreakMode="TailTruncation" />
+                   MaxLines="2"
+                   LineBreakMode="TailTruncation"
+                   TextColor="{StaticResource TextSecondary}"
+                   FontSize="12" />
 
-            <!-- BindableLayout перезаписує дочірні елементи, тому чип «+N» стоїть поруч, у зовнішньому FlexLayout. -->
-            <FlexLayout Grid.Row="4"
-                        Wrap="Wrap">
+            <!-- Навички (чипи) -->
+            <FlexLayout Grid.Row="5"
+                        Wrap="Wrap"
+                        VerticalOptions="Center">
                 <HorizontalStackLayout BindableLayout.ItemsSource="{Binding VisibleSkills}">
                     <BindableLayout.ItemTemplate>
                         <DataTemplate x:DataType="x:String">
-                            <Border Style="{StaticResource SkillChip}">
+                            <Border Style="{StaticResource SkillChip}"
+                                    Padding="8,2"
+                                    Margin="0,0,4,4">
                                 <Label Text="{Binding .}"
-                                       Style="{StaticResource BadgeLabel}" />
+                                       Style="{StaticResource BadgeLabel}"
+                                       FontSize="11"
+                                       TextColor="{StaticResource White}" />
                             </Border>
                         </DataTemplate>
                     </BindableLayout.ItemTemplate>
                 </HorizontalStackLayout>
                 <Border Style="{StaticResource SkillChip}"
-                        IsVisible="{Binding HasMoreSkills}">
+                        IsVisible="{Binding HasMoreSkills}"
+                        Padding="8,2"
+                        Margin="0,0,4,4">
                     <Label Text="{Binding MoreSkillsText}"
-                           Style="{StaticResource BadgeLabel}" />
+                           Style="{StaticResource BadgeLabel}"
+                           FontSize="11" />
                 </Border>
             </FlexLayout>
 
-            <Button Grid.Row="4"
-                    Grid.Column="1"
-                    Text="{Binding SaveButtonText}"
-                    Command="{Binding ToggleSaveCommand}"
-                    VerticalOptions="End"
-                    Style="{StaticResource CardAction}"
-                    SemanticProperties.Hint="Додати до обраного або прибрати з нього" />
+            <!-- Дії над карткою (Зберегти, ШІ-аналіз, Детальніше) -->
+            <HorizontalStackLayout Grid.Row="5"
+                                   Grid.Column="1"
+                                   Spacing="6"
+                                   VerticalOptions="Center"
+                                   HorizontalOptions="End">
+                <Button Text="ШІ-аналіз 🤖"
+                        Command="{Binding AnalyzeWithAiCommand}"
+                        Style="{StaticResource CardAction}"
+                        FontSize="11"
+                        Padding="8,4"
+                        HeightRequest="30"
+                        MinimumHeightRequest="30"
+                        SemanticProperties.Hint="Надіслати вакансію ШІ-асистенту для швидкого аналізу" />
+                <Button Text="{Binding DetailsToggleText}"
+                        Command="{Binding ToggleDetailsCommand}"
+                        Style="{StaticResource CardAction}"
+                        FontSize="11"
+                        Padding="8,4"
+                        HeightRequest="30"
+                        MinimumHeightRequest="30" />
+                <Button Text="{Binding SaveButtonText}"
+                        Command="{Binding ToggleSaveCommand}"
+                        Style="{StaticResource CardAction}"
+                        FontSize="11"
+                        Padding="8,4"
+                        HeightRequest="30"
+                        MinimumHeightRequest="30"
+                        SemanticProperties.Hint="Додати до обраного або прибрати з нього" />
+            </HorizontalStackLayout>
+
+            <!-- Розгорнутий детальний опис вакансії -->
+            <Border Grid.Row="6"
+                    Grid.ColumnSpan="2"
+                    IsVisible="{Binding IsDetailsExpanded}"
+                    StrokeShape="RoundRectangle 10"
+                    StrokeThickness="1"
+                    Stroke="{StaticResource Secondary}"
+                    BackgroundColor="{StaticResource DarkBg2}"
+                    Padding="10"
+                    Margin="0,2,0,0">
+                <VerticalStackLayout Spacing="6">
+                    <Label Text="Повні характеристики вакансії"
+                           FontFamily="OpenSansSemibold"
+                           FontSize="13"
+                           TextColor="{StaticResource White}" />
+                    <Label Text="{Binding Category, StringFormat='Категорія: {0}'}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <Label Text="{Binding Schedule, StringFormat='Графік: {0}'}"
+                           IsVisible="{Binding HasSchedule}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <Label Text="{Binding Experience, StringFormat='Досвід: {0}'}"
+                           IsVisible="{Binding HasExperience}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <Label Text="{Binding FullAddress, StringFormat='Адреса: {0}'}"
+                           IsVisible="{Binding HasFullAddress}"
+                           Style="{StaticResource MutedLabel}"
+                           FontSize="12" />
+                    <BoxView HeightRequest="1" Color="{StaticResource Secondary}" Margin="0,2" />
+                    <Label Text="Повний опис:"
+                           FontFamily="OpenSansSemibold"
+                           FontSize="12"
+                           TextColor="{StaticResource White}" />
+                    <Label Text="{Binding Description}"
+                           TextColor="{StaticResource TextSecondary}"
+                           FontSize="12" />
+                </VerticalStackLayout>
+            </Border>
+
         </Grid>
     </Border>
 </ContentView>

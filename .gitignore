@@ -29,3 +29,4 @@ coverage/
 *.db-shm
 *.db-wal
 /TestResults
+/src/waterfall.UI/.vs/ProjectEvaluation

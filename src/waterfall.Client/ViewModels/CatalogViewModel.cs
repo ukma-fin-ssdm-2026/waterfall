@@ -32,12 +32,21 @@ public partial class CatalogViewModel : ObservableObject
     private string? _loadedQuery;
     private int _page;
     private bool _hasNextPage;
+    private readonly IUrlLauncher? _urlLauncher;
+    private readonly IDistanceCalculatorService? _distanceService;
 
-    public CatalogViewModel(IHttpGatewayService gateway, IMessenger messenger, TimeProvider time)
+    public CatalogViewModel(
+        IHttpGatewayService gateway,
+        IMessenger messenger,
+        TimeProvider time,
+        IUrlLauncher? urlLauncher = null,
+        IDistanceCalculatorService? distanceService = null)
     {
         _gateway = gateway;
         _messenger = messenger;
         _time = time;
+        _urlLauncher = urlLauncher;
+        _distanceService = distanceService;
 
         // Зміна «Обраного» з іншої вкладки: оновлюємо картку на місці, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
@@ -84,6 +93,54 @@ public partial class CatalogViewModel : ObservableObject
     public partial int TotalCount { get; set; }
 
     /// <summary>
+    /// Показувати розширену панель фільтрів (US-002, FR-004).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FilterToggleText))]
+    public partial bool IsFilterPanelVisible { get; set; }
+
+    public string FilterToggleText => IsFilterPanelVisible ? "Сховати фільтри ▲" : "Фільтри ⚙";
+
+    [ObservableProperty]
+    public partial string SkillFilter { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string SelectedFormat { get; set; } = "Усі формати";
+
+    [ObservableProperty]
+    public partial string SelectedCategory { get; set; } = "Усі категорії";
+
+    [ObservableProperty]
+    public partial string MinSalaryFilter { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string MaxSalaryFilter { get; set; } = string.Empty;
+
+    public IReadOnlyList<string> FormatOptions { get; } = ["Усі формати", "Віддалено", "Офіс", "Гібрид"];
+
+    public IReadOnlyList<string> CategoryOptions { get; } =
+    [
+        "Усі категорії",
+        ".NET",
+        "QA",
+        "Mobile",
+        "DevOps",
+        "Full Stack",
+        "Frontend",
+        "Backend",
+        "Data / AI"
+    ];
+
+    /// <summary>
+    /// Інформаційний банер про застарілий кеш (REL-001).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasStaleCache))]
+    public partial string? StaleCacheText { get; set; }
+
+    public bool HasStaleCache => !string.IsNullOrEmpty(StaleCacheText);
+
+    /// <summary>
     /// Хоча б один запит каталогу завершився успішно.
     /// </summary>
     [ObservableProperty]
@@ -104,6 +161,43 @@ public partial class CatalogViewModel : ObservableObject
     /// Лічильник показується лише для актуального результату (не поруч із помилкою).
     /// </summary>
     public bool ShowTotal => HasLoaded && !HasError;
+
+    [RelayCommand]
+    private void ToggleFilterPanel() => IsFilterPanelVisible = !IsFilterPanelVisible;
+
+    [RelayCommand]
+    private Task ApplyFiltersAsync() => LoadFirstPageAsync();
+
+    /// <summary>
+    /// Скидання фільтрів та оновлення каталогу (US-002 AC-2/3, Test-07, Test-33).
+    /// </summary>
+    [RelayCommand]
+    public Task ResetFiltersAsync()
+    {
+        SearchText = string.Empty;
+        SkillFilter = string.Empty;
+        SelectedFormat = FormatOptions[0];
+        SelectedCategory = CategoryOptions[0];
+        MinSalaryFilter = string.Empty;
+        MaxSalaryFilter = string.Empty;
+        return LoadFirstPageAsync();
+    }
+
+    // # Mock
+    [RelayCommand]
+    private void ExportVacancies()
+    {
+        ErrorMessage = null;
+        StaleCacheText = $"Експорт списку ({TotalCount} вакансій) виконано успішно у файл vacancies_export.json";
+    }
+
+    // # Mock
+    [RelayCommand]
+    private void ImportVacancies()
+    {
+        ErrorMessage = null;
+        StaleCacheText = "Імпорт вакансій: завантажено 25 нових вакансій із локального файлу.";
+    }
 
     /// <summary>
     /// Перше відкриття вкладки: завантажити, якщо ще не завантажували.
@@ -240,7 +334,7 @@ public partial class CatalogViewModel : ObservableObject
     {
         foreach (VacancyDto vacancy in page.Items)
         {
-            Vacancies.Add(new VacancyItemViewModel(vacancy, _gateway, _messenger, message => ErrorMessage = message));
+            Vacancies.Add(new VacancyItemViewModel(vacancy, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher, _distanceService));
         }
 
         _page = page.Page;

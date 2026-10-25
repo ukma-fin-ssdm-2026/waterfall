@@ -1,9 +1,11 @@
-﻿// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: тести всіх гілок SalaryText/SourceText, CompanyLine, StatusText (Lab 06); перевірено: dotnet test, звіт покриття.
 
 using System.Net;
 using CommunityToolkit.Mvvm.Messaging;
+using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
+using Waterfall.Client.Services;
 using Waterfall.Client.ViewModels;
 
 namespace Waterfall.Client.Tests;
@@ -26,9 +28,18 @@ public class VacancyItemViewModelTests
         string company = "Genesis", string location = "", string title = "Senior .NET") =>
         new(new VacancyDto
         {
-            Id = Guid.NewGuid(), IsSaved = isSaved, SalaryMin = min, SalaryMax = max, Currency = "USD",
-            Source = source, IsActive = isActive, Company = company, Location = location, Title = title,
-            Description = "Опис", Skills = ["C#", "Kafka"]
+            Id = Guid.NewGuid(),
+            IsSaved = isSaved,
+            SalaryMin = min,
+            SalaryMax = max,
+            Currency = "USD",
+            Source = source,
+            IsActive = isActive,
+            Company = company,
+            Location = location,
+            Title = title,
+            Description = "Опис",
+            Skills = ["C#", "Kafka"]
         }, _gateway, _messenger, _errors.Add);
 
     [Theory]
@@ -118,4 +129,218 @@ public class VacancyItemViewModelTests
         Assert.Equal(["Вакансію не знайдено."], _errors);
         Assert.Empty(_sent);
     }
+
+    [Fact]
+    public async Task OpenSource_WithValidUrl_CallsLauncher()
+    {
+        FakeUrlLauncher launcher = new();
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Senior .NET",
+            Description = "Опис",
+            Company = "Tech",
+            SourceUrl = "https://djinni.co/jobs/720001-senior-net-developer/"
+        }, _gateway, _messenger, _errors.Add, launcher);
+
+        await item.OpenSourceCommand.ExecuteAsync(null);
+
+        Assert.Equal(new Uri("https://djinni.co/jobs/720001-senior-net-developer/"), launcher.LaunchedUri);
+        Assert.Empty(_errors);
+    }
+
+    [Fact]
+    public async Task OpenSource_WhenLauncherFails_ReportsError()
+    {
+        FakeUrlLauncher launcher = new() { ReturnResult = false };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Senior .NET",
+            Description = "Опис",
+            Company = "Tech",
+            SourceUrl = "https://djinni.co/jobs/720001-senior-net-developer/"
+        }, _gateway, _messenger, _errors.Add, launcher);
+
+        await item.OpenSourceCommand.ExecuteAsync(null);
+
+        Assert.Equal(["Не вдалося відкрити посилання у браузері."], _errors);
+    }
+
+    [Fact]
+    public async Task OpenSource_WhenNoUrl_DoesNotCallLauncher()
+    {
+        FakeUrlLauncher launcher = new();
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Senior .NET",
+            Description = "Опис",
+            Company = "Tech",
+            SourceUrl = ""
+        }, _gateway, _messenger, _errors.Add, launcher);
+
+        await item.OpenSourceCommand.ExecuteAsync(null);
+
+        Assert.Null(launcher.LaunchedUri);
+        Assert.Empty(_errors);
+    }
+
+    [Fact]
+    public void AddressDisplay_PrefersFullAddressOverLocation()
+    {
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "вул. Володимирська, 10, Київ"
+        }, _gateway, _messenger, _errors.Add);
+
+        Assert.Equal("вул. Володимирська, 10, Київ", item.AddressDisplay);
+        Assert.True(item.HasAddress);
+    }
+
+    [Fact]
+    public void AddressDisplay_FallsBackToLocation_WhenFullAddressEmpty()
+    {
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Дніпро",
+            FullAddress = null
+        }, _gateway, _messenger, _errors.Add);
+
+        Assert.Equal("Дніпро, не вказано точну адресу", item.AddressDisplay);
+        Assert.True(item.HasAddress);
+    }
+
+    [Theory]
+    [InlineData(1.5, "1.5 км від вас")]
+    [InlineData(0.8, "800 м від вас")]
+    [InlineData(null, "Не вдалося розрахувати")]
+    public async Task RefreshDistance_FormatsDistanceCorrectly(double? km, string? expectedText)
+    {
+        FakeDistanceService service = new() { DistanceToReturn = km };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "вул. Мечникова, 2"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await item.RefreshDistanceAsync();
+
+        Assert.Equal(expectedText, item.DistanceText);
+        Assert.Equal(expectedText is not null, item.HasDistanceText);
+    }
+
+    [Fact]
+    public async Task RefreshDistance_SetsNoInternetText_WhenNetworkThrows()
+    {
+        FakeDistanceService service = new() { ThrowNetworkError = true };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "вул. Мечникова, 2"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await item.RefreshDistanceAsync();
+
+        Assert.Equal("Немає інтернету", item.DistanceText);
+        Assert.True(item.HasDistanceText);
+    }
+
+    [Fact]
+    public async Task RefreshDistance_SetsNull_ForRemoteVacancies()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 5.0 };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Remote",
+            FullAddress = "Віддалено"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await item.RefreshDistanceAsync();
+
+        Assert.Null(item.DistanceText);
+        Assert.False(item.HasDistanceText);
+    }
+
+    [Fact]
+    public async Task Messenger_UserAddressChangedMessage_RefreshesDistance()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 2.0 };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            FullAddress = "вул. Ярославів Вал, 1"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await item.RefreshDistanceAsync();
+        Assert.Equal("2.0 км від вас", item.DistanceText);
+
+        service.DistanceToReturn = 4.2;
+        _messenger.Send(new UserAddressChangedMessage("вул. Саксаганського, 40"));
+
+        // Messenger triggers RefreshDistanceAsync asynchronously; give brief time
+        await Task.Delay(50);
+        Assert.Equal("4.2 км від вас", item.DistanceText);
+
+        // Коли користувач виходить з системи — адреса очищується, відстань зникає з картки
+        service.UserAddress = null;
+        _messenger.Send(new UserAddressChangedMessage(null));
+        await Task.Delay(50);
+        Assert.Null(item.DistanceText);
+        Assert.False(item.HasDistanceText);
+    }
+
+    private sealed class FakeDistanceService : IDistanceCalculatorService
+    {
+        public string? UserAddress { get; set; } = "вул. Хрещатик, 22, Київ";
+        public double? DistanceToReturn { get; set; } = 1.5;
+        public bool ThrowNetworkError { get; set; }
+
+        public Task<double?> CalculateDistanceKmAsync(string destinationAddress, CancellationToken ct = default)
+        {
+            if (ThrowNetworkError)
+            {
+                throw new HttpRequestException("Немає інтернету");
+            }
+
+            return Task.FromResult(DistanceToReturn);
+        }
+    }
+
+    private sealed class FakeUrlLauncher : Waterfall.Client.Interfaces.IUrlLauncher
+    {
+        public Uri? LaunchedUri { get; private set; }
+        public bool ReturnResult { get; set; } = true;
+        public Exception? ExceptionToThrow { get; set; }
+
+        public Task<bool> OpenAsync(Uri uri)
+        {
+            if (ExceptionToThrow is not null)
+            {
+                throw ExceptionToThrow;
+            }
+
+            LaunchedUri = uri;
+            return Task.FromResult(ReturnResult);
+        }
+    }
 }
+

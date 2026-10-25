@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
+             xmlns:controls="clr-namespace:waterfall.UI.Controls"
+             x:Class="waterfall.UI.Views.RecommendationsPage"
+             x:DataType="vm:RecommendationsViewModel"
+             Title="Рекомендації"
+             BackgroundColor="{StaticResource DarkBg2}">
+
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- Пояснення основи рекомендацій (FR-006, US-004) -->
+        <Border Margin="12,10,12,6"
+                StrokeShape="RoundRectangle 12"
+                StrokeThickness="1"
+                Stroke="{StaticResource Secondary}"
+                BackgroundColor="{StaticResource DarkBg1}"
+                Padding="14,10">
+            <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                <Label Text="✨" FontSize="16" VerticalOptions="Center" />
+                <Label Text="{Binding RecommendedBasisText}"
+                       Style="{StaticResource MutedLabel}"
+                       FontSize="13"
+                       VerticalOptions="Center" />
+            </HorizontalStackLayout>
+        </Border>
+
+        <!-- Банер помилки -->
+        <Border Grid.Row="1"
+                IsVisible="{Binding HasError}"
+                Style="{StaticResource ErrorBanner}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <Label Text="{Binding ErrorMessage}"
+                       VerticalOptions="Center"
+                       Style="{StaticResource ErrorLabel}" />
+                <Button Grid.Column="1"
+                        Text="Повторити"
+                        Command="{Binding LoadRecommendationsCommand}"
+                        Style="{StaticResource CardActionPrimary}" />
+            </Grid>
+        </Border>
+
+        <!-- Список рекомендованих вакансій -->
+        <RefreshView Grid.Row="2"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+            <CollectionView ItemsSource="{Binding Recommendations}"
+                            SelectionMode="None">
+
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="vm:VacancyItemViewModel">
+                        <controls:VacancyCard />
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+
+                <!-- Заглушка за US-004 AC-2 -->
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout Padding="32"
+                                         Spacing="10"
+                                         IsVisible="{Binding IsEmpty}">
+                        <Label Text="💡"
+                               FontSize="36"
+                               HorizontalOptions="Center" />
+                        <Label Text="Поки немає рекомендацій"
+                               HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center"
+                               Style="{StaticResource CardTitle}" />
+                        <Label Text="Зберігайте вакансії або користуйтесь ШІ-консультантом, щоб отримати персоналізовані пропозиції"
+                               HorizontalOptions="Center"
+                               HorizontalTextAlignment="Center"
+                               Style="{StaticResource MutedLabel}" />
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+            </CollectionView>
+        </RefreshView>
+    </Grid>
+</ContentPage>
