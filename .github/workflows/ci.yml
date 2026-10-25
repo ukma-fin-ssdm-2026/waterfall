@@ -23,7 +23,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 10.0.403
 
       # Only API for now to not bundle excess packages (MAUI)
       - name: Restore dependencies
@@ -44,7 +44,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v6
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 10.0.403
 
       # On Linux the libraries target net10.0 only, so test projects build without MAUI workloads
       # Note: Sensitive logging security regression tests (CWE-532) are integrated into Api tests
