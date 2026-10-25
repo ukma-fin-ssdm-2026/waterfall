@@ -58,4 +58,9 @@ public interface IHttpGatewayService
     /// Отримати географічні координати адреси з постійного геокешу сервера (GeoLocationCache).
     /// </summary>
     Task<Waterfall.Client.Models.Geo.CoordinatesDto?> GetCoordinatesAsync(string address, CancellationToken ct = default);
+
+    /// <summary>
+    /// Двостороння синхронізація геокешу з сервером (вивантаження офлайн знайдених координат та отримання нових).
+    /// </summary>
+    Task<Waterfall.Client.Models.Geo.GeoSyncResponseDto?> SyncGeoCacheAsync(Waterfall.Client.Models.Geo.GeoSyncRequestDto request, CancellationToken ct = default);
 }

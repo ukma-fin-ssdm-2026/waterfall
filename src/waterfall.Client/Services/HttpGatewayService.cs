@@ -109,6 +109,19 @@ public sealed class HttpGatewayService : IHttpGatewayService
         }
     }
 
+    public async Task<GeoSyncResponseDto?> SyncGeoCacheAsync(GeoSyncRequestDto request, CancellationToken ct = default)
+    {
+        try
+        {
+            HttpRequestMessage msg = Post("api/v1/geo/sync", request, Json.GeoSyncRequestDto);
+            return await SendAsync(msg, Json.GeoSyncResponseDto, ct);
+        }
+        catch (ApiException)
+        {
+            return null;
+        }
+    }
+
     private async Task<AuthResponse> AuthenticateAsync(HttpRequestMessage request, CancellationToken ct)
     {
         AuthResponse response = await SendAsync(request, Json.AuthResponse, ct);

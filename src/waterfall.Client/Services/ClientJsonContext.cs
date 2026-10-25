@@ -29,4 +29,8 @@ namespace Waterfall.Client.Services;
 [JsonSerializable(typeof(ApiErrorResponse))]
 [JsonSerializable(typeof(UserAddressDto))]
 [JsonSerializable(typeof(CoordinatesDto))]
+[JsonSerializable(typeof(GeoSyncItemDto))]
+[JsonSerializable(typeof(List<GeoSyncItemDto>))]
+[JsonSerializable(typeof(GeoSyncRequestDto))]
+[JsonSerializable(typeof(GeoSyncResponseDto))]
 internal sealed partial class ClientJsonContext : JsonSerializerContext;
