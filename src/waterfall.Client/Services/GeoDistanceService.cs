@@ -25,20 +25,26 @@ public class GeoDistanceService : IDistanceCalculatorService
 
     private readonly ConcurrentDictionary<string, double> _routeCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly IHttpGatewayService? _gateway;
+    private readonly ILocalGeoCacheService? _localCache;
     private readonly HttpClient _httpClient;
     private readonly TimeSpan _photonDelay;
 
-    public GeoDistanceService() : this(null, null, null)
+    public GeoDistanceService() : this(null, null, null, null)
     {
     }
 
-    public GeoDistanceService(IHttpGatewayService? gateway) : this(gateway, null, null)
+    public GeoDistanceService(IHttpGatewayService? gateway) : this(gateway, null, null, null)
     {
     }
 
-    public GeoDistanceService(IHttpGatewayService? gateway, HttpClient? httpClient, TimeSpan? photonDelay = null)
+    public GeoDistanceService(IHttpGatewayService? gateway, ILocalGeoCacheService? localCache) : this(gateway, null, null, localCache)
+    {
+    }
+
+    public GeoDistanceService(IHttpGatewayService? gateway, HttpClient? httpClient, TimeSpan? photonDelay = null, ILocalGeoCacheService? localCache = null)
     {
         _gateway = gateway;
+        _localCache = localCache;
         _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15.0) };
         _photonDelay = photonDelay ?? TimeSpan.FromSeconds(1.0);
         if (!_httpClient.DefaultRequestHeaders.Contains("User-Agent"))
@@ -112,6 +118,17 @@ public class GeoDistanceService : IDistanceCalculatorService
             return cached;
         }
 
+        // 0. Перевірка локальної бази даних SQLite клієнта
+        if (_localCache != null)
+        {
+            (double Lat, double Lon)? localDbCoords = await _localCache.GetCoordinatesAsync(address, ct);
+            if (localDbCoords.HasValue)
+            {
+                GeoCache[norm] = localDbCoords.Value;
+                return localDbCoords.Value;
+            }
+        }
+
         bool hadNetworkError = false;
         Exception? networkException = null;
 
@@ -123,7 +140,13 @@ public class GeoDistanceService : IDistanceCalculatorService
                 CoordinatesDto? serverCoords = await _gateway.GetCoordinatesAsync(address, ct);
                 if (serverCoords != null)
                 {
-                    return (serverCoords.Latitude, serverCoords.Longitude);
+                    (double Lat, double Lon) res = (serverCoords.Latitude, serverCoords.Longitude);
+                    GeoCache[norm] = res;
+                    if (_localCache != null)
+                    {
+                        await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: true, ct);
+                    }
+                    return res;
                 }
             }
             catch (Exception ex) when (IsNetworkException(ex))
@@ -142,6 +165,10 @@ public class GeoDistanceService : IDistanceCalculatorService
         if (localMatch.HasValue)
         {
             GeoCache[norm] = localMatch.Value;
+            if (_localCache != null)
+            {
+                await _localCache.SaveCoordinatesAsync(address, localMatch.Value.Lat, localMatch.Value.Lon, isSynced: false, ct);
+            }
             return localMatch.Value;
         }
 
@@ -219,6 +246,10 @@ public class GeoDistanceService : IDistanceCalculatorService
 
                         (double Lat, double Lon) res = (best.Lat, best.Lon);
                         GeoCache[norm] = res;
+                        if (_localCache != null)
+                        {
+                            await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: false, ct);
+                        }
                         return res;
                     }
                 }
@@ -306,6 +337,10 @@ public class GeoDistanceService : IDistanceCalculatorService
         if (cityCentroid.HasValue)
         {
             GeoCache[norm] = cityCentroid.Value;
+            if (_localCache != null)
+            {
+                await _localCache.SaveCoordinatesAsync(address, cityCentroid.Value.Lat, cityCentroid.Value.Lon, isSynced: false, ct);
+            }
             return cityCentroid.Value;
         }
 
@@ -316,6 +351,66 @@ public class GeoDistanceService : IDistanceCalculatorService
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Двостороння синхронізація локальної бази SQLite із сервером:
+    /// вивантажує офлайн знайдені координати (IsSynced = false) на сервер,
+    /// позначає їх як IsSynced = true, та завантажує актуальні координати із сервера у локальну SQLite базу.
+    /// </summary>
+    public async Task<int> SyncWithServerAsync(CancellationToken ct = default)
+    {
+        if (_gateway == null || _localCache == null)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var unsynced = await _localCache.GetUnsyncedAsync(ct);
+            GeoSyncRequestDto request = new()
+            {
+                ClientItems = unsynced.Select(u => new GeoSyncItemDto
+                {
+                    Id = u.Id,
+                    Address = u.NormalizedAddress,
+                    Latitude = u.Latitude,
+                    Longitude = u.Longitude,
+                    CreatedAt = u.CreatedAt
+                }).ToList()
+            };
+
+            GeoSyncResponseDto? response = await _gateway.SyncGeoCacheAsync(request, ct);
+            if (response == null)
+            {
+                return 0;
+            }
+
+            if (unsynced.Count > 0)
+            {
+                await _localCache.MarkAsSyncedAsync(unsynced.Select(u => u.Id), ct);
+            }
+
+            if (response.ServerItems != null && response.ServerItems.Count > 0)
+            {
+                await _localCache.UpsertFromServerAsync(response.ServerItems, ct);
+
+                foreach (GeoSyncItemDto item in response.ServerItems)
+                {
+                    if (!string.IsNullOrWhiteSpace(item.Address))
+                    {
+                        string norm = NormalizeAddressKey(item.Address);
+                        GeoCache[norm] = (item.Latitude, item.Longitude);
+                    }
+                }
+            }
+
+            return (response.ServerItems?.Count ?? 0) + unsynced.Count;
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     private async Task<double?> TryOsrmRouteAsync((double Lat, double Lon) origin, (double Lat, double Lon) destination, CancellationToken ct)
