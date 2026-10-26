@@ -2,7 +2,7 @@
 
 | Історія | Тип | Опис | Пов'язані NFR | Тестові випадки |
 |---------|-----|------|---------------|-----------------|
-| US-001 | FR | Перегляд списку вакансій (FR-001, FR-011) | PERF-001, PERF-003, REL-001 | Test-01: картка містить title/company/desc/salary/format/URL;<br>Test-02: пагінація next/prev, 20 вакансій на сторінці;<br>Test-32: вакансія без ЗП у джерелі → картка з позначкою «Зарплата не вказана», структура розмітки не порушена |
+| US-001 | FR | Перегляд списку вакансій (FR-001, FR-011) | PERF-001, PERF-003, REL-001 | Test-01: картка містить title/company/desc/salary/format/URL;<br>Test-02: пагінація next/prev, 20 вакансій на сторінці;<br>Test-32: вакансія без ЗП у джерелі → картка з позначкою «Зарплата не вказана», структура розмітки не порушена;<br>Test-34: картка показує щонайбільше 3 навички та чип «+N»;<br>Test-35: порожні та повторені навички не потрапляють у чипи |
 | US-002 | FR | Фільтрація вакансій (FR-004) | PERF-001, USE-001 | Test-06: фільтр Python + Віддалено → тільки релевантні;<br>Test-07: нема збігів → пустий список із повідомленням «За обраними фільтрами вакансій не знайдено» та кнопкою скидання фільтрів;<br>Test-33: «Скинути фільтри» → поля до значень за замовчуванням, повний каталог |
 | US-003 | FR | Зберігання вакансій (FR-005) | SEC-001, REL-002 | Test-09: Save → мітка збережено, повторний клік → видалено;<br>Test-10: розділ Збережені показує N карток, чужі недоступні |
 | US-004 | FR | Отримання персоналізованих рекомендацій (FR-006) | — | Test-13: 3 збережені з Python → рекомендації з Python без збережених;<br>Test-14: 0 збережених → повідомлення про відсутні рекомендації;<br>Test-15: 3 збережені з Python, а потім +2 Java → список оновлюється, включає Java |
@@ -21,8 +21,41 @@
 | REL-003 | NFR | LLM down → повідомлення ≤30с + звичайний пошук | — | Test-20: LLM down → повідомлення ≤30с + звичайний пошук, без блокування інших функцій |
 | FUNC-001 | NFR | 0 вигаданих вакансій/посилань у відповіді ШІ | — | Test-21: кожен ID/посилання з відповіді ШІ існує в БД, 0 вигаданих |
 
+## Зв'язок із тест-планом (Лаб 7)
+
+ID тест-кейсів у таблиці вище — це ID з [плану тестування](../validation/test-plan.md). Нижче видно, чи має кейс автотест у коді, чи лишається планом. Розбіжність тут — сигнал: або тест зайвий, або вимогу забули записати.
+
+| ID | Автотест у коді | Стан |
+| --- | --- | --- |
+| Test-01 | `VacancyItemViewModelTests` (`SalaryText_*`, `SourceText_*`, `CompanyLine_*`, `StatusText_*`) | виконано |
+| Test-02 | `EfVacancyRepositoryTests.GetAllAsync_Pagination_SkipsAndTakesExpectedWindow`, `GetAllAsync_NoFilters_*` | виконано |
+| Test-03 | `NonFunctionalPerformanceTests.PERF_001_CatalogPagination_P95Latency_UnderOneSecond_With10kRecords` | виконано (p95 34.92 мс) |
+| Test-04 | `VacancyIngestionServiceTests` (`SampleDump_*`, `Normalize_*`), `BulkUpsertTests`, `JobParserServiceTests`, `EfVacancyRepositoryTests.BulkUpsertAsync_*` | частково: пропускної здатності 500/10 хв немає окремим тестом |
+| Test-05 | `JobParserServiceTests.BrokenFile_DoesNotStopOtherFiles`, `MissingDirectory_IsLoggedAndSkipped` | частково: кеш ≤ 12 год не перевіряється |
+| Test-06 | `EfVacancyRepositoryTests.GetAllAsync_*Filter*` | виконано |
+| Test-07 | `CatalogViewModelTests.NoResults_IsEmpty` | частково: скидання фільтрів не покрито |
+| Test-08 | — | план: ручний сценарій, автотесту немає |
+| Test-09 | `VacancyItemViewModelTests.Toggle_*` | виконано |
+| Test-10 | `SavedVacanciesControllerTests`, `EfSavedVacancyRepositoryTests`, `FavoritesViewModelTests` | виконано |
+| Test-11 | `SEC_001_ZeroPlainTextPasswordsInDatabaseStorage`, `PasswordHasherTests.Hash_DoesNotContainPlaintext` | виконано |
+| Test-12 | `LoginViewModelTests.Restore_*`, `AuthSessionTests.FromToken_*` | частково: відновлення після краху застосунку вручну |
+| Test-13…15 | `RecommendationsViewModelTests` (`LoadRecommendations_*`, `Refresh_*`) | частково: сценарії 13–15 не відтворені окремими тестами |
+| Test-16…21 | — | план: `AIConsultantViewModel` без тестів (US-005) |
+| Test-22…27 | — | план: `AnalyticsViewModel` без тестів (US-006, US-007) |
+| Test-28…30 | — | план: US-008 без тестів |
+| Test-31 | `ci.yml` (6 наборів, 526 тестів) + зведений звіт ReportGenerator | виконано (line 77.7%, branch 74.3%, 26.10.2026) |
+| Test-32 | `VacancyItemViewModelTests.SalaryText_CoversAllRangeShapes` | виконано |
+| Test-33 | — | план: скидання фільтрів не покрито |
+| Test-34, Test-35 | `VacancyItemSkillsTests` (`VisibleSkills_*`) | виконано |
+
+Прогалини, які лишилися поза таблицею:
+
+- 40 тестів `waterfall.Auth.Tests` і тести auth у `waterfall.Api.Tests` не мають жодної вимоги в цій матриці: реєстрація/вхід/JWT у Лаб 2 не зафіксовані окремим FR.
+- 11 тестів геоданих (`GeoDistanceServiceTests`, `PhotonAddressAutocompleteServiceTests`, `SqliteLocalGeoCacheServiceTests`, `GeoControllerTests`) теж без вимоги — функціональність з'явилася в PR #114 після Лаб 2.
+
 ## Використання ШІ та внесок
 
 | Об'єкт | Внесок | ШІ | Як перевірено |
 |--------|--------|----|---------------|
 | RTM | Дмитро | структурування та тести | самоперевірка автора (§8) |
+| Розділ «Зв'язок із тест-планом (Лаб 7)»: колонка ID → автотести, прогалини простежуваності | Константін | Звірка назв тестів зі списком методів у `tests/**` | Кожну назву тесту знайдено пошуком у коді; стан «виконано/частково/план» — за наявністю методу й прогоном `dotnet test` (526 тестів, 0 падінь) |
