@@ -1,4 +1,4 @@
-// AI: тести фонового парсера: djinni.co і дампи (issue #62, Lab 06); перевірено: запуск dotnet test, самоперевірка автора (§8)
+// AI: тести фонового парсера: djinni.co, work.ua і дампи (issue #62, Lab 06); перевірено: запуск dotnet test, самоперевірка автора (§8)
 
 using System.Net;
 using System.Net.Http.Headers;
@@ -260,19 +260,46 @@ public sealed class JobParserServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task WorkUa_ReadsListAndJobPages()
+    {
+        _web.Responses["https://www.work.ua/jobs/?ss=1"] = (HttpStatusCode.OK, WorkUaPageTests.ListPage(WorkUaPageTests.Card(11), WorkUaPageTests.Card(12)));
+        _web.Responses["https://www.work.ua/jobs/?ss=1&page=2"] = (HttpStatusCode.OK, WorkUaPageTests.ListPage()); // за останньою сторінкою список порожній
+        _web.Responses["https://www.work.ua/jobs/11/"] = (HttpStatusCode.OK, WorkUaPageTests.JobPage(skills: ["Jira", "SQL"]));
+        _web.Responses["https://www.work.ua/jobs/12/"] = (HttpStatusCode.OK, WorkUaPageTests.JobPage(skills: []));
+        JobParserService parser = CreateParser(directory: null, workUaPages: 5);
+
+        await parser.StartAsync(CancellationToken.None);
+        await _ingestion.WaitForCallsAsync(1);
+        await parser.StopAsync(CancellationToken.None);
+
+        Assert.Equal(
+            [
+                "https://www.work.ua/robots.txt",
+                "https://www.work.ua/jobs/?ss=1", "https://www.work.ua/jobs/11/", "https://www.work.ua/jobs/12/",
+                "https://www.work.ua/jobs/?ss=1&page=2"
+            ],
+            _web.Urls);
+        Assert.All(_ingestion.Received, job => Assert.Equal(JobSource.WorkUa, job.Source));
+        Assert.Equal(["Jira, SQL", null], _ingestion.Received.Select(job => job.Tags));
+        // Повний опис зі сторінки вакансії замість скороченого з картки
+        Assert.All(_ingestion.Received, job => Assert.Contains("Досвід ручного тестування", job.DescriptionHtml));
+    }
+
+    [Fact]
     public async Task Sites_AndDumps_AreProcessedSeparately()
     {
         _web.FirstPage = DjinniPageTests.Page(DjinniPageTests.Job(7));
+        _web.Responses["https://www.work.ua/jobs/?ss=1"] = (HttpStatusCode.OK, WorkUaPageTests.ListPage(WorkUaPageTests.Card(8)));
         File.WriteAllText(Path.Combine(_directory, "dump.json"), ValidDump);
-        JobParserService parser = CreateParser(_directory, djinniPages: 1);
+        JobParserService parser = CreateParser(_directory, djinniPages: 1, workUaPages: 1);
 
         await parser.StartAsync(CancellationToken.None);
-        await _ingestion.WaitForCallsAsync(2);
+        await _ingestion.WaitForCallsAsync(3);
         await parser.StopAsync(CancellationToken.None);
 
         // Кожне джерело — окремий виклик нормалізації: збій одного не зачепить інші
-        Assert.Equal(["7", "1"], _ingestion.Received.Select(job => job.Id));
-        Assert.Equal([JobSource.Djinni, JobSource.Djinni], _ingestion.Received.Select(job => job.Source));
+        Assert.Equal(["7", "8", "1"], _ingestion.Received.Select(job => job.Id));
+        Assert.Equal([JobSource.Djinni, JobSource.WorkUa, JobSource.Djinni], _ingestion.Received.Select(job => job.Source));
     }
 
     [Fact]
@@ -406,7 +433,7 @@ public sealed class JobParserServiceTests : IDisposable
         Assert.Equal("1", Assert.Single(await crawler.CrawlAsync(CancellationToken.None)).Id);
     }
 
-    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0)
+    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0, int workUaPages = 0)
     {
         ServiceProvider services = new ServiceCollection()
             .AddScoped<IVacancyIngestionService>(_ => _ingestion)
@@ -418,6 +445,7 @@ public sealed class JobParserServiceTests : IDisposable
             RawDataDirectory = directory,
             Interval = interval ?? TimeSpan.FromHours(1),
             DjinniPages = djinniPages,
+            WorkUaPages = workUaPages,
             RequestDelay = TimeSpan.Zero
         };
 
