@@ -3,25 +3,25 @@
 
 ## 1. Поточний статус
 
-У рішенні **298 модульних тестів** у 6 проєктах (кількість — за `dotnet test`, 19.10.2026):
+У рішенні **526 тестів** у 6 проєктах (кількість — за `dotnet test`, 26.10.2026, після мерджу #136):
 
 | Набір тестів | Модуль | Тестів | Що перевіряє |
 | :--- | :--- | :---: | :--- |
-| [`waterfall.Ingestion.Tests`](../../tests/waterfall.Ingestion.Tests/README.md) | збір вакансій | 50 | нормалізація полів, фоновий парсер, `BulkUpsertAsync` на справжній SQLite; фікстури, заглушки, граничні випадки |
+| [`waterfall.Ingestion.Tests`](../../tests/waterfall.Ingestion.Tests/README.md) | збір вакансій | 186 | нормалізація полів, фоновий парсер, `BulkUpsertAsync` на справжній SQLite; розбір сторінок Djinni/Dou/Work.ua, `robots.txt` і темп запитів `SiteCrawler`; фікстури, заглушки, граничні випадки |
 | `waterfall.Auth.Tests` | автентифікація | 40 | сервіс автентифікації, JWT, хешування паролів, контролер, валідація запитів |
-| [`waterfall.Client.Tests`](../../tests/waterfall.Client.Tests/README.md) | клієнт / UI | 106 | `HttpGatewayService` (помилки мережі й сервера), viewmodels каталогу, «Обраного», входу і картки, розбір JWT; заглушки з керованими відповідями, `FakeTimeProvider`, property-based тест (FsCheck) |
-| [`waterfall.Repository.Tests`](../../tests/waterfall.Repository.Tests/README.md) | сховище (репозиторії) | 33 | SQLite in-memory: пошук за 4 полями та JSON, фільтрація, сортування, пагінація, `BulkUpsert`, ізоляція закладок та операції користувачів |
-| [`waterfall.Services.Tests`](../../tests/waterfall.Services.Tests/README.md) | бізнес-сервіси та кеш | 44 | Cache-Aside (PERF-001), Stale-Cache fallback (REL-001), збагачення `IsSaved`, каскадна інвалідація кешу, стійкість до битого JSON |
-| [`waterfall.Api.Tests`](../../tests/waterfall.Api.Tests/README.md) | REST API та безпека | 25 | Ендпоинти вакансій і закладок (HTTP 200/201/400/404/409), трасування запитів, витяг claims з JWT, захист від витоку даних у логи (CWE-532) |
+| [`waterfall.Client.Tests`](../../tests/waterfall.Client.Tests/README.md) | клієнт / UI | 161 | `HttpGatewayService` (помилки мережі й сервера), viewmodels каталогу, «Обраного», входу і картки, розбір JWT; заглушки з керованими відповідями, `FakeTimeProvider`, property-based тест (FsCheck) |
+| [`waterfall.Repository.Tests`](../../tests/waterfall.Repository.Tests/README.md) | сховище (репозиторії) | 53 | SQLite in-memory: пошук за 4 полями та JSON, фільтрація, сортування, пагінація, `BulkUpsert`, ізоляція закладок та операції користувачів |
+| [`waterfall.Services.Tests`](../../tests/waterfall.Services.Tests/README.md) | бізнес-сервіси та кеш | 54 | Cache-Aside (PERF-001), Stale-Cache fallback (REL-001), збагачення `IsSaved`, каскадна інвалідація кешу, стійкість до битого JSON |
+| [`waterfall.Api.Tests`](../../tests/waterfall.Api.Tests/README.md) | REST API та безпека | 32 | Ендпоинти вакансій і закладок (HTTP 200/201/400/404/409), трасування запитів, витяг claims з JWT, захист від витоку даних у логи (CWE-532) |
 | `src/mcp` (TypeScript) | MCP-сервер | — | тестів немає; лише статичні перевірки: ESLint з `eslint-plugin-security`, `tsc`, `npm audit` |
 
-Усі набори .NET прописані в CI (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)). Застереження: з 14.10.2026 GitHub Actions не запускає жодного job через проблему з оплатою організації («recent account payments have failed»), тож зелений прогін CI зараз нічого не доводить. Тести запускаємо локально, доки власник організації не виправить білінг.
+Усі набори .NET прописані в CI (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)). З 19.10.2026 workflow-и виконуються на self-hosted раннерах курсу (PR #111), тож зелений прогін CI знову щось доводить: 26.10.2026 на `main` пройшли і тести (526, 0 падінь), і ворота покриття (77,7 %).
 
 ## 2. Покриття та філософія якості
 
 Замість штучної гонитви за «100% рядковим покриттям» через тривіальні перевірки вбудованих методів ORM чи авто-властивостей, набір тестів сфокусовано на критичній бізнес-логіці, стійкості (resilience) та граничних умовах.
 
-Загальне покриття по всьому рішенню: **80,3 % рядків, 82,5 % гілок, 93,8 % методів** (усі 6 наборів, coverlet + ReportGenerator з фільтрами з `ci.yml`, 19.10.2026). Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) виключає спільний [`tests/coverage.runsettings`](../../tests/coverage.runsettings). Ворота в CI запускають тести без нього і рахують ще й згенеровані рядки клієнта (~2000, зокрема `ClientJsonContext`), тому бачать **81,7 %** (на `main` до нових тестів клієнта — 80,6 %; [зведений дашборд](../../coverage-report/index.html) з 77,6 % згенеровано локально 18.10, ще до частини тестів сервісів).
+Загальне покриття по всьому рішенню: **80,3 % рядків, 82,5 % гілок, 93,8 % методів** (усі 6 наборів, coverlet + ReportGenerator з фільтрами з `ci.yml`, 19.10.2026). Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) виключає спільний [`tests/coverage.runsettings`](../../tests/coverage.runsettings). Ворота в CI запускають тести без нього і рахують ще й згенеровані рядки клієнта (~2000, зокрема `ClientJsonContext`), тому бачать **77,7 %** (26.10.2026, після #136; раніше — 81,7 %, до нових тестів клієнта — 80,6 %; [зведений дашборд](../../coverage-report/index.html) з 77,6 % згенеровано локально 18.10, ще до частини тестів сервісів).
 Покриття цільових сервісів та репозиторіїв:
 - `VacancyService`: **97,9 %**
 - `VacancyCacheService`: **98,7 %**
@@ -104,7 +104,7 @@
 ### 6.1. Ворота покриття в CI (Quality Gate)
 - **Поріг:** **75 %** загального рядкового покриття рішень.
 - **Чому такий поріг:** Поріг 75 % гарантує захист усієї доменної логіки та сервісів (де фактичне покриття сягає 96–100 %), не блокуючи збірку через одноразовий шаблонний код конфігурації (хостинг, DI-розширення, сідер БД, які не містять розгалужень бізнес-правил).
-- **Підтвердження:** локальний прогін тих самих команд 18.10 дав 77,6 % ([`coverage-report/Summary.txt`](../../coverage-report/Summary.txt)); 19.10 на `main` — 80,6 %, разом із новими тестами клієнта — **81,7 %** ≥ 75 %. У самому CI ворота ще не виконувались: job не стартує через білінг (див. розділ 1).
+- **Підтвердження:** 26.10.2026 на `main` ворота вперше виконались у самому CI (self-hosted раннери курсу) і пройшли: **77,7 %** ≥ 75 % ([прогін 40293889103](https://github.com/ukma-fin-ssdm-2026/waterfall/actions/runs/40293889103), 526 тестів, branch 74,3 %). Раніше: локальний прогін 18.10 — 77,6 %, 19.10 на `main` — 81,7 %.
 
 ### 6.2. Мутаційне тестування (Stryker.NET)
 - **Досліджений модуль:** `waterfall.Services.VacancyIngestionService` (нормалізація вхідних даних та URL вакансій).
