@@ -1,5 +1,6 @@
 // AI: фоновий збір вакансій з djinni.co, work.ua та JSON-дампів (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API проти справжніх djinni.co і work.ua, самоперевірка автора (§8)
 
+using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Waterfall.Services.Interfaces;
@@ -163,3 +164,42 @@ public class IngestionOptions
     public string? RawDataDirectory { get; set; }
 }
 
+/// <summary>
+/// Не дає налаштуваннями зробити збір нав'язливим для сайтів (THR-11, PERF-003): з надто частим збором
+/// чи надто короткою паузою між запитами API не запуститься, а в журналі буде пояснення.
+/// </summary>
+public sealed class IngestionOptionsValidator : IValidateOptions<IngestionOptions>
+{
+    public static readonly TimeSpan MinInterval = TimeSpan.FromMinutes(10);
+
+    // PERF-003: не більше 2 запитів на секунду до одного джерела
+    public static readonly TimeSpan MinRequestDelay = TimeSpan.FromMilliseconds(500);
+
+    // 10 сторінок — це до 160 запитів до сайту за перший збір після запуску
+    public const int MaxPages = 10;
+
+    public ValidateOptionsResult Validate(string? name, IngestionOptions options)
+    {
+        List<string> errors = [];
+        if (options.Interval < MinInterval)
+        {
+            errors.Add($"Ingestion:Interval має бути не менше {MinInterval.TotalMinutes:0} хв, а задано {options.Interval:c}");
+        }
+
+        if (options.RequestDelay < MinRequestDelay)
+        {
+            errors.Add(string.Create(CultureInfo.InvariantCulture,
+                $"Ingestion:RequestDelay має бути не менше {MinRequestDelay.TotalSeconds} с, а задано {options.RequestDelay.TotalSeconds} с"));
+        }
+
+        foreach ((string setting, int pages) in new[] { ("DjinniPages", options.DjinniPages), ("WorkUaPages", options.WorkUaPages), ("DouPages", options.DouPages) })
+        {
+            if (pages is < 0 or > MaxPages)
+            {
+                errors.Add($"Ingestion:{setting} має бути від 0 до {MaxPages}, а задано {pages}");
+            }
+        }
+
+        return errors.Count == 0 ? ValidateOptionsResult.Success : ValidateOptionsResult.Fail(errors);
+    }
+}

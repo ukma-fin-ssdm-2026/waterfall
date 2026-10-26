@@ -1,5 +1,6 @@
 // AI: тести фонового парсера: djinni.co, work.ua і дампи (issue #62, Lab 06); перевірено: запуск dotnet test, самоперевірка автора (§8)
 
+using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -431,6 +432,28 @@ public sealed class JobParserServiceTests : IDisposable
         await crawler.CrawlAsync(CancellationToken.None);
 
         Assert.Equal(2, _web.Urls.Count(url => url == "https://djinni.co/jobs/"));
+    }
+
+    [Theory]
+    [InlineData("00:30:00", "00:00:02", 3, 3, true)]   // як у appsettings.json
+    [InlineData("00:10:00", "00:00:00.5", 0, 10, true)] // самі межі
+    [InlineData("00:00:10", "00:00:02", 3, 3, false)]  // «хоч кожні 10 секунд»
+    [InlineData("00:30:00", "00:00:00.1", 3, 3, false)] // 10 запитів на секунду
+    [InlineData("00:30:00", "00:00:02", 11, 3, false)]
+    [InlineData("00:30:00", "00:00:02", 3, -1, false)]
+    public void OptionsValidator_RejectsIntrusiveSettings(string interval, string delay, int djinniPages, int workUaPages, bool valid)
+    {
+        IngestionOptions options = new()
+        {
+            Interval = TimeSpan.Parse(interval, CultureInfo.InvariantCulture),
+            RequestDelay = TimeSpan.Parse(delay, CultureInfo.InvariantCulture),
+            DjinniPages = djinniPages,
+            WorkUaPages = workUaPages
+        };
+
+        ValidateOptionsResult result = new IngestionOptionsValidator().Validate(null, options);
+
+        Assert.Equal(valid, result.Succeeded);
     }
 
     [Fact]
