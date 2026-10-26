@@ -8,7 +8,7 @@ using Waterfall.Services.Models.Vacancies;
 namespace Waterfall.Api.Workers;
 
 /// <summary>
-/// Job Parser Service: раз на <see cref="IngestionOptions.Interval"/> завантажує найсвіжіші вакансії з djinni.co і work.ua
+/// Job Parser Service: раз на <see cref="IngestionOptions.Interval"/> завантажує найсвіжіші вакансії з djinni.co, work.ua і jobs.dou.ua
 /// (а якщо задано каталог — ще й JSON-дампи) та передає їх на нормалізацію й збереження
 /// (<see cref="IVacancyIngestionService.ProcessRawVacanciesAsync"/>).
 /// Збій сайту чи одного файлу записується в журнал і не зупиняє ні інші джерела, ні API.
@@ -36,7 +36,8 @@ public class JobParserService : BackgroundService
         _sites =
         [
             new SiteCrawler(new DjinniParser(), _options.DjinniPages, _options.RequestDelay, httpClientFactory, logger),
-            new SiteCrawler(new WorkUaParser(), _options.WorkUaPages, _options.RequestDelay, httpClientFactory, logger)
+            new SiteCrawler(new WorkUaParser(), _options.WorkUaPages, _options.RequestDelay, httpClientFactory, logger),
+            new SiteCrawler(new DouParser(), _options.DouPages, _options.RequestDelay, httpClientFactory, logger)
         ];
 
         // Відносний шлях рахуємо від каталогу проєкту API (src/api); порожній шлях вимикає дампи
@@ -54,8 +55,8 @@ public class JobParserService : BackgroundService
         }
 
         _logger.LogInformation(
-            "Фоновий збір вакансій: djinni.co — {DjinniPages} стор., work.ua — {WorkUaPages} стор., каталог з дампами — {Directory}, інтервал {Interval}.",
-            _options.DjinniPages, _options.WorkUaPages, _directory ?? "вимкнено", _options.Interval);
+            "Фоновий збір вакансій: djinni.co — {DjinniPages} стор., work.ua — {WorkUaPages} стор., jobs.dou.ua — {DouPages} стор., каталог з дампами — {Directory}, інтервал {Interval}.",
+            _options.DjinniPages, _options.WorkUaPages, _options.DouPages, _directory ?? "вимкнено", _options.Interval);
 
         using PeriodicTimer timer = new(_options.Interval);
         try
@@ -151,6 +152,9 @@ public class IngestionOptions
 
     /// <summary>Скільки перших сторінок усіх вакансій work.ua читати за раз (по 14 вакансій); 0 — не звертатися до сайту.</summary>
     public int WorkUaPages { get; set; } = 3;
+
+    /// <summary>RSS-стрічка jobs.dou.ua — одна сторінка з 50 найсвіжішими вакансіями: 1 — читати, 0 — не звертатися до сайту.</summary>
+    public int DouPages { get; set; } = 1;
 
     /// <summary>Пауза перед кожним запитом до сайту.</summary>
     public TimeSpan RequestDelay { get; set; } = TimeSpan.FromSeconds(2);

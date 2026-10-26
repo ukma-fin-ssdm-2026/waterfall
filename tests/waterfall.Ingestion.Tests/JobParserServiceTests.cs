@@ -286,6 +286,32 @@ public sealed class JobParserServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Dou_ReadsFeedAndNewJobPages()
+    {
+        _web.Responses["https://jobs.dou.ua/vacancies/feeds/"] = (HttpStatusCode.OK, DouPageTests.Feed(DouPageTests.Item(1), DouPageTests.Item(2)));
+        _web.Responses["https://jobs.dou.ua/companies/acme/vacancies/1/"] = (HttpStatusCode.OK, DouPageTests.JobPage());
+        JobParserService parser = CreateParser(directory: null, douPages: 5);
+
+        await parser.StartAsync(CancellationToken.None);
+        await _ingestion.WaitForCallsAsync(1);
+        await parser.StopAsync(CancellationToken.None);
+
+        // Стрічка одна: «сторінки 2» не просимо, навіть якщо в налаштуваннях більше
+        Assert.Equal(
+            [
+                "https://jobs.dou.ua/robots.txt",
+                "https://jobs.dou.ua/vacancies/feeds/",
+                "https://jobs.dou.ua/companies/acme/vacancies/1/",
+                "https://jobs.dou.ua/companies/acme/vacancies/2/"
+            ],
+            _web.Urls);
+        Assert.All(_ingestion.Received, job => Assert.Equal(JobSource.Dou, job.Source));
+        // Сторінка вакансії 1 уточнила поля, а сторінка 2 вакансією не була — лишилися дані зі стрічки
+        Assert.Equal(["Middle Java Developer", "Вакансія 2"], _ingestion.Received.Select(job => job.Title));
+        Assert.Equal(["Kvitka Bank", "Acme"], _ingestion.Received.Select(job => job.Company));
+    }
+
+    [Fact]
     public async Task Sites_AndDumps_AreProcessedSeparately()
     {
         _web.FirstPage = DjinniPageTests.Page(DjinniPageTests.Job(7));
@@ -433,7 +459,7 @@ public sealed class JobParserServiceTests : IDisposable
         Assert.Equal("1", Assert.Single(await crawler.CrawlAsync(CancellationToken.None)).Id);
     }
 
-    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0, int workUaPages = 0)
+    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0, int workUaPages = 0, int douPages = 0)
     {
         ServiceProvider services = new ServiceCollection()
             .AddScoped<IVacancyIngestionService>(_ => _ingestion)
@@ -446,6 +472,7 @@ public sealed class JobParserServiceTests : IDisposable
             Interval = interval ?? TimeSpan.FromHours(1),
             DjinniPages = djinniPages,
             WorkUaPages = workUaPages,
+            DouPages = douPages,
             RequestDelay = TimeSpan.Zero
         };
 
