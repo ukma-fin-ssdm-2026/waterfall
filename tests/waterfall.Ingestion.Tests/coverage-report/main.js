@@ -290,15 +290,21 @@ var assemblies = [
   {
     "name": "Waterfall.Api",
     "classes": [
-      { "name": "Waterfall.Api.Workers.IngestionOptions", "rp": "Waterfall.Api_IngestionOptions.html", "cl": 3, "ucl": 0, "cal": 3, "tl": 112, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
-      { "name": "Waterfall.Api.Workers.JobParserService", "rp": "Waterfall.Api_JobParserService.html", "cl": 41, "ucl": 1, "cal": 42, "tl": 112, "cb": 13, "tb": 14, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Api.Workers.DjinniParser", "rp": "Waterfall.Api_DjinniParser.html", "cl": 156, "ucl": 1, "cal": 157, "tl": 247, "cb": 98, "tb": 100, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Api.Workers.DouParser", "rp": "Waterfall.Api_DouParser.html", "cl": 86, "ucl": 0, "cal": 86, "tl": 148, "cb": 39, "tb": 48, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Api.Workers.IngestionOptions", "rp": "Waterfall.Api_IngestionOptions.html", "cl": 7, "ucl": 0, "cal": 7, "tl": 205, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Api.Workers.IngestionOptionsValidator", "rp": "Waterfall.Api_IngestionOptionsValidator.html", "cl": 22, "ucl": 0, "cal": 22, "tl": 205, "cb": 14, "tb": 14, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Api.Workers.JobParserService", "rp": "Waterfall.Api_JobParserService.html", "cl": 80, "ucl": 1, "cal": 81, "tl": 205, "cb": 21, "tb": 22, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Api.Workers.RobotsTxt", "rp": "Waterfall.Api_RobotsTxt.html", "cl": 48, "ucl": 0, "cal": 48, "tl": 83, "cb": 31, "tb": 32, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Api.Workers.SiteCrawler", "rp": "Waterfall.Api_SiteCrawler.html", "cl": 156, "ucl": 0, "cal": 156, "tl": 288, "cb": 82, "tb": 86, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Api.Workers.WorkUaParser", "rp": "Waterfall.Api_WorkUaParser.html", "cl": 76, "ucl": 0, "cal": 76, "tl": 122, "cb": 45, "tb": 46, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
     ]},
   {
     "name": "waterfall.Services",
     "classes": [
-      { "name": "Waterfall.Services.Interfaces.IngestionResult", "rp": "waterfall.Services_IngestionResult.html", "cl": 1, "ucl": 0, "cal": 1, "tl": 34, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
-      { "name": "Waterfall.Services.Interfaces.RawVacancy", "rp": "waterfall.Services_RawVacancy.html", "cl": 12, "ucl": 0, "cal": 12, "tl": 34, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
-      { "name": "Waterfall.Services.VacancyIngestionService", "rp": "waterfall.Services_VacancyIngestionService.html", "cl": 122, "ucl": 0, "cal": 122, "tl": 263, "cb": 80, "tb": 80, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Services.Interfaces.IngestionResult", "rp": "waterfall.Services_IngestionResult.html", "cl": 1, "ucl": 0, "cal": 1, "tl": 46, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Services.Interfaces.RawVacancy", "rp": "waterfall.Services_RawVacancy.html", "cl": 13, "ucl": 0, "cal": 13, "tl": 46, "cb": 0, "tb": 0, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
+      { "name": "Waterfall.Services.VacancyIngestionService", "rp": "waterfall.Services_VacancyIngestionService.html", "cl": 171, "ucl": 1, "cal": 172, "tl": 302, "cb": 97, "tb": 98, "cm": 0, "fcm": 0, "tm": 0, "lch": [], "bch": [], "mch": [], "mfch": [], "hc": [], "metrics": { } },
     ]},
 ];
 
@@ -313,16 +319,58 @@ var riskHotspotMetrics = [
 
 var riskHotspots = [
   {
-    "assembly": "waterfall.Services", "class": "Waterfall.Services.VacancyIngestionService", "reportPath": "waterfall.Services_VacancyIngestionService.html", "methodName": "ParseSalary(System.String)", "methodShortName": "ParseSalary(...)", "fileIndex": 0, "line": 133,
+    "assembly": "Waterfall.Api", "class": "Waterfall.Api.Workers.SiteCrawler", "reportPath": "Waterfall.Api_SiteCrawler.html", "methodName": "CrawlAsync()", "methodShortName": "CrawlAsync()", "fileIndex": 0, "line": 84,
     "metrics": [
-      { "value": 28, "exceeded": false },
-      { "value": 28, "exceeded": true },
+      { "value": 34, "exceeded": true },
+      { "value": 34, "exceeded": true },
     ]},
   {
-    "assembly": "waterfall.Services", "class": "Waterfall.Services.VacancyIngestionService", "reportPath": "waterfall.Services_VacancyIngestionService.html", "methodName": "ParsePublishedAt(System.String,System.DateTimeOffset)", "methodShortName": "ParsePublishedAt(...)", "fileIndex": 0, "line": 181,
+    "assembly": "waterfall.Services", "class": "Waterfall.Services.VacancyIngestionService", "reportPath": "waterfall.Services_VacancyIngestionService.html", "methodName": "ParseSalary(System.String,System.String)", "methodShortName": "ParseSalary(...)", "fileIndex": 0, "line": 154,
+    "metrics": [
+      { "value": 32, "exceeded": true },
+      { "value": 32, "exceeded": true },
+    ]},
+  {
+    "assembly": "Waterfall.Api", "class": "Waterfall.Api.Workers.DjinniParser", "reportPath": "Waterfall.Api_DjinniParser.html", "methodName": "FormatSalary(System.Text.Json.JsonElement)", "methodShortName": "FormatSalary(...)", "fileIndex": 0, "line": 89,
+    "metrics": [
+      { "value": 24, "exceeded": false },
+      { "value": 24, "exceeded": true },
+    ]},
+  {
+    "assembly": "Waterfall.Api", "class": "Waterfall.Api.Workers.SiteCrawler", "reportPath": "Waterfall.Api_SiteCrawler.html", "methodName": "WithJobPage(Waterfall.Services.Interfaces.RawVacancy,Waterfall.Services.Interfaces.RawVacancy)", "methodShortName": "WithJobPage(...)", "fileIndex": 0, "line": 207,
     "metrics": [
       { "value": 20, "exceeded": false },
       { "value": 20, "exceeded": true },
+    ]},
+  {
+    "assembly": "waterfall.Services", "class": "Waterfall.Services.VacancyIngestionService", "reportPath": "waterfall.Services_VacancyIngestionService.html", "methodName": "ParsePublishedAt(System.String,System.DateTimeOffset)", "methodShortName": "ParsePublishedAt(...)", "fileIndex": 0, "line": 203,
+    "metrics": [
+      { "value": 20, "exceeded": false },
+      { "value": 20, "exceeded": true },
+    ]},
+  {
+    "assembly": "Waterfall.Api", "class": "Waterfall.Api.Workers.DjinniParser", "reportPath": "Waterfall.Api_DjinniParser.html", "methodName": "FormatExperience(System.Text.Json.JsonElement)", "methodShortName": "FormatExperience(...)", "fileIndex": 0, "line": 148,
+    "metrics": [
+      { "value": 18, "exceeded": false },
+      { "value": 18, "exceeded": true },
+    ]},
+  {
+    "assembly": "Waterfall.Api", "class": "Waterfall.Api.Workers.WorkUaParser", "reportPath": "Waterfall.Api_WorkUaParser.html", "methodName": "ParseListPage(System.String)", "methodShortName": "ParseListPage(...)", "fileIndex": 0, "line": 33,
+    "metrics": [
+      { "value": 18, "exceeded": false },
+      { "value": 18, "exceeded": true },
+    ]},
+  {
+    "assembly": "Waterfall.Api", "class": "Waterfall.Api.Workers.DouParser", "reportPath": "Waterfall.Api_DouParser.html", "methodName": "ParseListPage(System.String)", "methodShortName": "ParseListPage(...)", "fileIndex": 0, "line": 38,
+    "metrics": [
+      { "value": 16, "exceeded": false },
+      { "value": 16, "exceeded": true },
+    ]},
+  {
+    "assembly": "Waterfall.Api", "class": "Waterfall.Api.Workers.WorkUaParser", "reportPath": "Waterfall.Api_WorkUaParser.html", "methodName": "ParseJobPage(System.String)", "methodShortName": "ParseJobPage(...)", "fileIndex": 0, "line": 69,
+    "metrics": [
+      { "value": 16, "exceeded": false },
+      { "value": 16, "exceeded": true },
     ]},
 ];
 
