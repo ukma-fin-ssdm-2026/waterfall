@@ -104,6 +104,7 @@ builder.Services.AddControllers(options =>
 builder.Services.AddWaterfallRepositories(builder.Configuration);
 builder.Services.AddWaterfallServices();
 builder.Services.Configure<IngestionOptions>(builder.Configuration.GetSection("Ingestion"));
+builder.Services.AddHttpClient();
 builder.Services.AddHostedService<JobParserService>();
 
 // 2b. JWT Bearer, auth-сервіси та перевірка секретів (fail-fast, THR-09).
