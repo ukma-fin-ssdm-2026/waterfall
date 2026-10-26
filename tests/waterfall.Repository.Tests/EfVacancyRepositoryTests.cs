@@ -185,6 +185,47 @@ public sealed class EfVacancyRepositoryTests : IDisposable
         Assert.Equal(kyivVac.Id, items.Single().Id);
     }
 
+    // AI: регресійний тест пошуку кирилицею (Саєнко Данило, на прохання команди); перевірено: падає без SqliteUnicodeLowerInterceptor, самоперевірка (§8)
+    [Theory]
+    [InlineData("search", "РОЗРОБНИК")]
+    [InlineData("search", "комунікація")]
+    [InlineData("category", "тестування")]
+    [InlineData("location", "київ")]
+    [InlineData("experience", "ДОСВІД")]
+    [InlineData("schedule", "повна")]
+    public async Task GetAllAsync_CyrillicFilters_IgnoreCase(string filter, string value)
+    {
+        // Arrange: вбудована в SQLite lower() знає лише латиницю, тож «київ» не знаходив «Київ»
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        VacancyDB target = CreateVacancy(
+            title: "Розробник .NET",
+            category: "Тестування",
+            location: "Київ (гібрид)",
+            experience: "Досвід від 1 року",
+            schedule: "Повна зайнятість");
+        target.SkillsJson = "[\"Комунікація\"]";
+        VacancyDB other = CreateVacancy(title: "Дизайнер", category: "Дизайн", location: "Львів", experience: null, schedule: null);
+        db.Vacancies.AddRange(target, other);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act
+        (IReadOnlyList<VacancyDB> items, int totalCount) = filter switch
+        {
+            "search" => await repo.GetAllAsync(search: value),
+            "category" => await repo.GetAllAsync(category: value),
+            "location" => await repo.GetAllAsync(location: value),
+            "experience" => await repo.GetAllAsync(experience: value),
+            _ => await repo.GetAllAsync(schedule: value)
+        };
+
+        // Assert
+        Assert.Equal(1, totalCount);
+        Assert.Equal(target.Id, items.Single().Id);
+    }
+
     [Theory]
     [InlineData(2500, 1)] // MinSalary >= 2500 -> matches v1 (2000..3500) because max >= 2500
     [InlineData(4000, 0)] // MinSalary >= 4000 -> no matches

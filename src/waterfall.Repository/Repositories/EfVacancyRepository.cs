@@ -41,7 +41,8 @@ public class EfVacancyRepository : IVacancyRepository
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            string term = search.Trim().ToLower();
+            // Той самий регістр, що й у lower() на боці БД (SqliteUnicodeLowerInterceptor)
+            string term = search.Trim().ToLowerInvariant();
             query = query.Where(v =>
                 v.Title.ToLower().Contains(term) ||
                 v.Company.ToLower().Contains(term) ||
@@ -51,25 +52,25 @@ public class EfVacancyRepository : IVacancyRepository
 
         if (!string.IsNullOrWhiteSpace(category))
         {
-            string cat = category.Trim().ToLower();
+            string cat = category.Trim().ToLowerInvariant();
             query = query.Where(v => v.Category.ToLower().Contains(cat));
         }
 
         if (!string.IsNullOrWhiteSpace(experience))
         {
-            string exp = experience.Trim().ToLower();
+            string exp = experience.Trim().ToLowerInvariant();
             query = query.Where(v => v.Experience != null && v.Experience.ToLower().Contains(exp));
         }
 
         if (!string.IsNullOrWhiteSpace(location))
         {
-            string loc = location.Trim().ToLower();
+            string loc = location.Trim().ToLowerInvariant();
             query = query.Where(v => v.Location.ToLower().Contains(loc));
         }
 
         if (!string.IsNullOrWhiteSpace(schedule))
         {
-            string sch = schedule.Trim().ToLower();
+            string sch = schedule.Trim().ToLowerInvariant();
             query = query.Where(v => v.Schedule != null && v.Schedule.ToLower().Contains(sch));
         }
 
