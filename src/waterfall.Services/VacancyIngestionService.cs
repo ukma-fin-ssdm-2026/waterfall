@@ -2,24 +2,31 @@
 
 using System.Globalization;
 using System.Net;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Services.Interfaces;
+using Waterfall.Services.Models.Vacancies;
 
 namespace Waterfall.Services;
 
 /// <summary>
 /// Чистить і стандартизує сирі вакансії (назва, опис, зарплата, дата, навички)
 /// та зберігає їх через <see cref="IVacancyRepository.BulkUpsertAsync"/>.
-/// Поки що працюємо з одним сайтом — Djinni.
+/// Збираємо з трьох сайтів — Djinni, Work.ua і DOU.
 /// </summary>
 public class VacancyIngestionService : IVacancyIngestionService
 {
-    private const string Source = "Djinni";
-    private const string SourceHost = "djinni.co";
+    // Для кожного сайту: домен, на який мають вести посилання (THR-03), і валюта зарплати, якщо сайт її не вказав
+    private static readonly Dictionary<JobSource, (string Host, string Currency)> KnownSources = new()
+    {
+        [JobSource.Djinni] = ("djinni.co", "USD"), // Djinni публікує зарплати в доларах
+        [JobSource.WorkUa] = ("work.ua", "UAH"),
+        [JobSource.Dou] = ("dou.ua", "USD")        // на DOU зарплати теж здебільшого в доларах
+    };
 
     // Більше значення в «N … тому» не буває реальною датою публікації. До того ж, навіть 10 000 місяців тому ще не виводять дату за межі календаря.
     private const int MaxTimeAgo = 10_000;
@@ -32,6 +39,10 @@ public class VacancyIngestionService : IVacancyIngestionService
     private static readonly Regex Spaces = new(@"\s+", RegexOptions.None, RegexTimeout);
     private static readonly Regex Number = new(@"\d+", RegexOptions.None, RegexTimeout);
     private static readonly Regex TimeAgo = new(@"(\d+)\s*(хв|год|дн|ден|тиж|міс)", RegexOptions.IgnoreCase, RegexTimeout);
+
+    // Кирилицю й «+» лишаємо як є: інакше «Комунікація» чи «C++» лягли б у БД як К… і їх не знаходив би пошук каталогу,
+    // що шукає підрядок у SkillsJson. Це безпечно, бо цей JSON не вставляється в HTML: API віддає навички окремим масивом.
+    private static readonly JsonSerializerOptions SkillsJsonOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private readonly IVacancyRepository _repository;
     private readonly ILogger<VacancyIngestionService> _logger;
@@ -74,6 +85,11 @@ public class VacancyIngestionService : IVacancyIngestionService
     /// </summary>
     public static (VacancyDB? Vacancy, string? Error) Normalize(RawVacancy raw, DateTimeOffset now)
     {
+        if (!KnownSources.TryGetValue(raw.Source, out (string Host, string Currency) source))
+        {
+            return (null, $"невідоме джерело {raw.Source}");
+        }
+
         if (string.IsNullOrWhiteSpace(raw.Id))
         {
             return (null, "немає id вакансії");
@@ -92,14 +108,14 @@ public class VacancyIngestionService : IVacancyIngestionService
             return (null, "немає опису");
         }
 
-        // Фішингове посилання не має потрапити в каталог під виглядом вакансії з Djinni (THR-03)
-        string? url = NormalizeUrl(raw.Url);
+        // Фішингове посилання не має потрапити в каталог під виглядом вакансії з Djinni чи Work.ua (THR-03)
+        string? url = NormalizeUrl(raw.Url, source.Host);
         if (url is null)
         {
-            return (null, $"посилання веде не на {SourceHost}");
+            return (null, $"посилання веде не на {source.Host}");
         }
 
-        (decimal? salaryMin, decimal? salaryMax, string currency) = ParseSalary(raw.Salary);
+        (decimal? salaryMin, decimal? salaryMax, string currency) = ParseSalary(raw.Salary, source.Currency);
 
         string? fullAddress = !string.IsNullOrWhiteSpace(raw.FullAddress)
             ? Cut(CleanText(raw.FullAddress), 300)
@@ -108,7 +124,7 @@ public class VacancyIngestionService : IVacancyIngestionService
         VacancyDB vacancy = new()
         {
             Id = Guid.NewGuid(),
-            Source = Source,
+            Source = raw.Source.ToString(),
             ExternalId = Cut(raw.Id.Trim(), 100),
             SourceUrl = url,
             Title = Cut(title, 200),
@@ -122,7 +138,8 @@ public class VacancyIngestionService : IVacancyIngestionService
             SalaryMin = salaryMin,
             SalaryMax = salaryMax,
             Currency = currency,
-            SkillsJson = JsonSerializer.Serialize(ParseSkills(raw.Tags)),
+            // Навички — лише ті, що вказав роботодавець; якщо поля немає, список порожній
+            SkillsJson = JsonSerializer.Serialize(ParseSkills(raw.Tags), SkillsJsonOptions),
             PublishedAt = ParsePublishedAt(raw.Posted, now),
             FirstSeenAt = now,
             LastSeenAt = now,
@@ -136,13 +153,16 @@ public class VacancyIngestionService : IVacancyIngestionService
     /// «$3500-4500» → 3500–4500 USD, «до 2500» → лише максимум, «від 2000» → лише мінімум.
     /// Погодинні ставки й «за домовленістю» дають порожню зарплату.
     /// </summary>
-    public static (decimal? Min, decimal? Max, string Currency) ParseSalary(string? salary)
+    /// <param name="salary">Зарплата так, як її написано на сайті.</param>
+    /// <param name="defaultCurrency">Валюта, якщо в рядку її не видно: у Djinni це долари, у Work.ua — гривні.</param>
+    public static (decimal? Min, decimal? Max, string Currency) ParseSalary(string? salary, string defaultCurrency = "USD")
     {
         string text = (salary ?? string.Empty).ToLowerInvariant();
         string currency =
+            text.Contains('$') || text.Contains("usd") ? "USD" :
             text.Contains('€') || text.Contains("eur") ? "EUR" :
             text.Contains('₴') || text.Contains("грн") || text.Contains("uah") ? "UAH" :
-            "USD"; // Djinni публікує зарплати в доларах
+            defaultCurrency;
 
         // Погодинну ставку не можна порівнювати з місячними зарплатами в каталозі
         if (text.Contains("/год") || text.Contains("/hour"))
@@ -214,7 +234,8 @@ public class VacancyIngestionService : IVacancyIngestionService
         if (DateTimeOffset.TryParseExact(text, "dd.MM.yyyy", CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out DateTimeOffset date)
             || DateTimeOffset.TryParse(posted, CultureInfo.InvariantCulture, DateTimeStyles.AssumeUniversal, out date))
         {
-            return date > now ? now : date;
+            // Зберігаємо в UTC: БД (DateTimeOffsetToBinaryConverter) сортує за місцевим часом, тож «20:43 +03:00» стала б пізнішою за «18:00 UTC»
+            return date > now ? now : date.ToUniversalTime();
         }
 
         return now;
@@ -259,14 +280,14 @@ public class VacancyIngestionService : IVacancyIngestionService
     }
 
     /// <summary>Приймає лише https-посилання на сайт-джерело і відкидає з нього трекінгові параметри.</summary>
-    private static string? NormalizeUrl(string? url)
+    private static string? NormalizeUrl(string? url, string sourceHost)
     {
         if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out Uri? uri) || uri.Scheme != Uri.UriSchemeHttps)
         {
             return null;
         }
 
-        bool fromSource = uri.Host == SourceHost || uri.Host.EndsWith("." + SourceHost, StringComparison.Ordinal);
+        bool fromSource = uri.Host == sourceHost || uri.Host.EndsWith("." + sourceHost, StringComparison.Ordinal);
         return fromSource ? Cut(uri.GetLeftPart(UriPartial.Path), 1000) : null;
     }
 
