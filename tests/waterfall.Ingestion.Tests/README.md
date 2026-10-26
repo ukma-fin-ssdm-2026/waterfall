@@ -72,7 +72,7 @@
 | Рядки | 97,5 % | 99,5 % | 99 % | 99,6 % |
 | Гілки | 89 % | 99 % | 96,1 % | 95,7 % |
 
-HTML-звіт: [`coverage-report/index.html`](coverage-report/index.html) (згенеровано ReportGenerator з даних coverlet). У звіті 99,6 % рядків (816 з 819), 95,7 % гілок і 100 % методів. `BulkUpsertAsync` у звіт не входить, бо цей метод лежить у класі репозиторію Дениса разом з чужими методами; окремо він покритий повністю (19 з 19 рядків).
+Цифри — з локального прогону coverlet лише для класів модуля: 99,6 % рядків (816 з 819), 95,7 % гілок і 100 % методів. Окремого HTML-звіту модуля в репозиторії немає: покриття всього рішення, зокрема цього модуля, — у [загальному звіті](../../coverage-report/index.html) (див. [`docs/testing/testing-strategy.md`](../../docs/testing/testing-strategy.md)). `BulkUpsertAsync` у звіт не входить, бо цей метод лежить у класі репозиторію Дениса разом з чужими методами; окремо він покритий повністю (19 з 19 рядків).
 
 Непокритими лишилися 3 рядки, і до кожного тест не дістанеться:
 
@@ -88,7 +88,7 @@ HTML-звіт: [`coverage-report/index.html`](coverage-report/index.html) (зг�
 dotnet test tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -p:TargetFrameworks=net10.0 -p:TargetFramework=net10.0
 ```
 
-Перегенерувати звіт покриття. Спершу зібрати дані:
+Подивитися покриття лише цього модуля локально. Звіт ляже в `TestResults/`, а він у `.gitignore`, тож у репозиторій не потрапить. Спершу зібрати дані:
 
 ```bash
 dotnet test tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -p:TargetFrameworks=net10.0 -p:TargetFramework=net10.0 --collect "XPlat Code Coverage" --results-directory TestResults/ingestion
@@ -97,10 +97,8 @@ dotnet test tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -p:
 Потім побудувати HTML лише для класів модуля:
 
 ```bash
-dotnet tool restore && dotnet tool run reportgenerator "-reports:TestResults/ingestion/**/coverage.cobertura.xml" "-targetdir:tests/waterfall.Ingestion.Tests/coverage-report" "-reporttypes:Html;TextSummary" "-classfilters:+Waterfall.Api.Workers.*;+Waterfall.Services.VacancyIngestionService;+Waterfall.Services.Interfaces.RawVacancy;+Waterfall.Services.Interfaces.IngestionResult"
+dotnet tool restore && dotnet tool run reportgenerator "-reports:TestResults/ingestion/**/coverage.cobertura.xml" "-targetdir:TestResults/ingestion/report" "-reporttypes:Html;TextSummary" "-classfilters:+Waterfall.Api.Workers.*;+Waterfall.Services.VacancyIngestionService;+Waterfall.Services.Interfaces.RawVacancy;+Waterfall.Services.Interfaces.IngestionResult"
 ```
-
-Каталог `TestResults/` у `.gitignore`. Після генерації абсолютні шляхи до файлів у HTML варто замінити на відносні.
 
 ## Використання ШІ та внесок
 
@@ -112,4 +110,4 @@ dotnet tool restore && dotnet tool run reportgenerator "-reports:TestResults/ing
 | Збір з work.ua (`WorkUaParser`, `RobotsTxt`, `WorkUaPageTests`, `RobotsTxtTests`) | Саєнко Данило | Аналіз розмітки work.ua і `WorkUaParserService` Дениса, генерація коду й тестів | Розбір 28 справжніх карток і 6 сторінок вакансій, завантажених вручну, з перевіркою кожного поля; живий запуск API: Cloudflare відповідає сервісу 403 з перевіркою браузера, сервіс записує попередження й переходить до наступного джерела (див. [`data/raw/README.md`](../../data/raw/README.md)) |
 | Збір з jobs.dou.ua (`DouParser`, `DouPageTests`) | Саєнко Данило | Аналіз RSS-стрічки й сторінки вакансії DOU, генерація коду й тестів | Звірка з 50 справжніми елементами стрічки й сторінкою вакансії; живий запуск API на чистій БД: 50 вакансій збережено, 0 відкинуто, категорія в усіх, зарплата в 10 |
 | Пауза після відмови сайту (`SiteCrawler`), межі налаштувань (`IngestionOptionsValidator`) | Саєнко Данило | Генерація коду й тестів | Тести з керованим годинником (`TimeProvider`) на паузи в годинах; запуск API з `Ingestion:Interval=00:00:10` — API не стартує й пояснює чому, зі значеннями з `appsettings.json` — стартує |
-| `coverage-report/`, цей README | Саєнко Данило | Генерація звіту ReportGenerator, чернетка документа | Звірка цифр зі звітом coverlet, перегляд HTML-звіту |
+| Цей README | Саєнко Данило | Чернетка документа | Звірка цифр із локальним звітом coverlet |
