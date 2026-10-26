@@ -3,6 +3,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Options;
 using Waterfall.Services.Interfaces;
+using Waterfall.Services.Models.Vacancies;
 
 namespace Waterfall.Api.Workers;
 
@@ -97,7 +98,7 @@ public class JobParserService : BackgroundService
             throw new JsonException($"Очікувався дамп Djinni, а в файлі source = \"{dump.Source}\".");
         }
 
-        return dump.Jobs ?? [];
+        return (dump.Jobs ?? []).Select(job => job with { Source = JobSource.Djinni }).ToList();
     }
 
     private sealed record DjinniDump(string? Source, List<RawVacancy>? Jobs);

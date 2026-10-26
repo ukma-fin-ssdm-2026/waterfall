@@ -9,6 +9,7 @@ using Waterfall.Repository.Entities;
 using Waterfall.Repository.Repositories;
 using Waterfall.Services;
 using Waterfall.Services.Interfaces;
+using Waterfall.Services.Models.Vacancies;
 
 namespace Waterfall.Ingestion.Tests;
 
@@ -107,6 +108,61 @@ public class VacancyIngestionServiceTests
         Assert.Equal("[\"C#\",\".NET\",\"Docker\"]", vacancy.SkillsJson);
         Assert.Equal(3500m, vacancy.SalaryMin);
         Assert.Equal(Now.AddDays(-2), vacancy.PublishedAt);
+    }
+
+    [Fact]
+    public void Normalize_StoresSkillsReadably_ForCatalogSearch()
+    {
+        // Поле «Необхідні навички» на Djinni буває українською; пошук каталогу шукає підрядок у SkillsJson
+        (VacancyDB? vacancy, _) = VacancyIngestionService.Normalize(Raw() with { Tags = "Комунікація, C/C++" }, Now);
+
+        Assert.Equal("[\"Комунікація\",\"C/C++\"]", vacancy?.SkillsJson);
+    }
+
+    [Fact]
+    public void Normalize_WithoutSkillsField_DoesNotGuessSkillsFromText()
+    {
+        // Навички беремо лише з окремого поля на сайті, а не з опису
+        RawVacancy raw = Raw() with { Tags = null, DescriptionHtml = "<p>Потрібні C# та PostgreSQL</p>" };
+
+        (VacancyDB? vacancy, _) = VacancyIngestionService.Normalize(raw, Now);
+
+        Assert.Equal("[]", vacancy?.SkillsJson);
+    }
+
+    [Fact]
+    public void Normalize_WorkUa_ChecksWorkUaDomainAndDefaultsToHryvnias()
+    {
+        RawVacancy raw = Raw() with { Source = JobSource.WorkUa, Url = "https://www.work.ua/jobs/8051901/", Salary = "17 000 – 35 000" };
+
+        (VacancyDB? vacancy, string? error) = VacancyIngestionService.Normalize(raw, Now);
+
+        Assert.Null(error);
+        Assert.NotNull(vacancy);
+        Assert.Equal("WorkUa", vacancy.Source);
+        Assert.Equal("https://www.work.ua/jobs/8051901/", vacancy.SourceUrl);
+        Assert.Equal((17000m, 35000m, "UAH"), (vacancy.SalaryMin, vacancy.SalaryMax, vacancy.Currency));
+        // Посилання на Djinni у вакансії з Work.ua — підробка (THR-03)
+        Assert.Contains("work.ua", VacancyIngestionService.Normalize(raw with { Url = "https://djinni.co/jobs/1-dev/" }, Now).Error);
+    }
+
+    [Theory]
+    [InlineData(JobSource.Unknown)]
+    [InlineData(JobSource.RobotaUa)] // збирати з Robota.ua ще не вміємо, тож і домену для перевірки посилань немає
+    public void Normalize_UnsupportedSource_IsRejected(JobSource source)
+    {
+        (VacancyDB? vacancy, string? error) = VacancyIngestionService.Normalize(Raw() with { Source = source }, Now);
+
+        Assert.Null(vacancy);
+        Assert.Contains("невідоме джерело", error);
+    }
+
+    [Theory]
+    [InlineData("17 000 – 35 000", "UAH")]
+    [InlineData("$500", "USD")] // валюта в рядку важливіша за типову для сайту
+    public void ParseSalary_UsesSiteCurrencyWhenNoneIsWritten(string salary, string currency)
+    {
+        Assert.Equal(currency, VacancyIngestionService.ParseSalary(salary, "UAH").Currency);
     }
 
     [Theory]
@@ -230,6 +286,7 @@ public class VacancyIngestionServiceTests
 
     private static RawVacancy Raw() => new()
     {
+        Source = JobSource.Djinni,
         Id = "1",
         Url = "https://djinni.co/jobs/1-dev/",
         Title = "Middle .NET Developer",
