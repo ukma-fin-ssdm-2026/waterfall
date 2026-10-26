@@ -5,6 +5,7 @@ using System.Reflection;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using Microsoft.OpenApi;
 using Waterfall.Api.Extensions;
@@ -103,7 +104,10 @@ builder.Services.AddControllers(options =>
 // 2. Реєстрація інфраструктури (EF Core SQLite/MSSQL), репозиторіїв та сервісів бізнес-логіки
 builder.Services.AddWaterfallRepositories(builder.Configuration);
 builder.Services.AddWaterfallServices();
-builder.Services.Configure<IngestionOptions>(builder.Configuration.GetSection("Ingestion"));
+// Надто частий збір не дасть запустити API (fail-fast, THR-11)
+builder.Services.AddOptions<IngestionOptions>().Bind(builder.Configuration.GetSection("Ingestion")).ValidateOnStart();
+builder.Services.AddSingleton<IValidateOptions<IngestionOptions>, IngestionOptionsValidator>();
+builder.Services.AddHttpClient();
 builder.Services.AddHostedService<JobParserService>();
 
 // 2b. JWT Bearer, auth-сервіси та перевірка секретів (fail-fast, THR-09).

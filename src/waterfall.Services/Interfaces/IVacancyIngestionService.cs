@@ -1,5 +1,8 @@
 // AI: контракт нормалізації та збереження сирих вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, самоперевірка автора (§8)
 
+using System.Text.Json.Serialization;
+using Waterfall.Services.Models.Vacancies;
+
 namespace Waterfall.Services.Interfaces;
 
 /// <summary>
@@ -16,6 +19,13 @@ public interface IVacancyIngestionService
 /// </summary>
 public sealed record RawVacancy
 {
+    /// <summary>
+    /// Сайт, з якого вакансію зібрано: від нього залежить, на який домен може вести посилання.
+    /// Задає парсер, а не дані з сайту, тож із JSON-дампу це поле не читається.
+    /// </summary>
+    [JsonIgnore]
+    public JobSource Source { get; init; }
+
     public string? Id { get; init; }
     public string? Url { get; init; }
     public string? Title { get; init; }
@@ -28,6 +38,8 @@ public sealed record RawVacancy
     public string? Employment { get; init; }
     public string? Category { get; init; }
     public string? DescriptionHtml { get; init; }
+
+    /// <summary>Навички з окремого поля на сайті через кому; null, якщо роботодавець його не заповнив.</summary>
     public string? Tags { get; init; }
 }
 

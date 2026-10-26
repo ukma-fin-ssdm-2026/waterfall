@@ -22,6 +22,12 @@ public class WaterfallDbContext : DbContext
     public DbSet<UserPersonalDataDB> UserPersonalData => Set<UserPersonalDataDB>();
     public DbSet<GeoLocationCacheDB> GeoLocationCache => Set<GeoLocationCacheDB>();
 
+    protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
+    {
+        // У SQLite lower() без цього не працює з кирилицею, і пошук каталогу був би чутливим до регістру
+        optionsBuilder.AddInterceptors(SqliteUnicodeLowerInterceptor.Instance);
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
