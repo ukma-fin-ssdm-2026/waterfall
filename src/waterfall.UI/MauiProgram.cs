@@ -1,3 +1,4 @@
+// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Logging;
 using waterfall.UI.Services;
@@ -53,6 +54,8 @@ public static class MauiProgram
         builder.Services.AddTransient<FavoritesPage>();
         builder.Services.AddTransient<LoginViewModel>();
         builder.Services.AddTransient<LoginPage>();
+        builder.Services.AddTransient<SystemSettingsViewModel>();
+        builder.Services.AddTransient<SystemSettingsPage>();
 
 #if DEBUG
         builder.Logging.AddDebug();

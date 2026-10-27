@@ -31,6 +31,10 @@
             Title="Профіль"
             ContentTemplate="{DataTemplate views:LoginPage}"
             Route="login" />
+        <ShellContent
+            Title="Системні налаштування"
+            ContentTemplate="{DataTemplate views:SystemSettingsPage}"
+            Route="systemsettings" />
     </TabBar>
 
 </Shell>
