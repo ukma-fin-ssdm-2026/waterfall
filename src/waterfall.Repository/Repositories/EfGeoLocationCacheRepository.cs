@@ -13,7 +13,7 @@ namespace Waterfall.Repository.Repositories;
 /// Підтримує розумну нормалізацію: номери будинків, поверхи та службові префікси не враховуються,
 /// що дозволяє знаходити вулицю навіть без вказання міста або конкретного номера.
 /// </summary>
-public class EfGeoLocationCacheRepository : IGeoLocationCacheRepository
+public partial class EfGeoLocationCacheRepository : IGeoLocationCacheRepository
 {
     private readonly WaterfallDbContext _context;
 
@@ -92,15 +92,8 @@ public class EfGeoLocationCacheRepository : IGeoLocationCacheRepository
         return null;
     }
 
-    private static readonly string[] KnownCities =
-    [
-        "київ", "львів", "харків", "дніпро", "одеса", "запоріж", "вінниц", "полтав",
-        "чернівц", "тернопіль", "івано-франківськ", "ужгород", "луцьк", "рівне",
-        "житомир", "черкас", "суми", "чернігів", "миколаїв", "херсон"
-    ];
-
     private static bool IsCityOnly(string normalizedAddress) =>
-        KnownCities.Any(city => string.Equals(normalizedAddress.Trim(), city, StringComparison.OrdinalIgnoreCase));
+        Waterfall.Repository.Helpers.GeoAddressHelper.KnownCities.Any(city => string.Equals(normalizedAddress.Trim(), city, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Перевіряє, чи містить збережена адреса всі ключові слова запиту.
@@ -239,18 +232,33 @@ public class EfGeoLocationCacheRepository : IGeoLocationCacheRepository
         string result = address.Trim().ToLowerInvariant();
 
         // 1. Видаляємо дужки та все всередині (напр. "(БЦ Гулівер)", "(2 поверх)")
-        result = Regex.Replace(result, @"\([^)]*\)", " ");
+        result = ParenthesesRegex().Replace(result, " ");
 
         // 2. Видаляємо номери будинків, дробів, корпусів та окремих цифр (напр. "3", "1а", "2-а", "101", "55/2")
-        result = Regex.Replace(result, @"\b\d+[-/a-zA-Zа-яА-ЯіїєґІЇЄҐ0-9]*\b", " ");
+        result = HouseNumbersRegex().Replace(result, " ");
 
         // 3. Видаляємо службові адресні префікси
-        result = Regex.Replace(result, @"\b(вул|вулиця|просп|проспект|пл|площа|бульвар|бул|провулок|буд|будинок|офіс|оф|поверх|корпус|корп|бц|трц|тоц|№)\b\.?", " ", RegexOptions.IgnoreCase);
+        result = StreetPrefixesRegex().Replace(result, " ");
 
         // 4. Замінюємо розділові знаки на пробіли
-        result = Regex.Replace(result, @"[,./\\#\-–—"";:'`]", " ");
+        result = PunctuationRegex().Replace(result, " ");
 
         // 5. Стискаємо подвійні пробіли
-        return Regex.Replace(result, @"\s+", " ").Trim();
+        return WhitespaceRegex().Replace(result, " ").Trim();
     }
+
+    [GeneratedRegex(@"\([^)]*\)", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex ParenthesesRegex();
+
+    [GeneratedRegex(@"\b\d+[-/a-zA-Zа-яА-ЯіїєґІЇЄҐ0-9]*\b", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex HouseNumbersRegex();
+
+    [GeneratedRegex(@"\b(вул|вулиця|просп|проспект|пл|площа|бульвар|бул|провулок|буд|будинок|офіс|оф|поверх|корпус|корп|бц|трц|тоц|№)\b\.?", RegexOptions.IgnoreCase, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex StreetPrefixesRegex();
+
+    [GeneratedRegex(@"[,./\\#\-–—"";:'`]", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex PunctuationRegex();
+
+    [GeneratedRegex(@"\s+", RegexOptions.None, matchTimeoutMilliseconds: 1000)]
+    private static partial Regex WhitespaceRegex();
 }
