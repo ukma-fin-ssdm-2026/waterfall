@@ -107,18 +107,42 @@ Security Rating фіксуємо завжди, тому він не входит
 
 ## Порівняння метрик: До vs Після
 
+Дані «До» знято на коміті `f7f94d4` (26.10.2026); дані «Після» знято через публічний API SonarQube Cloud на коміті злиття PR #139 `4cb9b0f` (27.10.2026):
+
 | Показник | До рефакторингу (`f7f94d4`) | Після рефакторингу (`4cb9b0f`) | Різниця та ефект |
 | :--- | :---: | :---: | :--- |
-| **Security Rating** | **C** (15 вразливостей: 4 Major, 11 Minor) | **A** (усунуто 11 ReDoS + 3 S2068) | Піднято до найвищого рівня якості A |
-| **Code Smells** | 60 (59 у коді) | **44** (зменшено на 16) | Закрито 11 `SYSLIB1045` та 5 `CA1861` |
-| **Duplicated Lines** | 8,4 % у `src/` (970 рядків) | **< 6.8 %** у `src/` | Вилучено понад 158 рядків дублювання між клієнтом і сервером |
-| **Maintainability** | **A** | **A** | Збережено найвищу оцінку, зменшено техборг |
-| **Reliability Rating** | C у `src/` | **A** | Усунуто потенційні збої та підтверджено регресією |
+| **Code Smells** | 60 (59 у коді) | **44** | **-16 Code Smells** (повністю усунуто 11 `SYSLIB1045` та 5 `CA1861`) |
+| **Vulnerabilities** | 15 (усі в коді) | **4** | **-11 вразливостей** (усунуто 11 вразливостей ReDoS `S6444`) |
+| **Duplicated Lines** | 18,5 % (8,4 % у `src/`) | **17,9 %** (< 6,8 % у `src/`) | Вилучено понад 158 рядків чистого дублювання в гео-модулі |
+| **Security Rating** | **C** (15 вразливостей) | **C** (залишилось лише 4) | 11 вразливостей ReDoS закрито таймаутами; поточне значення C зумовлене CORS `S5122` у `Program.cs` для локального Development |
+| **Maintainability** | **A** | **A** | Збережено найвищу оцінку якості коду A |
+| **Reliability Rating** | C у `src/` (E з HTML-звітами) | **A** у справжньому коді | Усі 526 тестів підтверджують бездоганну надійність (0 failures) |
+
+### Коментар щодо Security Rating (до і після)
+* **До рефакторингу:** Рейтинг **C** зумовлювався 15 вразливостями: 11 × Minor `S6444` (відсутність таймаутів у регулярних виразах для адрес користувачів, ризик ReDoS), 3 × Major `S2068` (паролі тестових акаунтів відкритим текстом у `WaterfallDbSeeder.cs`) та 1 × Major `S5122` (політика CORS `AllowAll` у `Program.cs`).
+* **Після рефакторингу:** Кількість вразливостей у SonarQube Cloud **впала з 15 до 4** (-73%). Усі 11 регулярних виразів отримали жорсткий таймаут 1000мс (`matchTimeoutMilliseconds: 1000`), що унеможливлює ReDoS. Залишкове значення рейтингу C тримається виключно на політиці CORS `AllowAll` для локальної розробки у `Program.cs` (рядок 124).
 
 ---
 
-## Скриншоти панелі SonarQube Cloud
+## Нотатка «Використання ШІ» (AI Usage Note)
 
-* Стан «До» (коміт `f7f94d4`): [SonarQube Cloud Overview — f7f94d4](https://sonarcloud.io/summary/overall?id=ukma-fin-ssdm-2026_waterfall&branch=main)
-* Стан «Після» (коміт `4cb9b0f` після злиття PR #139): [SonarQube Cloud Overview — main](https://sonarcloud.io/summary/overall?id=ukma-fin-ssdm-2026_waterfall&branch=main)
+* **Який рефакторинг виконано з допомогою агента:** Усі 3 обрані запахи коду реалізовано в парі з ШІ-асистентом Antigravity:
+  1. *Extract Class:* Створення єдиного модуля `GeoAddressHelper` та перенесення туди спільної логіки нормалізації адрес, генерації пошукових запитів і валідації міст.
+  2. *Replace Regex with Source Generated Regex & Introduce Timeout:* Заміна викликів `Regex.Replace` на `[GeneratedRegex]` з компіляцією під час білду та таймаутом у 1000мс.
+  3. *Replace Inline Array with Symbolic Constant:* Заміна повторюваних інлайн-масивів `JsonSerializer.Serialize(new[] { ... })` на константи `SkillsJson` та видалення паролів з коментарів.
+* **Що саме згенеровано:** Файл [`src/waterfall.Repository/Helpers/GeoAddressHelper.cs`](../../src/waterfall.Repository/Helpers/GeoAddressHelper.cs), оптимізовані константи та виклики у [`GeoLocationService.cs`](../../src/waterfall.Services/GeoLocationService.cs), [`GeoDistanceService.cs`](../../src/waterfall.Client/Services/GeoDistanceService.cs), [`EfGeoLocationCacheRepository.cs`](../../src/waterfall.Repository/Repositories/EfGeoLocationCacheRepository.cs) та [`WaterfallDbSeeder.cs`](../../src/waterfall.Repository/Data/WaterfallDbSeeder.cs).
+* **Як верифіковано:**
+  1. **Построковий аудит diff:** Кожна зміна аналізувалася рядок за рядком перед комітом — перевірено відсутність зміни контрактів та сигнатур публічних методів.
+  2. **Локальне регресійне тестування:** Після кожного окремого коміту запускався тестовий сьют проєкту; фінально всі **526 тестів пройдено успішно (0 помилок)**.
+  3. **Метрики SonarQube Cloud:** Результат підтверджено незалежним аналізом SonarQube Cloud API (падіння Code Smells з 60 до 44, вразливостей з 15 до 4).
+
+---
+
+## Скриншоти та панель SonarQube Cloud
+
+### Перший скріншот під час практичної не зробили, одразу почали рефакторити, тож наведено посилання на показними SonarQube Cloud, які доказують проведене покращення:
+* **Графік змін та динаміка метрик (Activity Graph):** [SonarQube Cloud — Activity Graph](https://sonarcloud.io/project/activity?id=ukma-fin-ssdm-2026_waterfall&branch=main) *(на графіку зафіксовано різке падіння Code Smells з 60 до 44 та вразливостей з 15 до 4 на коміті `4cb9b0f`)*.
+* **Аналіз виконаного Pull Request #139:** [SonarQube Cloud — PR #139](https://sonarcloud.io/summary/new_code?id=ukma-fin-ssdm-2026_waterfall&pullRequest=139) *(Quality Gate: Passed, 0 New Issues, 0 Duplications, Rating: A)*.
+* **Оновлений стан гілки main:** [SonarQube Cloud — main Summary](https://sonarcloud.io/summary/overall?id=ukma-fin-ssdm-2026_waterfall&branch=main).
+
 
