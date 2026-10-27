@@ -8,128 +8,719 @@
              Title="Каталог"
              BackgroundColor="{StaticResource DarkBg2}">
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+    <ContentPage.Resources>
+        <ResourceDictionary>
+            <Style x:Key="CompactFieldLabel" TargetType="Label">
+                <Setter Property="FontSize" Value="10" />
+                <Setter Property="TextColor" Value="{StaticResource TextSecondary}" />
+                <Setter Property="Margin" Value="2,0,0,1" />
+                <Setter Property="LineBreakMode" Value="TailTruncation" />
+            </Style>
 
-        <!-- Верхній рядок: Пошук та кнопки дій у стилі PointOfSale -->
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto"
-              ColumnSpacing="8"
-              Padding="12,12,12,6">
-            
-            <Border StrokeShape="RoundRectangle 12"
+            <Style x:Key="CompactFieldBorder" TargetType="Border">
+                <Setter Property="StrokeShape" Value="RoundRectangle 8" />
+                <Setter Property="Stroke" Value="{StaticResource Secondary}" />
+                <Setter Property="StrokeThickness" Value="1" />
+                <Setter Property="BackgroundColor" Value="{StaticResource DarkBg1}" />
+                <Setter Property="HeightRequest" Value="36" />
+                <Setter Property="Padding" Value="6,0" />
+            </Style>
+
+            <Style x:Key="CompactPicker" TargetType="Picker">
+                <Setter Property="TextColor" Value="{StaticResource White}" />
+                <Setter Property="BackgroundColor" Value="Transparent" />
+                <Setter Property="FontFamily" Value="OpenSansRegular" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="MinimumHeightRequest" Value="32" />
+                <Setter Property="HeightRequest" Value="34" />
+                <Setter Property="VerticalOptions" Value="Center" />
+            </Style>
+
+            <Style x:Key="CompactEntry" TargetType="Entry">
+                <Setter Property="TextColor" Value="{StaticResource White}" />
+                <Setter Property="PlaceholderColor" Value="{StaticResource TextSecondary}" />
+                <Setter Property="BackgroundColor" Value="Transparent" />
+                <Setter Property="FontFamily" Value="OpenSansRegular" />
+                <Setter Property="FontSize" Value="12" />
+                <Setter Property="MinimumHeightRequest" Value="32" />
+                <Setter Property="HeightRequest" Value="34" />
+                <Setter Property="VerticalOptions" Value="Center" />
+                <Setter Property="VerticalTextAlignment" Value="Center" />
+            </Style>
+
+            <Style x:Key="CompactCheckBox" TargetType="CheckBox">
+                <Setter Property="Color" Value="{StaticResource Primary}" />
+                <Setter Property="MinimumHeightRequest" Value="22" />
+                <Setter Property="MinimumWidthRequest" Value="22" />
+                <Setter Property="HeightRequest" Value="22" />
+                <Setter Property="WidthRequest" Value="22" />
+                <Setter Property="VerticalOptions" Value="Center" />
+            </Style>
+        </ResourceDictionary>
+    </ContentPage.Resources>
+
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*">
+
+        <!-- Рядок 0: Компактний пошуковий рядок, кнопка «Фільтр ⚡» та експорт/імпорт -->
+        <Grid Grid.Row="0"
+              ColumnDefinitions="*,Auto,Auto,Auto"
+              ColumnSpacing="6"
+              Padding="10,6,10,2">
+
+            <Border StrokeShape="RoundRectangle 10"
                     StrokeThickness="1"
                     Stroke="{StaticResource Secondary}"
                     BackgroundColor="{StaticResource DarkBg1}"
+                    HeightRequest="38"
                     Padding="4,0">
                 <SearchBar Text="{Binding SearchText}"
-                           SearchCommand="{Binding SearchCommand}"
-                           Placeholder="Посада, компанія або навичка..."
+                           SearchCommand="{Binding FilterExistingCommand}"
+                           Placeholder="Пошук за ключовими словами у завантажених вакансіях..."
+                           FontSize="12"
+                           MinimumHeightRequest="34"
+                           HeightRequest="36"
+                           VerticalOptions="Center"
                            BackgroundColor="Transparent" />
             </Border>
 
             <Button Grid.Column="1"
-                    Text="{Binding FilterToggleText}"
-                    Command="{Binding ToggleFilterPanelCommand}"
-                    Style="{StaticResource CardAction}"
-                    SemanticProperties.Hint="Відкрити або сховати панель детальної фільтрації" />
+                    Text="Фільтрувати ⚡"
+                    Command="{Binding FilterExistingCommand}"
+                    Style="{StaticResource CardActionPrimary}"
+                    FontSize="12"
+                    Padding="14,6"
+                    HeightRequest="38"
+                    MinimumHeightRequest="38" />
 
             <Button Grid.Column="2"
                     Text="Експорт 📥"
                     Command="{Binding ExportVacanciesCommand}"
                     Style="{StaticResource CardAction}"
-                    SemanticProperties.Hint="Експортувати список вакансій у файл (FR-012)" />
+                    FontSize="12"
+                    Padding="10,6"
+                    HeightRequest="38"
+                    MinimumHeightRequest="38" />
 
             <Button Grid.Column="3"
                     Text="Імпорт 📤"
                     Command="{Binding ImportVacanciesCommand}"
                     Style="{StaticResource CardAction}"
-                    SemanticProperties.Hint="Імпортувати вакансії з файлу (FR-012)" />
+                    FontSize="12"
+                    Padding="10,6"
+                    HeightRequest="38"
+                    MinimumHeightRequest="38" />
         </Grid>
 
-        <!-- Розширена панель фільтрації (US-002, FR-004) -->
+        <!-- Рядок 1: Компактна панель перемикання парсерів платформ та швидкого сортування БД -->
         <Border Grid.Row="1"
-                IsVisible="{Binding IsFilterPanelVisible}"
-                Style="{StaticResource VacancyCard}"
-                Margin="12,4,12,6"
-                Padding="16">
-            <VerticalStackLayout Spacing="12">
-                <Label Text="Фільтрація каталогу вакансій"
+                StrokeShape="RoundRectangle 10"
+                StrokeThickness="1"
+                Stroke="{StaticResource Secondary}"
+                BackgroundColor="{StaticResource DarkBg1}"
+                Margin="10,2,10,4"
+                Padding="10,4">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="8" RowDefinitions="Auto">
+                <Label Grid.Column="0"
+                       Text="Парсинг:"
                        FontFamily="OpenSansSemibold"
-                       FontSize="15"
-                       TextColor="{StaticResource White}" />
+                       FontSize="11"
+                       TextColor="{StaticResource TextSecondary}"
+                       VerticalOptions="Center" />
 
-                <Grid ColumnDefinitions="*,*" ColumnSpacing="10" RowDefinitions="Auto,Auto" RowSpacing="10">
-                    <Border StrokeShape="RoundRectangle 10"
-                            Stroke="{StaticResource Secondary}"
-                            BackgroundColor="{StaticResource DarkBg2}"
-                            Padding="8,0">
-                        <Entry Text="{Binding SkillFilter}"
-                               Placeholder="Стек технологій (напр. Python)"
-                               FontSize="13"
-                               BackgroundColor="Transparent" />
-                    </Border>
+                <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
+                    <Button Text="{Binding DouButtonText}"
+                            Command="{Binding SelectDouFilterCommand}"
+                            Style="{StaticResource CardAction}"
+                            FontSize="11"
+                            Padding="10,4"
+                            MinimumHeightRequest="32">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsDouPanelVisible}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
 
-                    <Border Grid.Column="1"
-                            StrokeShape="RoundRectangle 10"
-                            Stroke="{StaticResource Secondary}"
-                            BackgroundColor="{StaticResource DarkBg2}"
-                            Padding="8,0">
-                        <Picker Title="Формат роботи"
-                                ItemsSource="{Binding FormatOptions}"
-                                SelectedItem="{Binding SelectedFormat}"
-                                FontSize="13"
-                                BackgroundColor="Transparent" />
-                    </Border>
+                    <Button Text="{Binding WorkUaButtonText}"
+                            Command="{Binding SelectWorkUaFilterCommand}"
+                            Style="{StaticResource CardAction}"
+                            FontSize="11"
+                            Padding="10,4"
+                            MinimumHeightRequest="32">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsWorkUaPanelVisible}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
 
-                    <Border Grid.Row="1"
-                            StrokeShape="RoundRectangle 10"
-                            Stroke="{StaticResource Secondary}"
-                            BackgroundColor="{StaticResource DarkBg2}"
-                            Padding="8,0">
-                        <Picker Title="Категорія"
-                                ItemsSource="{Binding CategoryOptions}"
-                                SelectedItem="{Binding SelectedCategory}"
-                                FontSize="13"
-                                BackgroundColor="Transparent" />
-                    </Border>
-
-                    <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,*" ColumnSpacing="6">
-                        <Border StrokeShape="RoundRectangle 10"
-                                Stroke="{StaticResource Secondary}"
-                                BackgroundColor="{StaticResource DarkBg2}"
-                                Padding="8,0">
-                            <Entry Text="{Binding MinSalaryFilter}"
-                                   Placeholder="ЗП від ($)"
-                                   Keyboard="Numeric"
-                                   FontSize="13"
-                                   BackgroundColor="Transparent" />
-                        </Border>
-                        <Border Grid.Column="1"
-                                StrokeShape="RoundRectangle 10"
-                                Stroke="{StaticResource Secondary}"
-                                BackgroundColor="{StaticResource DarkBg2}"
-                                Padding="8,0">
-                            <Entry Text="{Binding MaxSalaryFilter}"
-                                   Placeholder="ЗП до ($)"
-                                   Keyboard="Numeric"
-                                   FontSize="13"
-                                   BackgroundColor="Transparent" />
-                        </Border>
-                    </Grid>
-                </Grid>
-
-                <HorizontalStackLayout Spacing="10" HorizontalOptions="End" Margin="0,4,0,0">
-                    <Button Text="Скинути фільтри"
-                            Command="{Binding ResetFiltersCommand}"
-                            Style="{StaticResource CardAction}" />
-                    <Button Text="Застосувати"
-                            Command="{Binding ApplyFiltersCommand}"
-                            Style="{StaticResource CardActionPrimary}" />
+                    <Button Text="{Binding DjinniButtonText}"
+                            Command="{Binding SelectDjinniFilterCommand}"
+                            Style="{StaticResource CardAction}"
+                            FontSize="11"
+                            Padding="10,4"
+                            MinimumHeightRequest="32">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsDjinniPanelVisible}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
                 </HorizontalStackLayout>
-            </VerticalStackLayout>
+
+                <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
+                    <Label Text="🔃 Сортування:"
+                           FontSize="11"
+                           TextColor="{StaticResource Accent}"
+                           VerticalOptions="Center" />
+                    <Border Style="{StaticResource CompactFieldBorder}"
+                            BackgroundColor="{StaticResource DarkBg2}"
+                            MinimumWidthRequest="205"
+                            VerticalOptions="Center">
+                        <Picker Style="{StaticResource CompactPicker}"
+                                ItemsSource="{Binding SortOptions}"
+                                SelectedItem="{Binding SelectedSortOption}" />
+                    </Border>
+                </HorizontalStackLayout>
+
+                <Button Grid.Column="3"
+                        Text="Скинути"
+                        Command="{Binding ResetFiltersCommand}"
+                        Style="{StaticResource CardAction}"
+                        FontSize="11"
+                        Padding="10,4"
+                        MinimumHeightRequest="32"
+                        VerticalOptions="Center" />
+
+                <Button Grid.Column="4"
+                        Text="{Binding FilterToggleText}"
+                        Command="{Binding ToggleFilterPanelCommand}"
+                        Style="{StaticResource CardAction}"
+                        FontSize="11"
+                        Padding="10,4"
+                        MinimumHeightRequest="32"
+                        VerticalOptions="Center" />
+            </Grid>
         </Border>
 
-        <!-- Інформаційний банер про застарілий кеш або результат експорту/імпорту (REL-001) -->
+        <!-- Рядок 2: Компактна панель (1. Запит на сайт за обраною платформою + 2. Єдиний уніфікований фільтр БД) -->
         <Border Grid.Row="2"
+                IsVisible="{Binding IsFilterPanelVisible}"
+                Style="{StaticResource VacancyCard}"
+                Stroke="{StaticResource Secondary}"
+                StrokeThickness="1"
+                Margin="10,0,10,4"
+                Padding="12,8">
+            <ScrollView Orientation="Vertical"
+                        VerticalScrollBarVisibility="Default"
+                        MaximumHeightRequest="380">
+                <VerticalStackLayout Spacing="10" Padding="0,0,4,0">
+
+                    <!-- ========================================================================= -->
+                    <!-- ЧАСТИНА 1: ЗАПИТ НА САЙТ (специфічні фільтри DOU / Work.ua / Djinni)      -->
+                    <!-- ========================================================================= -->
+                    <VerticalStackLayout Spacing="6">
+                            <!-- Компактна шапка запиту на сайт + перемикач платформ + кнопка «Знайти 🔍» -->
+                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
+                                    <Label Text="🌐 1. Запит на сайт (додає вакансії):"
+                                           FontFamily="OpenSansSemibold"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Primary}"
+                                           VerticalOptions="Center" />
+                                    <Button Text="🔵 DOU"
+                                            Command="{Binding SelectDouFilterCommand}"
+                                            Style="{StaticResource CardAction}"
+                                            FontSize="11"
+                                            Padding="10,4"
+                                            MinimumHeightRequest="30">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsDouSelected}" Value="True">
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                    <Button Text="🟠 Work.ua"
+                                            Command="{Binding SelectWorkUaFilterCommand}"
+                                            Style="{StaticResource CardAction}"
+                                            FontSize="11"
+                                            Padding="10,4"
+                                            MinimumHeightRequest="30">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsWorkUaSelected}" Value="True">
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                    <Button Text="🟣 Djinni"
+                                            Command="{Binding SelectDjinniFilterCommand}"
+                                            Style="{StaticResource CardAction}"
+                                            FontSize="11"
+                                            Padding="10,4"
+                                            MinimumHeightRequest="30">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsDjinniSelected}" Value="True">
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
+                                </HorizontalStackLayout>
+
+                                <!-- Кількість сторінок для обраної платформи -->
+                                <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
+                                    <Label Text="📄 Сторінок:" FontSize="11" TextColor="{StaticResource Accent}" VerticalOptions="Center" />
+                                    <Border IsVisible="{Binding IsDouSelected}" Style="{StaticResource CompactFieldBorder}" Stroke="{StaticResource Accent}" WidthRequest="56">
+                                        <Entry Style="{StaticResource CompactEntry}" Text="{Binding DouPagesToParse}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
+                                    </Border>
+                                    <Border IsVisible="{Binding IsWorkUaSelected}" Style="{StaticResource CompactFieldBorder}" Stroke="{StaticResource Accent}" WidthRequest="56">
+                                        <Entry Style="{StaticResource CompactEntry}" Text="{Binding WorkUaPagesToParse}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
+                                    </Border>
+                                    <Border IsVisible="{Binding IsDjinniSelected}" Style="{StaticResource CompactFieldBorder}" Stroke="{StaticResource Accent}" WidthRequest="56">
+                                        <Entry Style="{StaticResource CompactEntry}" Text="{Binding DjinniPagesToParse}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
+                                    </Border>
+                                </HorizontalStackLayout>
+
+                                <Button Grid.Column="2"
+                                        Text="Знайти 🔍"
+                                        Command="{Binding FetchFromSitesCommand}"
+                                        Style="{StaticResource CardActionPrimary}"
+                                        FontSize="12"
+                                        Padding="14,5"
+                                        MinimumHeightRequest="32"
+                                        VerticalOptions="Center" />
+                            </Grid>
+
+                            <!-- Параметри сайту DOU (1 компактний рядок) -->
+                            <Grid IsVisible="{Binding IsDouSelected}" ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                                <VerticalStackLayout Grid.Column="0">
+                                    <Label Text="Категорія DOU" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DouCategoryOptions}" SelectedItem="{Binding DouSelectedCategory}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Column="1">
+                                    <Label Text="Досвід роботи" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DouExperienceOptions}" SelectedItem="{Binding DouSelectedExperience}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Column="2">
+                                    <Label Text="Місто України" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DouCityOptions}" SelectedItem="{Binding DouSelectedCity}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                            </Grid>
+
+                            <!-- Параметри сайту Work.ua (2 компактні рядки) -->
+                            <Grid IsVisible="{Binding IsWorkUaSelected}" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="0">
+                                    <Label Text="Сфера Work.ua" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaCategoryOptions}" SelectedItem="{Binding WorkUaSelectedCategory}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="1">
+                                    <Label Text="Місто / Регіон" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaCityOptions}" SelectedItem="{Binding WorkUaSelectedCity}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="2">
+                                    <Label Text="Вид зайнятості" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaEmploymentOptions}" SelectedItem="{Binding WorkUaSelectedEmployment}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="3">
+                                    <Label Text="Досвід роботи" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaExperienceOptions}" SelectedItem="{Binding WorkUaSelectedExperience}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="0">
+                                    <Label Text="Рівень освіти" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaEducationOptions}" SelectedItem="{Binding WorkUaSelectedEducation}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="1">
+                                    <Label Text="Знання мов" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaLanguageOptions}" SelectedItem="{Binding WorkUaSelectedLanguage}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2">
+                                    <Label Text="Період публікації" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaDaysOptions}" SelectedItem="{Binding WorkUaSelectedDays}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                            </Grid>
+
+                            <!-- Параметри сайту Djinni (2 компактні рядки) -->
+                            <Grid IsVisible="{Binding IsDjinniSelected}" ColumnDefinitions="*,*,*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="0">
+                                    <Label Text="Категорія / Стек" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DjinniCategoryOptions}" SelectedItem="{Binding DjinniSelectedCategory}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="1">
+                                    <Label Text="Досвід роботи" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DjinniExperienceOptions}" SelectedItem="{Binding DjinniSelectedExperience}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="2">
+                                    <Label Text="Зайнятість" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DjinniEmploymentOptions}" SelectedItem="{Binding DjinniSelectedEmployment}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="3">
+                                    <Label Text="Рівень англійської" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DjinniEnglishOptions}" SelectedItem="{Binding DjinniSelectedEnglish}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="4">
+                                    <Label Text="Тип компанії" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DjinniCompanyTypeOptions}" SelectedItem="{Binding DjinniSelectedCompanyType}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="0">
+                                    <Label Text="Домен / Індустрія" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DjinniDomainOptions}" SelectedItem="{Binding DjinniSelectedDomain}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="1">
+                                    <Label Text="Регіон пошуку" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DjinniRegionOptions}" SelectedItem="{Binding DjinniSelectedRegion}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="2">
+                                    <Label Text="Місто (Україна)" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DjinniCityOptions}" SelectedItem="{Binding DjinniSelectedCity}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="1" Grid.Column="3" Grid.ColumnSpan="2">
+                                    <Label Text="Країна релокації / найму" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding DjinniCountryOptions}" SelectedItem="{Binding DjinniSelectedCountry}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                            </Grid>
+                    </VerticalStackLayout>
+
+                    <BoxView HeightRequest="1" Color="{StaticResource Secondary}" Opacity="0.5" />
+
+                    <!-- ========================================================================= -->
+                    <!-- ЧАСТИНА 2: УНІФІКОВАНИЙ ФІЛЬТР ВІДОБРАЖЕННЯ ТА СОРТУВАННЯ В БД            -->
+                    <!-- Спільний для всіх уніфікованих карток вакансій (без дублювання по вкладках)-->
+                    <!-- ========================================================================= -->
+                    <VerticalStackLayout Spacing="6">
+                            <!-- Шапка уніфікованого фільтра + швидкі прапорці + кнопки дій -->
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+                                <Label Text="⚡ 2. Уніфікований фільтр вакансій у БД (спільний для всіх карток)"
+                                       FontFamily="OpenSansSemibold"
+                                       FontSize="12"
+                                       TextColor="{StaticResource Accent}"
+                                       VerticalOptions="Center" />
+
+                                <HorizontalStackLayout Grid.Column="1" Spacing="6" HorizontalOptions="End" VerticalOptions="Center">
+                                    <!-- Чіп 1: З ЗП -->
+                                    <Border StrokeShape="RoundRectangle 6" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg1}" Padding="8,5">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding ToggleUnifiedOnlyWithSalaryCommand}" />
+                                        </Border.GestureRecognizers>
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding UnifiedOnlyWithSalary}" Value="True">
+                                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
+                                            <Border WidthRequest="16" HeightRequest="16" StrokeShape="RoundRectangle 4" Stroke="{StaticResource Primary}" StrokeThickness="1.5" BackgroundColor="Transparent" Padding="0" VerticalOptions="Center">
+                                                <Border.Triggers>
+                                                    <DataTrigger TargetType="Border" Binding="{Binding UnifiedOnlyWithSalary}" Value="True">
+                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                    </DataTrigger>
+                                                </Border.Triggers>
+                                                <Label Text="✓" FontSize="11" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" HorizontalOptions="Center" VerticalOptions="Center" HorizontalTextAlignment="Center" VerticalTextAlignment="Center" IsVisible="{Binding UnifiedOnlyWithSalary}" />
+                                            </Border>
+                                            <Label Text="💰 З ЗП" VerticalOptions="Center" FontSize="11" />
+                                        </HorizontalStackLayout>
+                                    </Border>
+
+                                    <!-- Чіп 2: Активні -->
+                                    <Border StrokeShape="RoundRectangle 6" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg1}" Padding="8,5">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding ToggleUnifiedOnlyActiveCommand}" />
+                                        </Border.GestureRecognizers>
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding UnifiedOnlyActive}" Value="True">
+                                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
+                                            <Border WidthRequest="16" HeightRequest="16" StrokeShape="RoundRectangle 4" Stroke="{StaticResource Primary}" StrokeThickness="1.5" BackgroundColor="Transparent" Padding="0" VerticalOptions="Center">
+                                                <Border.Triggers>
+                                                    <DataTrigger TargetType="Border" Binding="{Binding UnifiedOnlyActive}" Value="True">
+                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                    </DataTrigger>
+                                                </Border.Triggers>
+                                                <Label Text="✓" FontSize="11" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" HorizontalOptions="Center" VerticalOptions="Center" HorizontalTextAlignment="Center" VerticalTextAlignment="Center" IsVisible="{Binding UnifiedOnlyActive}" />
+                                            </Border>
+                                            <Label Text="👁️ Активні" VerticalOptions="Center" FontSize="11" />
+                                        </HorizontalStackLayout>
+                                    </Border>
+                                </HorizontalStackLayout>
+
+                                <Button Grid.Column="2"
+                                        Text="Скинути"
+                                        Command="{Binding ResetFiltersCommand}"
+                                        Style="{StaticResource CardAction}"
+                                        FontSize="11"
+                                        Padding="10,4"
+                                        MinimumHeightRequest="30"
+                                        VerticalOptions="Center" />
+
+                                <Button Grid.Column="3"
+                                        Text="Фільтрувати ⚡"
+                                        Command="{Binding FilterExistingCommand}"
+                                        Style="{StaticResource CardAction}"
+                                        BackgroundColor="{StaticResource Accent}"
+                                        TextColor="{StaticResource Black}"
+                                        FontSize="12"
+                                        Padding="14,5"
+                                        MinimumHeightRequest="30"
+                                        VerticalOptions="Center" />
+                            </Grid>
+
+                            <!-- Рядок 1 уніфікованих параметрів: Джерело, Сортування, Формат, Компанія, Зарплата (Від - До + Валюта) -->
+                            <Grid ColumnDefinitions="*,*,*,*,1.6*" ColumnSpacing="6">
+                                <VerticalStackLayout Grid.Column="0">
+                                    <Label Text="Джерело (платформа)" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}"
+                                                ItemsSource="{Binding SourceFilterOptions}"
+                                                SelectedItem="{Binding SelectedSourceFilter}" />
+                                    </Border>
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Column="1">
+                                    <Label Text="Сортування" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}"
+                                                ItemsSource="{Binding SortOptions}"
+                                                SelectedItem="{Binding SelectedSortOption}" />
+                                    </Border>
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Column="2">
+                                    <Label Text="Формат роботи" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}"
+                                                ItemsSource="{Binding FormatOptions}"
+                                                SelectedItem="{Binding SelectedFormat}" />
+                                    </Border>
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Column="3">
+                                    <Label Text="Компанія" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Entry Style="{StaticResource CompactEntry}"
+                                               Text="{Binding UnifiedCompanyFilter}"
+                                               ReturnCommand="{Binding FilterExistingCommand}"
+                                               Placeholder="Назва компанії..." />
+                                    </Border>
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Column="4">
+                                    <Label Text="Зарплата (від — до, валюта)" Style="{StaticResource CompactFieldLabel}" />
+                                    <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="4">
+                                        <Border Grid.Column="0" Style="{StaticResource CompactFieldBorder}">
+                                            <Entry Style="{StaticResource CompactEntry}"
+                                                   Text="{Binding MinSalaryFilter}"
+                                                   ReturnCommand="{Binding FilterExistingCommand}"
+                                                   Placeholder="Від"
+                                                   Keyboard="Numeric" />
+                                        </Border>
+                                        <Border Grid.Column="1" Style="{StaticResource CompactFieldBorder}">
+                                            <Entry Style="{StaticResource CompactEntry}"
+                                                   Text="{Binding MaxSalaryFilter}"
+                                                   ReturnCommand="{Binding FilterExistingCommand}"
+                                                   Placeholder="До"
+                                                   Keyboard="Numeric" />
+                                        </Border>
+                                        <Border Grid.Column="2" Style="{StaticResource CompactFieldBorder}" WidthRequest="94">
+                                            <Picker Style="{StaticResource CompactPicker}"
+                                                    ItemsSource="{Binding SalaryCurrencyOptions}"
+                                                    SelectedItem="{Binding SelectedSalaryCurrency}" />
+                                        </Border>
+                                    </Grid>
+                                </VerticalStackLayout>
+                            </Grid>
+
+                            <!-- Рядок 2: Компактні списки Вайт-лист слів та Бан-слова (спільні для всіх вакансій) -->
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <!-- Вайт-лист слів -->
+                                <Border Grid.Column="0"
+                                        StrokeShape="RoundRectangle 8"
+                                        Stroke="{StaticResource Accent}"
+                                        BackgroundColor="{StaticResource DarkBg1}"
+                                        Padding="8,6">
+                                    <VerticalStackLayout Spacing="4">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                                            <Label Text="✅ Вайт-лист:"
+                                                   FontFamily="OpenSansSemibold"
+                                                   FontSize="11"
+                                                   TextColor="{StaticResource Accent}"
+                                                   VerticalOptions="Center" />
+                                            <Border Grid.Column="1" Style="{StaticResource CompactFieldBorder}" BackgroundColor="{StaticResource DarkBg2}">
+                                                <Entry Style="{StaticResource CompactEntry}"
+                                                       Text="{Binding NewWhiteListWord}"
+                                                       ReturnCommand="{Binding AddWhiteListWordCommand}"
+                                                       Placeholder="Додати слова через кому (C#, React, AI)..." />
+                                            </Border>
+                                            <Button Grid.Column="2"
+                                                    Text="+ Додати"
+                                                    Command="{Binding AddWhiteListWordCommand}"
+                                                    Style="{StaticResource CardAction}"
+                                                    BackgroundColor="{StaticResource Accent}"
+                                                    TextColor="{StaticResource Black}"
+                                                    FontSize="11"
+                                                    Padding="10,4"
+                                                    MinimumHeightRequest="34"
+                                                    VerticalOptions="Center" />
+                                            <Button Grid.Column="3"
+                                                    Text="Очистити"
+                                                    Command="{Binding ClearWhiteListWordsCommand}"
+                                                    IsVisible="{Binding HasWhiteListWords}"
+                                                    Style="{StaticResource CardAction}"
+                                                    FontSize="11"
+                                                    Padding="8,4"
+                                                    MinimumHeightRequest="34"
+                                                    VerticalOptions="Center" />
+                                        </Grid>
+
+                                        <FlexLayout Wrap="Wrap"
+                                                    JustifyContent="Start"
+                                                    AlignItems="Center"
+                                                    IsVisible="{Binding HasWhiteListWords}"
+                                                    BindableLayout.ItemsSource="{Binding WhiteListWords}">
+                                            <BindableLayout.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <Border StrokeShape="RoundRectangle 6"
+                                                            Stroke="{StaticResource Accent}"
+                                                            BackgroundColor="{StaticResource DarkBg2}"
+                                                            Padding="6,2"
+                                                            Margin="0,2,4,2">
+                                                        <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                                                            <Label Text="{Binding .}"
+                                                                   FontSize="11"
+                                                                   FontFamily="OpenSansSemibold"
+                                                                   TextColor="{StaticResource Accent}"
+                                                                   VerticalOptions="Center" />
+                                                            <Button Text="✕"
+                                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:CatalogViewModel}}, Path=RemoveWhiteListWordCommand}"
+                                                                    CommandParameter="{Binding .}"
+                                                                    Style="{StaticResource CardAction}"
+                                                                    FontSize="9"
+                                                                    Padding="3,0"
+                                                                    MinimumHeightRequest="20"
+                                                                    MinimumWidthRequest="20" />
+                                                        </HorizontalStackLayout>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </BindableLayout.ItemTemplate>
+                                        </FlexLayout>
+                                    </VerticalStackLayout>
+                                </Border>
+
+                                <!-- Бан-слова -->
+                                <Border Grid.Column="1"
+                                        StrokeShape="RoundRectangle 8"
+                                        Stroke="{StaticResource Primary}"
+                                        BackgroundColor="{StaticResource DarkBg1}"
+                                        Padding="8,6">
+                                    <VerticalStackLayout Spacing="4">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                                            <Label Text="🚫 Бан-слова:"
+                                                   FontFamily="OpenSansSemibold"
+                                                   FontSize="11"
+                                                   TextColor="{StaticResource Primary}"
+                                                   VerticalOptions="Center" />
+                                            <Border Grid.Column="1" Style="{StaticResource CompactFieldBorder}" BackgroundColor="{StaticResource DarkBg2}">
+                                                <Entry Style="{StaticResource CompactEntry}"
+                                                       Text="{Binding NewBanListWord}"
+                                                       ReturnCommand="{Binding AddBanListWordCommand}"
+                                                       Placeholder="Виключити слова через кому (Gambling, PHP)..." />
+                                            </Border>
+                                            <Button Grid.Column="2"
+                                                    Text="+ Додати"
+                                                    Command="{Binding AddBanListWordCommand}"
+                                                    Style="{StaticResource CardActionPrimary}"
+                                                    FontSize="11"
+                                                    Padding="10,4"
+                                                    MinimumHeightRequest="34"
+                                                    VerticalOptions="Center" />
+                                            <Button Grid.Column="3"
+                                                    Text="Очистити"
+                                                    Command="{Binding ClearBanListWordsCommand}"
+                                                    IsVisible="{Binding HasBanListWords}"
+                                                    Style="{StaticResource CardAction}"
+                                                    FontSize="11"
+                                                    Padding="8,4"
+                                                    MinimumHeightRequest="34"
+                                                    VerticalOptions="Center" />
+                                        </Grid>
+
+                                        <FlexLayout Wrap="Wrap"
+                                                    JustifyContent="Start"
+                                                    AlignItems="Center"
+                                                    IsVisible="{Binding HasBanListWords}"
+                                                    BindableLayout.ItemsSource="{Binding BanListWords}">
+                                            <BindableLayout.ItemTemplate>
+                                                <DataTemplate x:DataType="x:String">
+                                                    <Border StrokeShape="RoundRectangle 6"
+                                                            Stroke="{StaticResource Primary}"
+                                                            BackgroundColor="{StaticResource DarkBg2}"
+                                                            Padding="6,2"
+                                                            Margin="0,2,4,2">
+                                                        <HorizontalStackLayout Spacing="4" VerticalOptions="Center">
+                                                            <Label Text="{Binding .}"
+                                                                   FontSize="11"
+                                                                   FontFamily="OpenSansSemibold"
+                                                                   TextColor="{StaticResource Primary}"
+                                                                   VerticalOptions="Center" />
+                                                            <Button Text="✕"
+                                                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:CatalogViewModel}}, Path=RemoveBanListWordCommand}"
+                                                                    CommandParameter="{Binding .}"
+                                                                    Style="{StaticResource CardAction}"
+                                                                    FontSize="9"
+                                                                    Padding="3,0"
+                                                                    MinimumHeightRequest="20"
+                                                                    MinimumWidthRequest="20" />
+                                                        </HorizontalStackLayout>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </BindableLayout.ItemTemplate>
+                                        </FlexLayout>
+                                    </VerticalStackLayout>
+                                </Border>
+                            </Grid>
+                    </VerticalStackLayout>
+                </VerticalStackLayout>
+            </ScrollView>
+        </Border>
+
+        <!-- Рядок 3: Інформаційний банер про активні фільтри / кеш або результат експорту/імпорту (REL-001) -->
+        <Border Grid.Row="3"
                 IsVisible="{Binding HasStaleCache}"
                 StrokeShape="RoundRectangle 10"
                 StrokeThickness="1"
@@ -142,8 +733,8 @@
                    TextColor="{StaticResource Accent}" />
         </Border>
 
-        <!-- Банер помилки сервера/мережі -->
-        <Border Grid.Row="3"
+        <!-- Рядок 4: Банер помилки сервера/мережі -->
+        <Border Grid.Row="4"
                 IsVisible="{Binding HasError}"
                 Style="{StaticResource ErrorBanner}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
@@ -157,8 +748,8 @@
             </Grid>
         </Border>
 
-        <!-- Підсумок і спіннер -->
-        <Grid Grid.Row="4" Padding="16,6" ColumnDefinitions="*,Auto">
+        <!-- Рядок 5: Підсумок і спіннер -->
+        <Grid Grid.Row="5" Padding="16,6" ColumnDefinitions="*,Auto">
             <Label Text="{Binding TotalText}"
                    IsVisible="{Binding ShowTotal}"
                    Style="{StaticResource MutedLabel}"
@@ -170,8 +761,8 @@
                                WidthRequest="20" />
         </Grid>
 
-        <!-- Список вакансій із пагінацією та pull-to-refresh -->
-        <RefreshView Grid.Row="5"
+        <!-- Рядок 6: Список вакансій із бази даних (пагінація та pull-to-refresh) -->
+        <RefreshView Grid.Row="6"
                      IsRefreshing="{Binding IsRefreshing}"
                      Command="{Binding RefreshCommand}">
             <CollectionView ItemsSource="{Binding Vacancies}"
@@ -193,11 +784,11 @@
                         <Label Text="🔍"
                                FontSize="36"
                                HorizontalOptions="Center" />
-                        <Label Text="За обраними фільтрами вакансій не знайдено"
+                        <Label Text="У базі даних за обраними критеріями вакансій не знайдено"
                                HorizontalOptions="Center"
                                HorizontalTextAlignment="Center"
                                Style="{StaticResource CardTitle}" />
-                        <Label Text="Спробуйте змінити критерії пошуку або скиньте активні фільтри"
+                        <Label Text="Спробуйте змінити параметри пошуку або скиньте активні фільтри платформ"
                                HorizontalOptions="Center"
                                HorizontalTextAlignment="Center"
                                Style="{StaticResource MutedLabel}" />
@@ -218,3 +809,4 @@
         </RefreshView>
     </Grid>
 </ContentPage>
+
