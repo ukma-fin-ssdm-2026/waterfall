@@ -11,6 +11,12 @@ namespace Waterfall.Repository.Data;
 /// </summary>
 public static class WaterfallDbSeeder
 {
+    private const string SeniorDotNetSkillsJson = "[\".NET 10\",\"C#\",\"Kafka\",\"PostgreSQL\",\"Docker\",\"Kubernetes\"]";
+    private const string MiddleMauiSkillsJson = "[\".NET MAUI\",\"C#\",\"MVVM\",\"XAML\",\"REST API\",\"SQLite\"]";
+    private const string FullStackSkillsJson = "[\"ASP.NET Core\",\"C#\",\"Angular\",\"TypeScript\",\"EF Core\",\"Azure\"]";
+    private const string QaSkillsJson = "[\"C#\",\"Playwright\",\"NUnit\",\"CI/CD\",\"REST API\"]";
+    private const string AiMlSkillsJson = "[\"Python\",\"C#\",\"PyTorch\",\"LLM\",\"Docker\",\"ONNX\"]";
+
     public static async Task SeedAsync(WaterfallDbContext context)
     {
         await context.Database.EnsureCreatedAsync();
@@ -36,7 +42,7 @@ public static class WaterfallDbSeeder
                     Currency = "USD",
                     Source = "Djinni",
                     SourceUrl = "https://djinni.co/jobs/example-senior-dotnet/",
-                    SkillsJson = JsonSerializer.Serialize(new[] { ".NET 10", "C#", "Kafka", "PostgreSQL", "Docker", "Kubernetes" }),
+                    SkillsJson = SeniorDotNetSkillsJson,
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-2),
                     FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-2),
                     LastSeenAt = DateTimeOffset.UtcNow,
@@ -58,7 +64,7 @@ public static class WaterfallDbSeeder
                     Currency = "USD",
                     Source = "Dou",
                     SourceUrl = "https://jobs.dou.ua/vacancies/example-middle-maui/",
-                    SkillsJson = JsonSerializer.Serialize(new[] { ".NET MAUI", "C#", "MVVM", "XAML", "REST API", "SQLite" }),
+                    SkillsJson = MiddleMauiSkillsJson,
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-1),
                     FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-1),
                     LastSeenAt = DateTimeOffset.UtcNow,
@@ -80,7 +86,7 @@ public static class WaterfallDbSeeder
                     Currency = "USD",
                     Source = "WorkUa",
                     SourceUrl = "https://www.work.ua/jobs/example-fullstack-csharp/",
-                    SkillsJson = JsonSerializer.Serialize(new[] { "ASP.NET Core", "C#", "Angular", "TypeScript", "EF Core", "Azure" }),
+                    SkillsJson = FullStackSkillsJson,
                     PublishedAt = DateTimeOffset.UtcNow.AddHours(-12),
                     FirstSeenAt = DateTimeOffset.UtcNow.AddHours(-12),
                     LastSeenAt = DateTimeOffset.UtcNow,
@@ -102,7 +108,7 @@ public static class WaterfallDbSeeder
                     Currency = "USD",
                     Source = "RobotaUa",
                     SourceUrl = "https://robota.ua/company123/vacancy-qa-dotnet",
-                    SkillsJson = JsonSerializer.Serialize(new[] { "C#", "Playwright", "NUnit", "CI/CD", "REST API" }),
+                    SkillsJson = QaSkillsJson,
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-3),
                     FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-3),
                     LastSeenAt = DateTimeOffset.UtcNow,
@@ -124,7 +130,7 @@ public static class WaterfallDbSeeder
                     Currency = "USD",
                     Source = "Dou",
                     SourceUrl = "https://jobs.dou.ua/vacancies/example-lead-ai-ml/",
-                    SkillsJson = JsonSerializer.Serialize(new[] { "Python", "C#", "PyTorch", "LLM", "Docker", "ONNX" }),
+                    SkillsJson = AiMlSkillsJson,
                     PublishedAt = DateTimeOffset.UtcNow.AddDays(-4),
                     FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-4),
                     LastSeenAt = DateTimeOffset.UtcNow,
@@ -193,7 +199,6 @@ public static class WaterfallDbSeeder
                 {
                     Id = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
                     Email = "seeker1@waterfall.com",
-                    // Пароль: DevSeeker1234
                     PasswordHash = "AQAAAAIAAYagAAAAELS0tART4w8CokOL0gSzcJAqi4a6nUzSZ1EUrjXd9NCvtkgXpXLMayG5mhBYhvqR3w==",
                     Role = "JobSeeker",
                     CreatedAt = DateTimeOffset.UtcNow.AddDays(-32)
@@ -202,7 +207,6 @@ public static class WaterfallDbSeeder
                 {
                     Id = Guid.Parse("66666666-6666-6666-6666-66666666666b"),
                     Email = "123@123",
-                    // Пароль: 123@123123@123
                     PasswordHash = "AQAAAAIAAYagAAAAED+/zVB86tdUugHC7i0xTTVLx9I2SbiMKpfOlYVxiv9d5RKskh8jhFCoE6HnwQHjEw==",
                     Role = "JobSeeker",
                     CreatedAt = DateTimeOffset.UtcNow.AddDays(-31)
@@ -211,7 +215,6 @@ public static class WaterfallDbSeeder
                 {
                     Id = Guid.Parse("77777777-7777-7777-7777-777777777777"),
                     Email = "analyst@waterfall.com",
-                    // Пароль: DevAnalyst1234
                     PasswordHash = "AQAAAAIAAYagAAAAENr1KdZ+sdpNXwmI+lat+FdNpqQHqwYlOmp2NoEA0Y7SCKmzka7ScgPXoZOWxJJ6bA==",
                     Role = "Analyst",
                     CreatedAt = DateTimeOffset.UtcNow.AddDays(-30)
