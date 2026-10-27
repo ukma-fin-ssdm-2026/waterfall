@@ -1,8 +1,8 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Waterfall.Repository.Entities;
+using Waterfall.Repository.Helpers;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Geo;
@@ -52,7 +52,7 @@ public class GeoLocationService : IGeoLocationService
             return (cached.Latitude, cached.Longitude);
         }
 
-        List<string> candidates = GenerateQueryCandidates(address).ToList();
+        List<string> candidates = GeoAddressHelper.GenerateQueryCandidates(address).ToList();
 
         // 2. Основний пошук через Photon API (із затримкою ~1 сек та збереженням усіх результатів у БД)
         (double Lat, double Lon)? photonCoords = await TryPhotonGeocodeAsync(address, candidates, ct);
@@ -156,14 +156,14 @@ public class GeoLocationService : IGeoLocationService
                         if (feature.TryGetProperty("properties", out JsonElement propsElem) &&
                             propsElem.ValueKind == JsonValueKind.Object)
                         {
-                            string? name = GetStringProperty(propsElem, "name");
-                            string? street = GetStringProperty(propsElem, "street");
-                            string? house = GetStringProperty(propsElem, "housenumber");
-                            string? city = GetStringProperty(propsElem, "city")
-                                ?? GetStringProperty(propsElem, "town")
-                                ?? GetStringProperty(propsElem, "village")
-                                ?? GetStringProperty(propsElem, "state");
-                            string? countryCode = GetStringProperty(propsElem, "countrycode");
+                            string? name = GeoAddressHelper.GetStringProperty(propsElem, "name");
+                            string? street = GeoAddressHelper.GetStringProperty(propsElem, "street");
+                            string? house = GeoAddressHelper.GetStringProperty(propsElem, "housenumber");
+                            string? city = GeoAddressHelper.GetStringProperty(propsElem, "city")
+                                ?? GeoAddressHelper.GetStringProperty(propsElem, "town")
+                                ?? GeoAddressHelper.GetStringProperty(propsElem, "village")
+                                ?? GeoAddressHelper.GetStringProperty(propsElem, "state");
+                            string? countryCode = GeoAddressHelper.GetStringProperty(propsElem, "countrycode");
 
                             if (!string.IsNullOrWhiteSpace(countryCode))
                             {
@@ -182,14 +182,14 @@ public class GeoLocationService : IGeoLocationService
                         foreach (var match in matches)
                         {
                             if (!string.IsNullOrWhiteSpace(match.Title) &&
-                                !IsCityConflict(originalAddress, match.Title))
+                                !GeoAddressHelper.IsCityConflict(originalAddress, match.Title))
                             {
                                 await _cacheRepository.SetCoordinatesAsync(match.Title, match.Lat, match.Lon, ct);
                             }
                         }
 
                         var best = matches
-                            .OrderBy(m => IsCityConflict(originalAddress, m.Title) ? 1 : 0)
+                            .OrderBy(m => GeoAddressHelper.IsCityConflict(originalAddress, m.Title) ? 1 : 0)
                             .ThenBy(m => m.IsUa ? 0 : 1)
                             .ThenBy(m => m.Index)
                             .First();
@@ -255,7 +255,7 @@ public class GeoLocationService : IGeoLocationService
                     if (matches.Count > 0)
                     {
                         var best = matches
-                            .OrderBy(m => IsCityConflict(originalAddress, m.Title) ? 1 : 0)
+                            .OrderBy(m => GeoAddressHelper.IsCityConflict(originalAddress, m.Title) ? 1 : 0)
                             .ThenBy(m => m.Index)
                             .First();
 
@@ -291,61 +291,5 @@ public class GeoLocationService : IGeoLocationService
         }
 
         return city ?? string.Empty;
-    }
-
-    private static string? GetStringProperty(JsonElement element, string propName)
-    {
-        if (element.TryGetProperty(propName, out JsonElement val) && val.ValueKind == JsonValueKind.String)
-        {
-            return val.GetString();
-        }
-
-        return null;
-    }
-
-    private static bool IsCityConflict(string address, string pageTitle)
-    {
-        string[] knownCities = ["київ", "львів", "харків", "дніпро", "одеса", "запоріж", "вінниц", "полтав", "чернівц", "тернопіль", "івано-франківськ", "ужгород", "луцьк", "рівне", "житомир", "черкас", "суми", "чернігів", "миколаїв", "херсон"];
-        string normAddr = address.ToLowerInvariant();
-        string normTitle = pageTitle.ToLowerInvariant();
-
-        string? addrCity = knownCities.FirstOrDefault(c => normAddr.Contains(c));
-        if (addrCity == null)
-        {
-            return false;
-        }
-
-        bool titleHasOtherCity = knownCities.Any(c => c != addrCity && normTitle.Contains(c));
-        bool titleHasSameCity = normTitle.Contains(addrCity);
-
-        return titleHasOtherCity && !titleHasSameCity;
-    }
-
-    private static IEnumerable<string> GenerateQueryCandidates(string address)
-    {
-        string noParens = Regex.Replace(address, @"\([^)]*\)", "").Trim();
-        string cleanNoise = Regex.Replace(noParens, @"\b(БЦ|ТРЦ|ТОЦ|офіс|оф\.|поверх|корпус|корп\.)\b[^,]*", "", RegexOptions.IgnoreCase).Trim();
-        cleanNoise = Regex.Replace(cleanNoise, @",\s*,+", ",").Trim(' ', ',');
-
-        if (!string.IsNullOrWhiteSpace(cleanNoise))
-        {
-            yield return cleanNoise;
-        }
-
-        if (!string.Equals(cleanNoise, address, StringComparison.OrdinalIgnoreCase))
-        {
-            yield return address;
-        }
-
-        string[] parts = cleanNoise.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length > 2)
-        {
-            yield return $"{parts[0]}, {parts[1]}";
-        }
-
-        if (parts.Length > 1)
-        {
-            yield return parts[0];
-        }
     }
 }

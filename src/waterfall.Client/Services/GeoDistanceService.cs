@@ -3,9 +3,9 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Geo;
+using Waterfall.Repository.Helpers;
 
 namespace Waterfall.Client.Services;
 
@@ -172,7 +172,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             return localMatch.Value;
         }
 
-        List<string> candidates = GenerateQueryCandidates(address).ToList();
+        List<string> candidates = GeoAddressHelper.GenerateQueryCandidates(address).ToList();
 
         // 3. Основний пошук координат через Photon API із затримкою ~1 секунда (результати кешуються)
         foreach (string candidate in candidates)
@@ -224,12 +224,12 @@ public class GeoDistanceService : IDistanceCalculatorService
                         if (feature.TryGetProperty("properties", out JsonElement propsElem) &&
                             propsElem.ValueKind == JsonValueKind.Object)
                         {
-                            string? name = GetStringProperty(propsElem, "name");
-                            string? street = GetStringProperty(propsElem, "street");
-                            string? city = GetStringProperty(propsElem, "city")
-                                ?? GetStringProperty(propsElem, "town")
-                                ?? GetStringProperty(propsElem, "village")
-                                ?? GetStringProperty(propsElem, "state");
+                            string? name = GeoAddressHelper.GetStringProperty(propsElem, "name");
+                            string? street = GeoAddressHelper.GetStringProperty(propsElem, "street");
+                            string? city = GeoAddressHelper.GetStringProperty(propsElem, "city")
+                                ?? GeoAddressHelper.GetStringProperty(propsElem, "town")
+                                ?? GeoAddressHelper.GetStringProperty(propsElem, "village")
+                                ?? GeoAddressHelper.GetStringProperty(propsElem, "state");
 
                             title = $"{city} {street} {name}".Trim();
                         }
@@ -240,7 +240,7 @@ public class GeoDistanceService : IDistanceCalculatorService
                     if (matches.Count > 0)
                     {
                         var best = matches
-                            .OrderBy(m => IsCityConflict(address, m.Title) ? 1 : 0)
+                            .OrderBy(m => GeoAddressHelper.IsCityConflict(address, m.Title) ? 1 : 0)
                             .ThenBy(m => m.Index)
                             .First();
 
@@ -308,7 +308,7 @@ public class GeoDistanceService : IDistanceCalculatorService
                     if (matches.Count > 0)
                     {
                         var best = matches
-                            .OrderBy(m => IsCityConflict(address, m.Title) ? 1 : 0)
+                            .OrderBy(m => GeoAddressHelper.IsCityConflict(address, m.Title) ? 1 : 0)
                             .ThenBy(m => m.Index)
                             .First();
 
@@ -464,48 +464,7 @@ public class GeoDistanceService : IDistanceCalculatorService
         return null;
     }
 
-    private static string? GetStringProperty(JsonElement element, string propName)
-    {
-        if (element.TryGetProperty(propName, out JsonElement val) && val.ValueKind == JsonValueKind.String)
-        {
-            return val.GetString();
-        }
 
-        return null;
-    }
-
-    private static IEnumerable<string> GenerateQueryCandidates(string address)
-    {
-        // 1. Очищення від коментарів у дужках: наприклад, "(БЦ Гулівер)" або "(2 поверх)"
-        string noParens = Regex.Replace(address, @"\([^)]*\)", "").Trim();
-
-        // 2. Очищення від шуму бізнес-центрів та офісів: БЦ, ТРЦ, ТОЦ, поверх, офіс
-        string cleanNoise = Regex.Replace(noParens, @"\b(БЦ|ТРЦ|ТОЦ|офіс|оф\.|поверх|корпус|корп\.)\b[^,]*", "", RegexOptions.IgnoreCase).Trim();
-        cleanNoise = Regex.Replace(cleanNoise, @",\s*,+", ",").Trim(' ', ',');
-
-        if (!string.IsNullOrWhiteSpace(cleanNoise))
-        {
-            yield return cleanNoise;
-        }
-
-        if (!string.Equals(cleanNoise, address, StringComparison.OrdinalIgnoreCase))
-        {
-            yield return address;
-        }
-
-        // 3. Якщо вказано декілька сегментів через кому — спробувати місто + вулицю
-        string[] parts = cleanNoise.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        if (parts.Length > 2)
-        {
-            yield return $"{parts[0]}, {parts[1]}";
-        }
-
-        // 4. Тільки місто як запасний варіант
-        if (parts.Length > 1)
-        {
-            yield return parts[0];
-        }
-    }
 
     private static double CalculateHaversineRoadDistance((double Lat, double Lon) c1, (double Lat, double Lon) c2)
     {
@@ -532,23 +491,7 @@ public class GeoDistanceService : IDistanceCalculatorService
     private static string NormalizeAddressKey(string address) =>
         address.Trim().ToLowerInvariant().Replace("вул.", "").Replace("проспект", "").Replace("пл.", "");
 
-    private static bool IsCityConflict(string address, string pageTitle)
-    {
-        string[] knownCities = ["київ", "львів", "харків", "дніпро", "одеса", "запоріж", "вінниц", "полтав", "чернівц", "тернопіль", "івано-франківськ", "ужгород", "луцьк", "рівне", "житомир", "черкас", "суми", "чернігів", "миколаїв", "херсон"];
-        string normAddr = address.ToLowerInvariant();
-        string normTitle = pageTitle.ToLowerInvariant();
 
-        string? addrCity = knownCities.FirstOrDefault(c => normAddr.Contains(c));
-        if (addrCity == null)
-        {
-            return false;
-        }
-
-        bool titleHasOtherCity = knownCities.Any(c => c != addrCity && normTitle.Contains(c));
-        bool titleHasSameCity = normTitle.Contains(addrCity);
-
-        return titleHasOtherCity && !titleHasSameCity;
-    }
 
     /// <summary>
     /// Локальний довідник точних координат для топових офісних адрес вакансій та популярних адрес користувачів.
