@@ -316,4 +316,48 @@ public class CatalogViewModelTests
         Assert.Single(_gateway.CatalogCalls);
         Assert.Equal(["A"], _vm.Vacancies.Select(v => v.Title));
     }
+
+    [Fact]
+    public async Task WhiteListAndBanList_FilterLoadedVacanciesInPlace()
+    {
+        Task load = _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        var page = FakeGateway.Page(1, 3, hasNext: false, "Senior .NET Developer", "Middle Python Gambling Engineer", "Junior .NET QA");
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(page);
+        await load;
+
+        _vm.NewWhiteListWord = ".NET, Python";
+        await _vm.AddWhiteListWordCommand.ExecuteAsync(null);
+        Assert.Equal([".NET", "Python"], _vm.WhiteListWords);
+        Assert.Equal(3, _vm.Vacancies.Count);
+
+        _vm.NewBanListWord = "Gambling, Junior";
+        await _vm.AddBanListWordCommand.ExecuteAsync(null);
+        Assert.Equal(["Gambling", "Junior"], _vm.BanListWords);
+        Assert.Equal(["Senior .NET Developer"], _vm.Vacancies.Select(v => v.Title));
+        Assert.Equal(1, _vm.TotalCount);
+    }
+
+    [Fact]
+    public async Task SelectedSortOption_SortsLoadedVacanciesByTitleAndSalary()
+    {
+        Task load = _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        var page = FakeGateway.Page(1, 3, hasNext: false, "B Developer", "C Engineer", "A Architect");
+        page = page with
+        {
+            Items =
+            [
+                page.Items[0] with { SalaryMin = 2000, SalaryMax = 3000, Currency = "USD" },
+                page.Items[1] with { SalaryMin = 5000, SalaryMax = 6000, Currency = "USD" },
+                page.Items[2] with { SalaryMin = 1000, SalaryMax = 1500, Currency = "USD" }
+            ]
+        };
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(page);
+        await load;
+
+        _vm.SelectedSortOption = "За назвою посади (А → Я)";
+        Assert.Equal(["A Architect", "B Developer", "C Engineer"], _vm.Vacancies.Select(v => v.Title));
+
+        _vm.SelectedSortOption = "За зарплатою (від найвищої ↓)";
+        Assert.Equal(["C Engineer", "B Developer", "A Architect"], _vm.Vacancies.Select(v => v.Title));
+    }
 }
