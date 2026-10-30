@@ -32,17 +32,25 @@ jobs:
         with:
           dotnet-version: 10.0.403
 
-      # The build runs between "begin" and "end"; as in ci.yml, MAUI projects are left out on Linux.
+      # The build and tests run between "begin" and "end"; as in ci.yml, MAUI projects are left out on Linux.
       # scanAll keeps the web and TypeScript files in the analysis next to the C# code.
-      - name: Build and analyze
+      # Exclusions remove generated coverage reports and test results to fix duplication and bug counts.
+      - name: Build, test and analyze
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          dotnet tool install --global dotnet-sonarscanner
+          dotnet tool install --global dotnet-sonarscanner || true
           export PATH="$PATH:$HOME/.dotnet/tools"
           dotnet-sonarscanner begin /k:"ukma-fin-ssdm-2026_waterfall" /o:"ukma-fin-ssdm-2026" \
             /d:sonar.token="$SONAR_TOKEN" /d:sonar.host.url="https://sonarcloud.io" \
-            /d:sonar.scanner.scanAll=true
+            /d:sonar.scanner.scanAll=true \
+            /d:sonar.exclusions="**/coverage-report/**,**/TestResults/**" \
+            /d:sonar.cs.opencover.reportsPaths="**/TestResults/**/coverage.opencover.xml"
           dotnet build src/api/Waterfall.Api.csproj -c Release --nologo
-          for p in tests/*/*.csproj; do dotnet build "$p" -c Release --nologo; done
+          for p in tests/*/*.csproj; do
+            dotnet test "$p" -c Release --nologo \
+              --collect:"XPlat Code Coverage" \
+              --results-directory ./TestResults \
+              -- DataCollectionRunSettings.DataCollectors.DataCollector.Configuration.Format=opencover
+          done
           dotnet-sonarscanner end /d:sonar.token="$SONAR_TOKEN"
