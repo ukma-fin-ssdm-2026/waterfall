@@ -167,7 +167,7 @@
                                 <Grid ColumnDefinitions="*,Auto" Margin="8,4,8,2">
                                     <Label Text="💡 Знайдені варіанти (натисніть для вибору):"
                                            FontSize="11"
-                                           TextColor="{StaticResource Muted}"
+                                           TextColor="{StaticResource TextSecondary}"
                                            VerticalOptions="Center" />
                                     <Button Grid.Column="1"
                                             Text="✕"
