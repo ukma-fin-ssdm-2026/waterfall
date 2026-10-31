@@ -27,6 +27,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IVacancyIngestionService, VacancyIngestionService>();
         services.AddScoped<IUserProfileService, UserProfileService>();
         services.AddScoped<IGeoLocationService, GeoLocationService>();
+        services.AddScoped<IUserStatsService, UserStatsService>();
 
         return services;
     }

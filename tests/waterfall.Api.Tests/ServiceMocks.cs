@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Common;
+using Waterfall.Services.Models.Profile;
 using Waterfall.Services.Models.SavedVacancies;
 using Waterfall.Services.Models.Vacancies;
 
@@ -165,6 +166,42 @@ public sealed class FakeSavedVacancyService : ISavedVacancyService
         DeleteCalls.Add((id, userId));
         int removed = SavedVacancies.RemoveAll(s => s.Id == id || s.VacancyId == id);
         return Task.FromResult(removed > 0);
+    }
+}
+
+public sealed class FakeUserStatsService : IUserStatsService
+{
+    public List<Guid> GetStatsCalls { get; } = [];
+    public List<(Guid UserId, string Query)> RecordSearchCalls { get; } = [];
+    public List<(Guid UserId, Guid VacancyId)> RecordViewCalls { get; } = [];
+    public List<Guid> ClearSearchHistoryCalls { get; } = [];
+
+    public UserStatsDto StatsToReturn { get; set; } = new();
+    public UserStatsRecordResult SearchResult { get; set; } = UserStatsRecordResult.Recorded;
+    public UserStatsRecordResult ViewResult { get; set; } = UserStatsRecordResult.Recorded;
+
+    public Task<UserStatsDto> GetStatsAsync(Guid userId, CancellationToken ct = default)
+    {
+        GetStatsCalls.Add(userId);
+        return Task.FromResult(StatsToReturn);
+    }
+
+    public Task<UserStatsRecordResult> RecordSearchAsync(Guid userId, string query, CancellationToken ct = default)
+    {
+        RecordSearchCalls.Add((userId, query));
+        return Task.FromResult(SearchResult);
+    }
+
+    public Task<UserStatsRecordResult> RecordVacancyViewAsync(Guid userId, Guid vacancyId, CancellationToken ct = default)
+    {
+        RecordViewCalls.Add((userId, vacancyId));
+        return Task.FromResult(ViewResult);
+    }
+
+    public Task<bool> ClearSearchHistoryAsync(Guid userId, CancellationToken ct = default)
+    {
+        ClearSearchHistoryCalls.Add(userId);
+        return Task.FromResult(ClearSearchHistoryCalls.Count > 0);
     }
 }
 

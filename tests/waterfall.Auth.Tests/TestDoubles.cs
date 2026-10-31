@@ -46,6 +46,9 @@ internal sealed class FakeUserRepository : IUserRepository
         return Task.FromResult(user);
     }
 
+    public Task<UserDB?> GetByIdAsync(Guid id, CancellationToken ct = default)
+        => throw new NotSupportedException("GetByIdAsync не використовується цими тестами.");
+
     public Task<UserDB> CreateAsync(UserDB entity, CancellationToken ct = default)
     {
         if (ThrowUniqueViolationOnCreate)

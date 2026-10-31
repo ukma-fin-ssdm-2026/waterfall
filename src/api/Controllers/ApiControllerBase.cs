@@ -111,6 +111,24 @@ public abstract class ApiControllerBase : ControllerBase
     }
 
     /// <summary>
+    /// Власний хелпер для повернення помилки 403 Forbidden.
+    /// Використовується, коли автентифікований користувач не має права на дію (наприклад,
+    /// запис активності доступний лише JobSeeker — data-model.md §7, інваріант 2).
+    /// </summary>
+    /// <param name="message">Опис причини відмови в доступі.</param>
+    protected ObjectResult ErrorForbidden(string message)
+    {
+        // Створюємо власну структуру помилки
+        ApiErrorResponse error = ApiErrorResponse.Create(
+            code: "FORBIDDEN",
+            message: message,
+            requestId: RequestId);
+
+        // Повертаємо HTTP 403 разом із нашим уніфікованим JSON
+        return StatusCode(StatusCodes.Status403Forbidden, error);
+    }
+
+    /// <summary>
     /// Власний хелпер для повернення помилки 409 Conflict.
     /// Використовується при конфлікті стану ресурсу (наприклад, спроба повторно зберегти вже збережену вакансію).
     /// Формує відповідь з кодом "CONFLICT" та RequestId.
