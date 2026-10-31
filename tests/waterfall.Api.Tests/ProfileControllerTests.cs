@@ -14,12 +14,18 @@ namespace Waterfall.Api.Tests;
 public class ProfileControllerTests
 {
     private readonly FakeProfileService _service = new();
+    private readonly FakeUserStatsService _statsService = new();
+    private readonly FakeVacancyService _vacancyService = new();
     private readonly ProfileController _controller;
     private readonly Guid _userId = Guid.NewGuid();
 
     public ProfileControllerTests()
     {
-        _controller = new ProfileController(_service, NullLogger<ProfileController>.Instance);
+        _controller = new ProfileController(
+            _service,
+            _statsService,
+            _vacancyService,
+            NullLogger<ProfileController>.Instance);
     }
 
     private void Authenticate()
