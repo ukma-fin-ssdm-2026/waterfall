@@ -158,11 +158,7 @@ public class VacancyIngestionService : IVacancyIngestionService
     public static (decimal? Min, decimal? Max, string Currency) ParseSalary(string? salary, string defaultCurrency = "USD")
     {
         string text = (salary ?? string.Empty).ToLowerInvariant();
-        string currency =
-            text.Contains('$') || text.Contains("usd") ? "USD" :
-            text.Contains('€') || text.Contains("eur") ? "EUR" :
-            text.Contains('₴') || text.Contains("грн") || text.Contains("uah") ? "UAH" :
-            defaultCurrency;
+        string currency = DetectCurrency(text, defaultCurrency);
 
         // Погодинну ставку не можна порівнювати з місячними зарплатами в каталозі
         if (text.Contains("/год") || text.Contains("/hour"))
@@ -199,6 +195,13 @@ public class VacancyIngestionService : IVacancyIngestionService
 
         return (amount, amount, currency);
     }
+
+    /// <summary>Валюта за позначкою в рядку зарплати (уже в нижньому регістрі); якщо позначки немає — типова для сайту.</summary>
+    private static string DetectCurrency(string text, string defaultCurrency) =>
+        text.Contains('$') || text.Contains("usd") ? "USD" :
+        text.Contains('€') || text.Contains("eur") ? "EUR" :
+        text.Contains('₴') || text.Contains("грн") || text.Contains("uah") ? "UAH" :
+        defaultCurrency;
 
     /// <summary>
     /// «сьогодні», «вчора», «3 дні тому», «5 годин тому», «10 хв. тому», «08.10.2026» або ISO 8601.
