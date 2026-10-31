@@ -7,7 +7,7 @@ namespace Waterfall.Services.Interfaces;
 /// <summary>
 /// Сервіс особистої статистики активності користувача (FR-007, US-008).
 /// Реалізує частину «статистика активності користувачів» компонента
-/// «Analytics & Statistics Service» (high-level-design.md §3.4); ринкова аналітика — окремо.
+/// «Analytics &amp; Statistics Service» (high-level-design.md §3.4); ринкова аналітика — окремо.
 /// Поведінкові ПД: читання і запис — лише для userId власника (THR-12),
 /// текст пошукових запитів у логи не потрапляє (THR-08).
 /// </summary>

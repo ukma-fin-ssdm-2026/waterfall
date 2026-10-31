@@ -111,6 +111,7 @@ public class ProfileController : ApiControllerBase
     /// Записати виконаний пошуковий запит в історію (FR-007).
     /// </summary>
     /// <param name="request">Текст виконаного пошуку.</param>
+    /// <param name="ct">Токен скасування операції.</param>
     /// <response code="202">Пошуковий запит записано в історію.</response>
     /// <response code="204">Запит пропущено: порожній або повтор попереднього записаного запиту.</response>
     /// <response code="400">Помилка валідації вхідних даних.</response>
@@ -174,6 +175,7 @@ public class ProfileController : ApiControllerBase
     /// Записати перегляд вакансії в історію (FR-007).
     /// </summary>
     /// <param name="request">Ідентифікатор переглянутої вакансії.</param>
+    /// <param name="ct">Токен скасування операції.</param>
     /// <response code="202">Перегляд записано; повтор протягом короткого інтервалу приймається без повторного запису.</response>
     /// <response code="400">Помилка валідації вхідних даних.</response>
     /// <response code="401">Користувач не авторизований.</response>

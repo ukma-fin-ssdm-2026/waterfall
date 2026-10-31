@@ -12,7 +12,7 @@ namespace Waterfall.Services;
 /// <summary>
 /// Сервіс особистої статистики активності користувача (FR-007, US-008).
 /// Реалізує частину «статистика активності користувачів» компонента
-/// «Analytics & Statistics Service» (high-level-design.md §3.4).
+/// «Analytics &amp; Statistics Service» (high-level-design.md §3.4).
 /// Поведінкові ПД: читання і запис — лише для userId власника (THR-12);
 /// текст пошукових запитів у логи не потрапляє (THR-08);
 /// успішні події активності не логуються (THR-05).
