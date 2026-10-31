@@ -105,41 +105,9 @@ public sealed class SiteCrawler
         CrawlState crawl = new();
         for (int page = 1; page <= _pages; page++)
         {
-            string? url = _site.ListPageUrl(page);
-            if (url is null)
-            {
-                break;
-            }
-
-            if (!robots.IsAllowed(new Uri(url).PathAndQuery))
-            {
-                _logger.LogWarning("robots.txt {Site} не дозволяє ботам читати {Url}, тож далі не йдемо.", _site.Name, url);
-                break;
-            }
-
-            List<RawVacancy> jobs;
-            try
-            {
-                jobs = _site.ParseListPage(await GetPageAsync(http, url, ct));
-            }
-            catch (Exception ex) when (IsSiteFailure(ex, ct))
-            {
-                _logger.LogWarning("Сторінка {Url} недоступна ({Error}); обробляємо {Count} вакансій, зібраних раніше.", url, ex.Message, crawl.Items.Count);
-                crawl.Refusal = ex as SiteRefusedException;
-                crawl.Interrupted = true;
-                break;
-            }
-
-            // За межами списку сайт показує першу сторінку (Djinni) чи порожню (Work.ua): нових вакансій немає — зупиняємося.
-            // Так само відкидаємо вакансію, що з'їхала на наступну сторінку, поки ми читали попередню (артефакт пагінації).
-            List<RawVacancy> fresh = jobs.Where(job => job.Id is null || crawl.SeenIds.Add(job.Id)).ToList();
+            List<RawVacancy> fresh = await ReadListPageAsync(http, robots, page, crawl, ct);
             if (fresh.Count == 0)
             {
-                if (page == 1)
-                {
-                    _logger.LogWarning("На {Url} не знайдено вакансій: можливо, {Site} змінив розмітку сторінки.", url, _site.Name);
-                }
-
                 break;
             }
 
@@ -174,6 +142,48 @@ public sealed class SiteCrawler
 
         _logger.LogInformation("З {Site} завантажено вакансій: {Count}.", _site.Name, crawl.Items.Count);
         return crawl.Items;
+    }
+
+    /// <summary>
+    /// Нові вакансії з N-ї сторінки списку. Порожній список — далі не йдемо: такої сторінки немає, robots.txt її не дозволяє,
+    /// сайт не відповів або нових вакансій на сторінці вже немає.
+    /// </summary>
+    private async Task<List<RawVacancy>> ReadListPageAsync(HttpClient http, RobotsTxt robots, int page, CrawlState crawl, CancellationToken ct)
+    {
+        string? url = _site.ListPageUrl(page);
+        if (url is null)
+        {
+            return [];
+        }
+
+        if (!robots.IsAllowed(new Uri(url).PathAndQuery))
+        {
+            _logger.LogWarning("robots.txt {Site} не дозволяє ботам читати {Url}, тож далі не йдемо.", _site.Name, url);
+            return [];
+        }
+
+        List<RawVacancy> jobs;
+        try
+        {
+            jobs = _site.ParseListPage(await GetPageAsync(http, url, ct));
+        }
+        catch (Exception ex) when (IsSiteFailure(ex, ct))
+        {
+            _logger.LogWarning("Сторінка {Url} недоступна ({Error}); обробляємо {Count} вакансій, зібраних раніше.", url, ex.Message, crawl.Items.Count);
+            crawl.Refusal = ex as SiteRefusedException;
+            crawl.Interrupted = true;
+            return [];
+        }
+
+        // За межами списку сайт показує першу сторінку (Djinni) чи порожню (Work.ua): нових вакансій немає — зупиняємося.
+        // Так само відкидаємо вакансію, що з'їхала на наступну сторінку, поки ми читали попередню (артефакт пагінації).
+        List<RawVacancy> fresh = jobs.Where(job => job.Id is null || crawl.SeenIds.Add(job.Id)).ToList();
+        if (fresh.Count == 0 && page == 1)
+        {
+            _logger.LogWarning("На {Url} не знайдено вакансій: можливо, {Site} змінив розмітку сторінки.", url, _site.Name);
+        }
+
+        return fresh;
     }
 
     /// <summary>
