@@ -165,6 +165,20 @@ public class VacancyIngestionServiceTests
         Assert.Equal(currency, VacancyIngestionService.ParseSalary(salary, "UAH").Currency);
     }
 
+    // Типова валюта тут XXX («без валюти» за ISO 4217): так видно, що валюту дала саме позначка в рядку
+    [Theory]
+    [InlineData("2500-5000 USD", "USD")] // так зарплату записує DjinniParser
+    [InlineData("від 2000 EUR", "EUR")]
+    [InlineData("₴30 000", "UAH")]
+    [InlineData("30 000 UAH", "UAH")]
+    [InlineData("$1000 або 41 000 грн", "USD")] // кілька позначок: долар перевіряється першим
+    [InlineData("€900 або 38 000 грн", "EUR")] // євро — раніше за гривню
+    [InlineData("30 000", "XXX")]
+    public void ParseSalary_CurrencyMarkInText_WinsInFixedOrder(string salary, string currency)
+    {
+        Assert.Equal(currency, VacancyIngestionService.ParseSalary(salary, "XXX").Currency);
+    }
+
     [Theory]
     [InlineData("https://djinni-careers.example.net/jobs/1/")]
     [InlineData("https://djinni.co.evil.example/jobs/1/")]
