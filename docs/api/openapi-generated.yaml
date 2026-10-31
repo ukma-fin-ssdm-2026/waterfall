@@ -195,6 +195,129 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/profile/stats:
+    get:
+      tags:
+        - Profile
+      summary: 'Отримати особисту статистику активності користувача (FR-007, US-008).'
+      description: 'Повертає кількість збережених вакансій і пошуків, топ технологій та категорій за переглядами і збереженнями, останні пошукові запити.'
+      operationId: GetProfileStats
+      responses:
+        '200':
+          description: Статистику успішно отримано.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStatsDto'
+        '401':
+          description: Користувач не авторизований.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/profile/searches:
+    post:
+      tags:
+        - Profile
+      summary: Записати виконаний пошуковий запит в історію (FR-007).
+      description: Додає виконаний пошук до історії особистої статистики. Повтори і порожні запити пропускаються; текст запиту в логи не пишеться (THR-08).
+      operationId: RecordSearch
+      requestBody:
+        description: Текст виконаного пошуку.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordSearchRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/RecordSearchRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/RecordSearchRequest'
+      responses:
+        '202':
+          description: Пошуковий запит записано в історію.
+        '204':
+          description: 'Запит пропущено: порожній або повтор попереднього записаного запиту.'
+        '400':
+          description: Помилка валідації вхідних даних.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Користувач не авторизований.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '403':
+          description: 'Запис активності доступний лише шукачу роботи (data-model.md §7, інваріант 2).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+    delete:
+      tags:
+        - Profile
+      summary: Очистити історію пошукових запитів користувача.
+      description: Видаляє всі записані пошукові запити поточного користувача. Генерація відсутніх записів не є помилкою.
+      operationId: ClearSearchHistory
+      responses:
+        '204':
+          description: Історію очищено (порожня історія також вважається успіхом).
+        '401':
+          description: Користувач не авторизований.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/profile/views:
+    post:
+      tags:
+        - Profile
+      summary: Записати перегляд вакансії в історію (FR-007).
+      description: 'Додає перегляд вакансії до історії особистої статистики та джерела агрегації частоти технологій/категорій (FR-006, FR-007).'
+      operationId: RecordVacancyView
+      requestBody:
+        description: Ідентифікатор переглянутої вакансії.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordVacancyViewRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/RecordVacancyViewRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/RecordVacancyViewRequest'
+      responses:
+        '202':
+          description: Перегляд записано; повтор протягом короткого інтервалу приймається без повторного запису.
+        '400':
+          description: Помилка валідації вхідних даних.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Користувач не авторизований.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '403':
+          description: 'Запис активності доступний лише шукачу роботи (data-model.md §7, інваріант 2).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Вакансію з вказаним vacancy_id не знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/saved-vacancies:
     get:
       tags:
@@ -317,7 +440,7 @@ paths:
       tags:
         - Vacancies
       summary: Отримати список вакансій із фільтрацією та пагінацією.
-      description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\r\nмінімальної зарплати та джерела агрегації."
+      description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\nмінімальної зарплати та джерела агрегації."
       operationId: GetVacancies
       parameters:
         - name: Page
@@ -395,7 +518,7 @@ paths:
           example: Djinni
         - name: OnlyActive
           in: query
-          description: "Ознака вибірки тільки активних вакансій (за замовчуванням true).\r\nЯкщо false — повертає як активні, так і закриті (архівні) вакансії."
+          description: "Ознака вибірки тільки активних вакансій (за замовчуванням true).\nЯкщо false — повертає як активні, так і закриті (архівні) вакансії."
           schema:
             type: boolean
             example: true
@@ -791,6 +914,31 @@ components:
           example: Secret123456
       additionalProperties: false
       description: 'Модель запиту на вхід користувача (навмисно без політики складності, щоб не розкривати її на логіні, THR-01).'
+    RecordSearchRequest:
+      required:
+        - query
+      type: object
+      properties:
+        query:
+          maxLength: 300
+          minLength: 0
+          type: string
+          description: Текст виконаного пошукового запиту.
+          example: Python розробник
+      additionalProperties: false
+      description: Модель запиту на запис виконаного пошукового запиту в історію (FR-007).
+    RecordVacancyViewRequest:
+      required:
+        - vacancyId
+      type: object
+      properties:
+        vacancyId:
+          type: string
+          description: Ідентифікатор переглянутої вакансії.
+          format: uuid
+          example: 11111111-1111-1111-1111-111111111111
+      additionalProperties: false
+      description: Модель запиту на запис перегляду вакансії в історію (FR-007).
     RegisterRequest:
       required:
         - email
@@ -860,6 +1008,17 @@ components:
           format: date-time
       additionalProperties: false
       description: DTO представлення збереженої вакансії («лайку» / закладки) для клієнтів API.
+    StatCountDto:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        count:
+          type: integer
+          format: int32
+      additionalProperties: false
+      description: 'Елемент агрегованої частоти: назва технології/категорії та кількість переглядів і збережень.'
     UpdateVacancyRequest:
       type: object
       properties:
@@ -971,7 +1130,38 @@ components:
         - JobSeeker
         - Analyst
       type: string
-      description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\r\n1 = Analyst (доступ до агрегованої аналітики)."
+      description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\n1 = Analyst (доступ до агрегованої аналітики)."
+    UserStatsDto:
+      type: object
+      properties:
+        savedVacanciesCount:
+          type: integer
+          description: Кількість активних збережених вакансій (як у розділі «Обране»).
+          format: int32
+        totalSearches:
+          type: integer
+          description: Загальна кількість виконаних пошукових запитів.
+          format: int32
+        topTechnologies:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatCountDto'
+          description: Топ технологій за частотою серед переглянутих і збережених вакансій.
+          nullable: true
+        topCategories:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatCountDto'
+          description: Топ категорій за частотою серед переглянутих і збережених вакансій.
+          nullable: true
+        recentSearches:
+          type: array
+          items:
+            type: string
+          description: Останні пошукові запити (новіші спершу).
+          nullable: true
+      additionalProperties: false
+      description: "Відповідь `GET api/v1/profile/stats` — статистика активності користувача (FR-007, US-008).\nПоведінкові ПД (data-model.md §5): повертається лише самому користувачеві (THR-12)."
     VacancyDto:
       type: object
       properties:
@@ -1072,7 +1262,7 @@ components:
           description: 'Ознака активності (true — активна, false — закрита/архівна).'
         isSaved:
           type: boolean
-          description: "Ознака збереження вакансії поточним користувачем у закладки.\r\nОбчислюється динамічно за таблицею збережених вакансій."
+          description: "Ознака збереження вакансії поточним користувачем у закладки.\nОбчислюється динамічно за таблицею збережених вакансій."
       additionalProperties: false
       description: 'DTO представлення вакансії для клієнтів API (Web API, .NET MAUI).'
     VacancyDtoPagedResult:
@@ -1114,7 +1304,7 @@ components:
           description: Чи існує наступна сторінка.
           readOnly: true
       additionalProperties: false
-      description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\r\nМістить сторінку елементів та метадані пагінації."
+      description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\nМістить сторінку елементів та метадані пагінації."
     ValidationErrorDetail:
       type: object
       properties:
