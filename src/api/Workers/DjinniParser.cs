@@ -27,7 +27,7 @@ public sealed class DjinniParser : IJobSiteParser
     /// <summary>Значення переводимо у формат, який уже розуміє нормалізація: «2500-5000 USD», «1 рік досвіду» тощо.</summary>
     public List<RawVacancy> ParseListPage(string html)
     {
-        HtmlNodeCollection? scripts = Load(html).DocumentNode.SelectNodes("//script[@type='application/ld+json']");
+        HtmlNodeCollection? scripts = Html.Load(html).DocumentNode.SelectNodes("//script[@type='application/ld+json']");
         List<RawVacancy> jobs = [];
         foreach (HtmlNode script in scripts ?? Enumerable.Empty<HtmlNode>())
         {
@@ -47,22 +47,13 @@ public sealed class DjinniParser : IJobSiteParser
     /// </summary>
     public RawVacancy ParseJobPage(string html)
     {
-        List<string> parts = Load(html).DocumentNode
+        List<string> parts = Html.Load(html).DocumentNode
             .SelectNodes("//h2[normalize-space()='Необхідні навички']/following-sibling::div[1]//span")?
-            .Select(part => Clean(part.InnerText))
+            .Select(part => Html.Clean(part.InnerText))
             .Where(part => part.Length > 0)
             .ToList() ?? [];
         return new RawVacancy { Tags = parts.Count > 0 ? string.Join(", ", parts) : null };
     }
-
-    private static HtmlDocument Load(string html)
-    {
-        HtmlDocument document = new();
-        document.LoadHtml(html);
-        return document;
-    }
-
-    private static string Clean(string html) => string.Join(' ', WebUtility.HtmlDecode(html).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     private static RawVacancy ToRawVacancy(JsonElement job) => new()
     {
