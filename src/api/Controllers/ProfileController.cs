@@ -78,7 +78,11 @@ public class ProfileController : ApiControllerBase
         }
 
         await _profileService.SaveUserAddressAsync(userId, request.Address, ct);
-        _logger.LogInformation("Оновлено адресу для користувача {UserId}.", userId);
+
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Оновлено адресу для користувача {UserId}.", userId);
+        }
 
         return Ok(new UserAddressDto { Address = request.Address.Trim() });
     }
@@ -102,7 +106,11 @@ public class ProfileController : ApiControllerBase
             return ErrorUnauthorized("Користувач не авторизований.");
         }
 
-        _logger.LogInformation("Запит особистої статистики користувача {UserId}", userId);
+        if (_logger.IsEnabled(LogLevel.Information))
+        {
+            _logger.LogInformation("Запит особистої статистики користувача {UserId}", userId);
+        }
+
         UserStatsDto stats = await _userStatsService.GetStatsAsync(userId, ct);
         return Ok(stats);
     }

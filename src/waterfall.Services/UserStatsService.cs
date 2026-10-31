@@ -120,7 +120,7 @@ public class UserStatsService : IUserStatsService
     public async Task<bool> ClearSearchHistoryAsync(Guid userId, CancellationToken ct = default)
     {
         bool deleted = await _searchQueryRepository.DeleteAllForUserAsync(userId, ct);
-        if (deleted)
+        if (deleted && _logger.IsEnabled(LogLevel.Information))
         {
             _logger.LogInformation("Очищено історію пошукових запитів користувача {UserId}", userId);
         }
