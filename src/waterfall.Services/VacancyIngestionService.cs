@@ -197,11 +197,26 @@ public class VacancyIngestionService : IVacancyIngestionService
     }
 
     /// <summary>Валюта за позначкою в рядку зарплати (уже в нижньому регістрі); якщо позначки немає — типова для сайту.</summary>
-    private static string DetectCurrency(string text, string defaultCurrency) =>
-        text.Contains('$') || text.Contains("usd") ? "USD" :
-        text.Contains('€') || text.Contains("eur") ? "EUR" :
-        text.Contains('₴') || text.Contains("грн") || text.Contains("uah") ? "UAH" :
-        defaultCurrency;
+    private static string DetectCurrency(string text, string defaultCurrency)
+    {
+        // Порядок перевірок важливий: якщо в рядку кілька валют, береться перша з них у цьому порядку
+        if (text.Contains('$') || text.Contains("usd"))
+        {
+            return "USD";
+        }
+
+        if (text.Contains('€') || text.Contains("eur"))
+        {
+            return "EUR";
+        }
+
+        if (text.Contains('₴') || text.Contains("грн") || text.Contains("uah"))
+        {
+            return "UAH";
+        }
+
+        return defaultCurrency;
+    }
 
     /// <summary>
     /// «сьогодні», «вчора», «3 дні тому», «5 годин тому», «10 хв. тому», «08.10.2026» або ISO 8601.
