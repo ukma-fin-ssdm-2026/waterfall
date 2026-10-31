@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Refactoring
+- **HTML parsing helpers deduplication** (*Extract Class*): Moved `Load`, `Text` and `Clean`, copied across `WorkUaParser`, `DouParser` and `DjinniParser`, into one shared `Html` class (removes the duplicated block `WorkUaParser.cs:101-118` ↔ `DouParser.cs:128-144` reported by SonarQube Cloud).
+- **Crawl loop decomposition** (*Extract Method, Introduce Parameter Object*): Split `SiteCrawler.CrawlAsync` into `ReadListPageAsync`, `WithJobPageAsync`, `ReadJobPageAsync` and `RememberJobPages`, keeping the state of one crawl in `CrawlState`; cognitive complexity of `CrawlAsync` 35 → 9.
+- **Salary currency detection** (*Extract Method, Replace Nested Conditional with Guard Clauses*): Moved currency detection out of `VacancyIngestionService.ParseSalary` into `DetectCurrency` and replaced the nested ternary (fixing `S3358`); cognitive complexity of `ParseSalary` 17 → 8.
+
+### Tests
+- Characterization tests for currency marks in salary text (`ParseSalary_CurrencyMarkInText_WinsInFixedOrder`), added before the salary refactoring.
+
 ## [0.1.1] - 2026-10-27
 
 ### Refactoring
