@@ -26,6 +26,13 @@ public class EfUserRepository : IUserRepository
             .FirstOrDefaultAsync(u => u.Email == normalizedEmail, ct);
     }
 
+    public async Task<UserDB?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        return await _context.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == id, ct);
+    }
+
     public async Task<UserDB> CreateAsync(UserDB entity, CancellationToken ct = default)
     {
         _context.Users.Add(entity);

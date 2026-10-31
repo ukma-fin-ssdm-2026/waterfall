@@ -17,6 +17,11 @@ public interface IUserRepository
     Task<UserDB?> GetByEmailAsync(string normalizedEmail, CancellationToken ct = default);
 
     /// <summary>
+    /// Знайти користувача за Id (без відстеження — для перевірок ролі).
+    /// </summary>
+    Task<UserDB?> GetByIdAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
     /// Створити користувача. Порушення унікальності email (гонка) лишає DbUpdateException викликувачу.
     /// </summary>
     Task<UserDB> CreateAsync(UserDB entity, CancellationToken ct = default);
