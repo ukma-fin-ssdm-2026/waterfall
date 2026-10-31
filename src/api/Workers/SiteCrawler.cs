@@ -145,18 +145,7 @@ public sealed class SiteCrawler
 
             foreach (RawVacancy job in fresh)
             {
-                RawVacancy? details = null;
-                if (job.Id is not null && !_jobPages.TryGetValue(job.Id, out details) && crawl.ReadJobPages && IsAllowedJobPage(job.Url, robots))
-                {
-                    details = await ReadJobPageAsync(http, job.Url!, crawl, ct);
-                }
-
-                if (details is not null)
-                {
-                    crawl.JobPages[job.Id!] = details;
-                }
-
-                crawl.Items.Add(details is null ? job : WithJobPage(job, details));
+                crawl.Items.Add(await WithJobPageAsync(http, robots, job, crawl, ct));
             }
         }
 
@@ -185,6 +174,27 @@ public sealed class SiteCrawler
 
         _logger.LogInformation("З {Site} завантажено вакансій: {Count}.", _site.Name, crawl.Items.Count);
         return crawl.Items;
+    }
+
+    /// <summary>
+    /// Вакансія зі списку разом із даними з її сторінки: з пам'яті, якщо сторінку вже читали, інакше щойно прочитаними.
+    /// Якщо даних сторінки немає, вакансія лишається такою, як у списку.
+    /// </summary>
+    private async Task<RawVacancy> WithJobPageAsync(HttpClient http, RobotsTxt robots, RawVacancy job, CrawlState crawl, CancellationToken ct)
+    {
+        RawVacancy? details = null;
+        if (job.Id is not null && !_jobPages.TryGetValue(job.Id, out details) && crawl.ReadJobPages && IsAllowedJobPage(job.Url, robots))
+        {
+            details = await ReadJobPageAsync(http, job.Url!, crawl, ct);
+        }
+
+        if (details is null)
+        {
+            return job;
+        }
+
+        crawl.JobPages[job.Id!] = details;
+        return WithJobPage(job, details);
     }
 
     /// <summary>Дані зі сторінки вакансії; null — сторінка не відкрилася.</summary>
