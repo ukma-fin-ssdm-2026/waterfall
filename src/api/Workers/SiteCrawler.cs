@@ -148,18 +148,7 @@ public sealed class SiteCrawler
                 RawVacancy? details = null;
                 if (job.Id is not null && !_jobPages.TryGetValue(job.Id, out details) && crawl.ReadJobPages && IsAllowedJobPage(job.Url, robots))
                 {
-                    try
-                    {
-                        details = _site.ParseJobPage(await GetPageAsync(http, job.Url!, ct));
-                    }
-                    catch (Exception ex) when (IsSiteFailure(ex, ct))
-                    {
-                        // Вакансія корисна й без сторінки: збережемо те, що є в списку.
-                        // Решту сторінок вакансій у цьому обході не чіпаємо, щоб не тиснути на сайт, який уже збоїть.
-                        _logger.LogWarning("Сторінка вакансії {Url} недоступна ({Error}); решту вакансій беремо лише зі списку.", job.Url, ex.Message);
-                        crawl.Refusal = ex as SiteRefusedException;
-                        crawl.ReadJobPages = false;
-                    }
+                    details = await ReadJobPageAsync(http, job.Url!, crawl, ct);
                 }
 
                 if (details is not null)
@@ -196,6 +185,24 @@ public sealed class SiteCrawler
 
         _logger.LogInformation("З {Site} завантажено вакансій: {Count}.", _site.Name, crawl.Items.Count);
         return crawl.Items;
+    }
+
+    /// <summary>Дані зі сторінки вакансії; null — сторінка не відкрилася.</summary>
+    private async Task<RawVacancy?> ReadJobPageAsync(HttpClient http, string url, CrawlState crawl, CancellationToken ct)
+    {
+        try
+        {
+            return _site.ParseJobPage(await GetPageAsync(http, url, ct));
+        }
+        catch (Exception ex) when (IsSiteFailure(ex, ct))
+        {
+            // Вакансія корисна й без сторінки: збережемо те, що є в списку.
+            // Решту сторінок вакансій у цьому обході не чіпаємо, щоб не тиснути на сайт, який уже збоїть.
+            _logger.LogWarning("Сторінка вакансії {Url} недоступна ({Error}); решту вакансій беремо лише зі списку.", url, ex.Message);
+            crawl.Refusal = ex as SiteRefusedException;
+            crawl.ReadJobPages = false;
+            return null;
+        }
     }
 
     /// <summary>Дані зі сторінки вакансії доповнюють і уточнюють дані зі списку (наприклад, повний опис замість скороченого).</summary>
