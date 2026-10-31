@@ -1,7 +1,6 @@
 // AI: розбір RSS-стрічки та сторінок вакансій jobs.dou.ua; перевірено: юніт-тести DouPageTests на розмітці справжніх сторінок (жовтень 2026), ручний запуск API проти jobs.dou.ua, самоперевірка автора (§8)
 
 using System.Globalization;
-using System.Net;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
@@ -46,7 +45,8 @@ public sealed class DouParser : IJobSiteParser
                 continue;
             }
 
-            (string title, string? company, string? salary, string? places) = SplitTitle(Clean(item.Element("title")?.Value ?? string.Empty));
+            // У заголовках стрічки HTML-сутності закодовано двічі («&amp;nbsp;»), тож після XML лишаються «&nbsp;» і «&amp;»
+            (string title, string? company, string? salary, string? places) = SplitTitle(Html.Clean(item.Element("title")?.Value ?? string.Empty));
             jobs.Add(new RawVacancy
             {
                 Source = JobSource.Dou,
@@ -67,24 +67,24 @@ public sealed class DouParser : IJobSiteParser
 
     public RawVacancy ParseJobPage(string html)
     {
-        HtmlNode? vacancy = Load(html).DocumentNode.SelectSingleNode("//div[contains(concat(' ', normalize-space(@class), ' '), ' b-vacancy ')]");
+        HtmlNode? vacancy = Html.Load(html).DocumentNode.SelectSingleNode("//div[contains(concat(' ', normalize-space(@class), ' '), ' b-vacancy ')]");
         if (vacancy is null)
         {
             return new RawVacancy();
         }
 
         // «Всі вакансії / Java / за кордоном»: другий пункт — категорія
-        List<string> breadcrumbs = vacancy.SelectNodes(".//li[contains(@class,'breadcrumbs')]/a")?.Select(Clean).ToList() ?? [];
+        List<string> breadcrumbs = vacancy.SelectNodes(".//li[contains(@class,'breadcrumbs')]/a")?.Select(Html.Clean).ToList() ?? [];
         List<string> sections = vacancy.SelectNodes(".//div[contains(concat(' ', normalize-space(@class), ' '), ' vacancy-section ')]")?
             .Select(section => section.InnerHtml)
             .ToList() ?? [];
 
         return new RawVacancy
         {
-            Title = Text(vacancy, ".//h1"),
-            Company = Text(vacancy, ".//div[contains(@class,'b-compinfo')]//div[contains(@class,'l-n')]/a[1]"),
-            Salary = Text(vacancy, ".//div[contains(@class,'sh-info')]//span[contains(@class,'salary')]"),
-            Location = Text(vacancy, ".//div[contains(@class,'sh-info')]//span[contains(@class,'place')]"),
+            Title = Html.Text(vacancy, ".//h1"),
+            Company = Html.Text(vacancy, ".//div[contains(@class,'b-compinfo')]//div[contains(@class,'l-n')]/a[1]"),
+            Salary = Html.Text(vacancy, ".//div[contains(@class,'sh-info')]//span[contains(@class,'salary')]"),
+            Location = Html.Text(vacancy, ".//div[contains(@class,'sh-info')]//span[contains(@class,'place')]"),
             Category = breadcrumbs.Count >= 2 ? breadcrumbs[1] : null,
             DescriptionHtml = sections.Count > 0 ? string.Join("\n", sections) : null
         };
@@ -126,23 +126,4 @@ public sealed class DouParser : IJobSiteParser
         using XmlReader reader = XmlReader.Create(text, settings);
         return XDocument.Load(reader);
     }
-
-    private static HtmlDocument Load(string html)
-    {
-        HtmlDocument document = new();
-        document.LoadHtml(html);
-        return document;
-    }
-
-    private static string? Text(HtmlNode node, string xpath)
-    {
-        string text = node.SelectSingleNode(xpath) is { } found ? Clean(found) : string.Empty;
-        return text.Length > 0 ? text : null;
-    }
-
-    private static string Clean(HtmlNode node) =>
-        Clean(string.Join(' ', node.DescendantsAndSelf().Where(part => part.NodeType == HtmlNodeType.Text).Select(part => part.InnerText)));
-
-    // У заголовках стрічки HTML-сутності закодовано двічі («&amp;nbsp;»), тож після XML лишаються «&nbsp;» і «&amp;»
-    private static string Clean(string text) => string.Join(' ', WebUtility.HtmlDecode(text).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }
