@@ -117,20 +117,7 @@ public sealed class SiteCrawler
             }
         }
 
-        // Пам'ятаємо лише вакансії з цього обходу: решта зникла зі списку й більше не знадобиться.
-        // Якщо ж обхід обірвався, старі записи ще можуть знадобитися наступного разу.
-        if (crawl.Interrupted)
-        {
-            foreach ((string id, RawVacancy details) in crawl.JobPages)
-            {
-                _jobPages[id] = details;
-            }
-        }
-        else
-        {
-            _jobPages = crawl.JobPages;
-        }
-
+        RememberJobPages(crawl);
         if (crawl.Refusal is null)
         {
             _pause = TimeSpan.Zero;
@@ -222,6 +209,23 @@ public sealed class SiteCrawler
             crawl.Refusal = ex as SiteRefusedException;
             crawl.ReadJobPages = false;
             return null;
+        }
+    }
+
+    // Пам'ятаємо лише вакансії з цього обходу: решта зникла зі списку й більше не знадобиться.
+    // Якщо ж обхід обірвався, старі записи ще можуть знадобитися наступного разу.
+    private void RememberJobPages(CrawlState crawl)
+    {
+        if (crawl.Interrupted)
+        {
+            foreach ((string id, RawVacancy details) in crawl.JobPages)
+            {
+                _jobPages[id] = details;
+            }
+        }
+        else
+        {
+            _jobPages = crawl.JobPages;
         }
     }
 
