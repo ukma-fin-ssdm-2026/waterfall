@@ -13,15 +13,15 @@
 * **Інструмент:** NuGet-пакет **`SecurityCodeScan.VS2019` (версія `5.6.7`)** — офіційний SAST-аналізатор для .NET / C# на базі Roslyn, що перевіряє код на правила безпеки (SCS0001–SCS0035, SQL Injection, CSRF, Path Traversal, Sensitive Data Exposure, небезпечна криптографія).
 * **Спеціальний імпорт у проєктах:**  
   Аналізатор імпортовано безпосередньо у файли проєктів бекенду як Roslyn Analyzer:
-  - [`src/api/Waterfall.Api.csproj`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/src/api/Waterfall.Api.csproj#L15-L18):
+  - [`src/api/Waterfall.Api.csproj`](./src/api/Waterfall.Api.csproj):
     ```xml
     <PackageReference Include="SecurityCodeScan.VS2019" Version="5.6.7">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
     ```
-  - [`src/waterfall.Services/waterfall.Services.csproj`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/src/waterfall.Services/waterfall.Services.csproj#L34-L37)
-  - [`src/waterfall.Repository/waterfall.Repository.csproj`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/src/waterfall.Repository/waterfall.Repository.csproj#L37-L40)
+  - [`src/waterfall.Services/waterfall.Services.csproj`](./src/waterfall.Services/waterfall.Services.csproj)
+  - [`src/waterfall.Repository/waterfall.Repository.csproj`](./src/waterfall.Repository/waterfall.Repository.csproj)
 * **Механізм запуску:**  
   Аналіз не потребує сторонніх утиліт і запускається автоматично компілятором Roslyn під час стандартної збірки проєкту:
   ```bash
@@ -62,7 +62,7 @@
 Під час аудиту коду автентифікації та журналювання було виявлено та усунено вразливість витоку персональних даних.
 
 ### 1. Що знайдено (файл, рядок):
-У файлах [`src/api/Controllers/AuthController.cs`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/src/api/Controllers/AuthController.cs) (рядки 56, 93) та [`src/api/Services/AuthenticationService.cs`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/src/api/Services/AuthenticationService.cs) (рядки 50, 72, 79, 97, 105, 108) у початковій реалізації здійснювалося логування email-адрес користувачів під час запитів на вхід і реєстрацію:
+У файлах [`src/api/Controllers/AuthController.cs`](./src/api/Controllers/AuthController.cs) (рядки 56, 93) та [`src/api/Services/AuthenticationService.cs`](./src/api/Services/AuthenticationService.cs) (рядки 50, 72, 79, 97, 105, 108) у початковій реалізації здійснювалося логування email-адрес користувачів під час запитів на вхід і реєстрацію:
 - `_logger.LogInformation("Запит реєстрації: {Email}", request.Email);`
 - `_logger.LogInformation("Запит входу: {Email}", request.Email);`
 - `_logger.LogWarning("Спроба реєстрації на зайнятий email: {Email}", email);`
@@ -71,7 +71,7 @@
 ### 2. ID правила та класифікація:
 * **CWE-532:** Insertion of Sensitive Information into Log File
 * **Правило безпеки:** аналог **SCS0028** (SecurityCodeScan: Sensitive Data Exposure / Log Forging) / **CA1848**
-* **Стандарт курсу:** порушення вимоги **SEC-001** та загроза **THR-08** із [`threat-model.md`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/docs/architecture/threat-model.md) («Зона 2, журнали застосунку — Information disclosure / небезпечне логування email та облікових даних»).
+* **Стандарт курсу:** порушення вимоги **SEC-001** та загроза **THR-08** із [`threat-model.md`](./docs/architecture/threat-model.md) («Зона 2, журнали застосунку — Information disclosure / небезпечне логування email та облікових даних»).
 
 ### 3. Чому це ризик:
 Журнали застосунку записуються у стандартний вивід і зберігаються на сервері. Логування email-адрес перетворює лог-файли на незахищене сховище персональних даних (ПД). У разі компрометації доступу до серверних логів або систем централізованого збору журналів (ELK, Seq, Grafana Loki) зловмисник отримує готову базу адрес користувачів платформи, що порушує вимоги GDPR та принцип конфіденційності. Крім того, наявність email у логах спрощує атаки типу credential stuffing.
@@ -109,7 +109,7 @@ _logger.LogInformation("Успішний вхід: {UserId}", user.Id);
 Вразливість та її запобігання зафіксовано разом із регресійним тестом, який підтверджує захист від повторної появи проблеми в CI:
 
 - **Посилання на Pull Request:** [Pull Request: fix(security): resolve CWE-532 sensitive logging with regression test](https://github.com/ukma-fin-ssdm-2026/waterfall/pull/71) (посилання на гілку та перегляд змін: [compare/main...fix/security-cwe-532-sensitive-logging](https://github.com/ukma-fin-ssdm-2026/waterfall/compare/main...fix/security-cwe-532-sensitive-logging)).
-- **Файл регресійного тесту:** [`tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs).
+- **Файл регресійного тесту:** [`tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs`](./tests/waterfall.Security.Tests/SensitiveLoggingRegressionTests.cs).
 - **Механізм перевірки:**  
 Тест верифікує виконання тверджень `Assert.DoesNotContain(SensitiveEmail, logEntry)` та `Assert.DoesNotContain(SensitivePassword, logEntry)`.
 
@@ -147,7 +147,7 @@ Found:  "victim.user@example.com"
 ### Загроза THR-04: SQL-ін'єкція (Tampering, межа TB-2)
 - **Сценарій з моделі загроз:** Вхідний рядок пошуку або значення фільтра потрапляє в SQL-запит конкатенацією рядків.
 - **Як код протистоїть:**  
-  У [`EfVacancyRepository.cs`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/src/waterfall.Repository/Repositories/EfVacancyRepository.cs#L41-L55) сирий SQL (`FromSqlRaw`) суворо заборонено правилом проектування. Усі запити конструюються виключно через типізовані вирази LINQ:
+  У [`EfVacancyRepository.cs`](./src/waterfall.Repository/Repositories/EfVacancyRepository.cs) сирий SQL (`FromSqlRaw`) суворо заборонено правилом проектування. Усі запити конструюються виключно через типізовані вирази LINQ:
   ```csharp
   if (!string.IsNullOrWhiteSpace(search))
   {
@@ -163,7 +163,7 @@ Found:  "victim.user@example.com"
 ### Загроза THR-01: Перебір паролів та атака за часом відповіді (Timing Attack, межа TB-1)
 - **Сценарій з моделі загроз:** Зловмисник визначає існування облікового запису за різницею часу відповіді сервера: обчислення для існуючого користувача з хешем виконується довше, ніж швидкий вихід при відсутності email у БД.
 - **Як код протистоїть:**  
-  У [`AuthenticationService.cs`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/src/api/Services/AuthenticationService.cs#L89-L103) та [`AspNetPasswordHasher.cs`](file:///c:/Users/user/source/repos/ukma-fin-ssdm-2026/waterfall/src/api/Services/AspNetPasswordHasher.cs#L25-L38) реалізовано вирівнювання часу обчислень через статичний `DummyHash`:
+  У [`AuthenticationService.cs`](./src/api/Services/AuthenticationService.cs) та [`AspNetPasswordHasher.cs`](./src/api/Services/AspNetPasswordHasher.cs) реалізовано вирівнювання часу обчислень через статичний `DummyHash`:
   ```csharp
   // Якщо користувача з таким email немає, IPasswordHasher все одно обчислює
   // повну перевірку проти DummyHash (виконуючи еквівалентні раунди PBKDF2):
@@ -462,3 +462,4 @@ $ dotnet build src/api/Waterfall.Api.csproj -c Release --no-incremental -p:Targe
 | `src/mcp/src/jsonSchemaToZod.ts`, `src/mcp/src/index.ts`, `src/mcp/eslint.config.js`, `src/mcp/package.json` | Саєнко Данило | Перетворювач JSON Schema → Zod без `eval`, fail-closed, налаштування ESLint з `eslint-plugin-security`, видалення `shx` | `npm run lint`, `npm run typecheck`, `npm audit`; диференційне порівняння зі старою реалізацією (670 наборів аргументів); stdio smoke-тест, зокрема з `--disallow-code-generation-from-strings` та ін'єкцією збою |
 | `.github/dependabot.yml`, `.github/workflows/mcp.yml`, job `test` у `.github/workflows/ci.yml` | Саєнко Данило | Конфігурація Dependabot і CI-перевірок (Бонус 2) | Звірка з довідником опцій Dependabot і `action.yml` setup-node на GitHub, розбір YAML, ті самі команди локально |
 | `src/api/Workers/JobParserService.cs`, `src/waterfall.Services/VacancyIngestionService.cs`, `src/waterfall.Services/Interfaces/IVacancyIngestionService.cs`, `BulkUpsertAsync` у репозиторії вакансій, `tests/waterfall.Ingestion.Tests/` | Саєнко Данило | Фоновий парсер дампу Djinni, нормалізація вакансій, масове збереження та юніт-тести | `dotnet test` (27 тестів, зокрема на SQLite); SecurityCodeScan без попереджень; ручний запуск API: з дампу збережено 10 вакансій, 2 відхилено з причиною |
+
