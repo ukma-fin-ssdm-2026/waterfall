@@ -21,6 +21,8 @@ public class WaterfallDbContext : DbContext
     public DbSet<UserDB> Users => Set<UserDB>();
     public DbSet<UserPersonalDataDB> UserPersonalData => Set<UserPersonalDataDB>();
     public DbSet<GeoLocationCacheDB> GeoLocationCache => Set<GeoLocationCacheDB>();
+    public DbSet<SearchQueryDB> SearchQueries => Set<SearchQueryDB>();
+    public DbSet<VacancyViewDB> VacancyViews => Set<VacancyViewDB>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
