@@ -53,14 +53,9 @@
 * [**decisions/**](./docs/architecture/decisions/) — ADR-001…003
 * [**uml/**](./docs/architecture/uml/) — `.puml` + `.svg`
 
-### Клієнт і якість коду (Лаб 5)
-* [**progress.md**](./docs/code-quality/progress.md) — структура модулів, стан коду, запуск застосунку, результати перевірок якості
-* [**TeamCharter.md §9**](./TeamCharter.md#9-політика-якості-та-огляду-коду) — стандарти коду, лінтери, чекліст Peer Review, Definition of Done
-* Застосунок (Windows): `dotnet run --project src/waterfall.UI -f net10.0-windows10.0.19041.0` (поруч має працювати API)
-* Перед комітом: `dotnet format waterfall.slnx --verify-no-changes`; хук `gitleaks` — `pre-commit install` (див. [`.pre-commit-config.yaml`](./.pre-commit-config.yaml))
-
 ### Проєктування та специфікація API (Лаб 4)
 * [**api-design.md**](./docs/api/api-design.md) — документ проєктування REST API (ресурсна модель, ендпоінти, пагінація, обробка помилок)
+* [**quality-attributes.md**](./docs/api/quality-attributes.md) — атрибути якості API
 * [**openapi-generated.yaml**](./docs/api/openapi-generated.yaml) — згенерована специфікація OpenAPI 3.0 (100% Code-First, 0 рядків вручну; не редагувати)
 * [**Swagger UI (інтерактивна документація)**](./docs/api/index.html) — автономний Swagger UI (CDN) поверх `openapi-generated.yaml`
 * [**Код бекенду Web API**](./src/api/) — реалізація на C# (.NET 10 / ASP.NET Core)
@@ -72,6 +67,27 @@
 4. Онлайн на GitHub Pages: https://ukma-fin-ssdm-2026.github.io/waterfall/ — збірка через `.github/workflows/api-docs.yml`.
 5. Регенерація специфікації з коду (Code-First): `dotnet run --project src/api -- --generate-openapi-and-exit` (або просто запуск сервера) — перезаписує `docs/api/openapi-generated.yaml` лише за наявності змін.
 6. Перевірка повноти схеми: усі операції мають summary/description, усі моделі — описи та приклади, усі `$ref` вказують на визначені схеми, помилки — через `ApiErrorResponse`.
+
+### Клієнт і якість коду (Лаб 5)
+* [**progress.md**](./docs/code-quality/progress.md) — структура модулів, стан коду, запуск застосунку, результати перевірок якості
+* [**static-analysis.md**](./docs/code-quality/static-analysis.md) — статичний аналіз безпеки
+* [**review-report.md**](./docs/code-quality/review-report.md) — огляд коду команди [pun-intended-team](https://github.com/ukma-fin-ssdm-2026/pun-intended-team)
+* [**TeamCharter.md §9**](./TeamCharter.md#9-політика-якості-та-огляду-коду) — стандарти коду, лінтери, чекліст Peer Review, Definition of Done
+* Застосунок (Windows): `dotnet run --project src/waterfall.UI -f net10.0-windows10.0.19041.0` (поруч має працювати API)
+* Перед комітом: `dotnet format waterfall.slnx --verify-no-changes`; хук `gitleaks` — `pre-commit install` (див. [`.pre-commit-config.yaml`](./.pre-commit-config.yaml))
+
+### Тестування та налагодження (Лаб 6)
+* [**testing-strategy.md**](./docs/testing/testing-strategy.md) — стратегія тестування
+* [**debugging-log.md**](./docs/testing/debugging-log.md) — журнал налагодження
+* [**Звіт покриття**](./coverage-report/) — звіт про покриття проекту тестами
+* [**tests**](./tests/) — директорія тестів
+
+### Планування тестування та огляди (Лаб 7)
+* [**test-plan.md**](./docs/validation/test-plan.md) — план тестування
+* [**review-log.md**](./docs/validation/review-log.md) — журнал оглядів
+
+### Рефакторинг та управління релізами (Лаб 8)
+* [**sonarcloud-report.md**](./docs/refactoring/sonarcloud-report.md) — Звіт SonarQube Cloud та результати рефакторингу
 
 ---
 
@@ -146,3 +162,4 @@ TypeScript MCP-сервер в [`src/mcp/`](./src/mcp/), згенеровани�
 | розділ `#### API: запуск, Swagger UI та регенерація специфікації` | Константін | текст інструкцій | самоперевірка автора (§8): скрипт `$ref`/описів/прикладів, HEAD-перевірка CDN, рев'ю в PR |
 | розділ `### Клієнт і якість коду (Лаб 5)` | Садиков Константін | так, текст | самоперевірка автора (§8); команди запущено локально |
 | примітка про секрети JWT, п. 2 (§ Запуск) | Дмитро (запит) + ШІ-агент (текст) | так | перевірено запуском: fail-fast без `Jwt__Key`, успішний старт і регенерація з ключем |
+
