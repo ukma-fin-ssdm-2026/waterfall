@@ -31,7 +31,7 @@ public sealed class WorkUaParser : IJobSiteParser
 
     public List<RawVacancy> ParseListPage(string html)
     {
-        HtmlNodeCollection? cards = Load(html).DocumentNode.SelectNodes("//div[contains(concat(' ', normalize-space(@class), ' '), ' job-link ')]");
+        HtmlNodeCollection? cards = Html.Load(html).DocumentNode.SelectNodes("//div[contains(concat(' ', normalize-space(@class), ' '), ' job-link ')]");
         List<RawVacancy> jobs = [];
         foreach (HtmlNode card in cards ?? Enumerable.Empty<HtmlNode>())
         {
@@ -43,19 +43,19 @@ public sealed class WorkUaParser : IJobSiteParser
             }
 
             string linkTitle = WebUtility.HtmlDecode(link.GetAttributeValue("title", string.Empty));
-            string title = Clean(link);
+            string title = Html.Clean(link);
             jobs.Add(new RawVacancy
             {
                 Source = JobSource.WorkUa,
                 Id = id.Groups["id"].Value,
                 Url = $"{BaseHost}/jobs/{id.Groups["id"].Value}/",
                 // Якщо текст посилання порожній, назва є в підказці до нього: «Назва, вакансія від …»
-                Title = title.Length > 0 ? title : Clean(PostedDate.Replace(linkTitle, string.Empty)),
-                Company = Text(card, ".//span[contains(@class,'glyphicon-company')]/following-sibling::span[1]//span[contains(@class,'strong-600')]"),
+                Title = title.Length > 0 ? title : Html.Clean(PostedDate.Replace(linkTitle, string.Empty)),
+                Company = Html.Text(card, ".//span[contains(@class,'glyphicon-company')]/following-sibling::span[1]//span[contains(@class,'strong-600')]"),
                 // Мітка «Вища за середню» стоїть окремо й суми не має; сума — одразу після значка гривні
-                Salary = Text(card, ".//span[contains(@class,'glyphicon-hryvnia-fill')]/following-sibling::span[1][contains(@class,'strong-600')]"),
+                Salary = Html.Text(card, ".//span[contains(@class,'glyphicon-hryvnia-fill')]/following-sibling::span[1][contains(@class,'strong-600')]"),
                 // «Тернопіль, » + посилання «1,0 км від центру»: беремо лише місто
-                Location = Text(card, ".//span[contains(@class,'glyphicon-map-marker')]/following-sibling::span[1]")?.TrimEnd(',', ' '),
+                Location = Html.Text(card, ".//span[contains(@class,'glyphicon-map-marker')]/following-sibling::span[1]")?.TrimEnd(',', ' '),
                 Posted = ParsePosted(linkTitle),
                 // Скорочений опис картки знадобиться, якщо сторінка вакансії не відкриється
                 DescriptionHtml = card.SelectSingleNode(".//p[contains(@class,'ellipsis')]")?.InnerHtml
@@ -67,24 +67,24 @@ public sealed class WorkUaParser : IJobSiteParser
 
     public RawVacancy ParseJobPage(string html)
     {
-        HtmlNode page = Load(html).DocumentNode;
+        HtmlNode page = Html.Load(html).DocumentNode;
         // Навички — мітки під «Ключові вимоги і навички»; роботодавець може їх не вказати
         List<string> skills = page.SelectNodes("//li[contains(concat(' ', normalize-space(@class), ' '), ' label-skill ')]")?
-            .Select(Clean)
+            .Select(Html.Clean)
             .Where(skill => skill.Length > 0)
             .ToList() ?? [];
         // «Вакансії › у Києві › Тестувальник»: останній пункт — категорія
         List<string> breadcrumbs = page.SelectNodes("//*[@itemtype='http://schema.org/BreadcrumbList']//*[@itemprop='itemListElement']//*[@itemprop='name']")?
-            .Select(Clean)
+            .Select(Html.Clean)
             .ToList() ?? [];
 
         return new RawVacancy
         {
             DescriptionHtml = page.SelectSingleNode("//div[@id='job-description']")?.InnerHtml,
-            Employment = Text(page, "//li[span[contains(@class,'glyphicon-schedule')]]"),
+            Employment = Html.Text(page, "//li[span[contains(@class,'glyphicon-schedule')]]"),
             // «Досвід роботи від 1 року.» серед ключових вимог
             Experience = page.SelectNodes("//h3[contains(., 'Ключові вимоги')]/following-sibling::ul[1]/li")?
-                .Select(requirement => Clean(requirement).TrimEnd('.'))
+                .Select(requirement => Html.Clean(requirement).TrimEnd('.'))
                 .FirstOrDefault(requirement => requirement.StartsWith("Досвід", StringComparison.OrdinalIgnoreCase)),
             Category = breadcrumbs.Count >= 3 ? breadcrumbs[^1] : null,
             Tags = skills.Count > 0 ? string.Join(", ", skills) : null
@@ -99,24 +99,4 @@ public sealed class WorkUaParser : IJobSiteParser
         int day = date.Success ? int.Parse(date.Groups["day"].Value, CultureInfo.InvariantCulture) : 0;
         return month > 0 ? $"{day:00}.{month:00}.{date.Groups["year"].Value}" : null;
     }
-
-    private static HtmlDocument Load(string html)
-    {
-        HtmlDocument document = new();
-        document.LoadHtml(html);
-        return document;
-    }
-
-    private static string? Text(HtmlNode node, string xpath)
-    {
-        string text = node.SelectSingleNode(xpath) is { } found ? Clean(found) : string.Empty;
-        return text.Length > 0 ? text : null;
-    }
-
-    // Шматки тексту з різних тегів розділяємо пробілом: «Повна зайнятість<span>·</span>Стандартний графік» не злипнеться
-    private static string Clean(HtmlNode node) =>
-        Clean(string.Join(' ', node.DescendantsAndSelf().Where(part => part.NodeType == HtmlNodeType.Text).Select(part => part.InnerText)));
-
-
-    private static string Clean(string html) => string.Join(' ', WebUtility.HtmlDecode(html).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 }
