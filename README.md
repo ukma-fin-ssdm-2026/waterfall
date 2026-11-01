@@ -50,7 +50,7 @@
 * [**traceability-matrix.md**](./docs/architecture/traceability-matrix.md) — простежуваність вимог
 * [**data-model.md**](./docs/architecture/data-model.md) — модель даних
 * [**threat-model.md**](./docs/architecture/threat-model.md) — STRIDE (загрози)
-* [**decisions/**](./docs/architecture/decisions/) — ADR-001…003
+* [**decisions/**](./docs/architecture/decisions/) — ADR-001…004
 * [**uml/**](./docs/architecture/uml/) — `.puml` + `.svg`
 
 ### Клієнт і якість коду (Лаб 5)
@@ -107,6 +107,11 @@
    # Windows PowerShell:
    $env:Jwt__Key = "<вставити згенероване>"
    ```
+2b. LLM-ключі (необов'язково): ШІ-функції вмикаються, щойно є ключ хоча б одного провайдера. Без ключів API запускається, а ШІ-запити отримують `503 LLM_UNAVAILABLE` і пропозицію звичайного пошуку (REL-003). Ключі не зберігаються в `appsettings.json` (THR-09): назви змінних задано в `Llm:Providers:<name>:ApiKeyEnv` (`OPENROUTER_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`), а порядок провайдерів і моделі — у `Llm:Roles` (ADR-004).
+- локальна розробка: `dotnet user-secrets set "Llm:Providers:openrouter:ApiKey" "<ключ>" --project src/api`
+- середовище: `$env:OPENROUTER_API_KEY = "<ключ>"` (PowerShell) або `export OPENROUTER_API_KEY="<ключ>"` (Linux/macOS)
+- для OpenRouter увімкніть zero data retention у налаштуваннях приватності акаунта (THR-06); ключі різних провайдерів дають резервні ланки ланцюжка
+- живий димовий тест провайдерів (не запускається в CI): `$env:WATERFALL_LLM_LIVE = "1"` і `dotnet test tests/waterfall.Services.Tests --filter Llm`
 3. Скачати залежності: `dotnet restore src/api/Waterfall.Api.csproj`
 4. Забілдити: `dotnet build src/api/Waterfall.Api.csproj`
 5. Запустити: `dotnet run --project src/api`
@@ -143,6 +148,7 @@ TypeScript MCP-сервер в [`src/mcp/`](./src/mcp/), згенеровани�
 | посилання на артефакти вимог | Денис | так, додавання посилань | самоперевірка автора (§8) |
 | розділ `### Архітектура` (навігація) | Садиков Константін | структурування посилань | самоперевірка автора (§8); рев'ю в PR |
 | розділ `### MCP-сервер` | Дмитро | структурування інструкцій | самоперевірка автора (§8) |
+| крок `2b` (налаштування LLM-ключів) | Садиков Константін | формулювання за ADR-004 і `Llm`-конфігурацією | самоперевірка автора (§8); запуск API без ключів |
 | розділ `#### API: запуск, Swagger UI та регенерація специфікації` | Константін | текст інструкцій | самоперевірка автора (§8): скрипт `$ref`/описів/прикладів, HEAD-перевірка CDN, рев'ю в PR |
 | розділ `### Клієнт і якість коду (Лаб 5)` | Садиков Константін | так, текст | самоперевірка автора (§8); команди запущено локально |
 | примітка про секрети JWT, п. 2 (§ Запуск) | Дмитро (запит) + ШІ-агент (текст) | так | перевірено запуском: fail-fast без `Jwt__Key`, успішний старт і регенерація з ключем |
