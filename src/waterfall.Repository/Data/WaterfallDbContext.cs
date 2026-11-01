@@ -23,6 +23,9 @@ public class WaterfallDbContext : DbContext
     public DbSet<GeoLocationCacheDB> GeoLocationCache => Set<GeoLocationCacheDB>();
     public DbSet<SearchQueryDB> SearchQueries => Set<SearchQueryDB>();
     public DbSet<VacancyViewDB> VacancyViews => Set<VacancyViewDB>();
+    public DbSet<ChatSessionDB> ChatSessions => Set<ChatSessionDB>();
+    public DbSet<ChatMessageDB> ChatMessages => Set<ChatMessageDB>();
+    public DbSet<ChatMessageVacancyDB> ChatMessageVacancies => Set<ChatMessageVacancyDB>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -33,6 +36,16 @@ public class WaterfallDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Складений ключ (message_id, vacancy_id) не дає зберегти ту саму вакансію в одній відповіді двічі
+        modelBuilder.Entity<ChatMessageVacancyDB>()
+            .HasKey(link => new { link.MessageId, link.VacancyId });
+
+        // Автор репліки зберігається рядком ("User"/"Assistant"), щоб вміст таблиці читався без декодування
+        modelBuilder.Entity<ChatMessageDB>()
+            .Property(message => message.Author)
+            .HasConversion<string>()
+            .HasMaxLength(20);
 
         if (Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
         {
