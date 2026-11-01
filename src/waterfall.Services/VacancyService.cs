@@ -1,9 +1,11 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: передача нормалізованих фільтрів у репозиторій і мапінг нових полів DTO; перевірено: тести VacancyServiceTests
 
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
+using Waterfall.Repository.Normalization;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Common;
 using Waterfall.Services.Models.Vacancies;
@@ -59,8 +61,11 @@ public class VacancyService : IVacancyService
                 search: filter.Search,
                 category: filter.Category,
                 experience: filter.Experience,
-                location: null,
-                schedule: null,
+                location: filter.Location,
+                workFormat: filter.WorkFormat,
+                maxExperienceMonths: filter.MaxExperienceMonths,
+                categoryGroup: filter.CategoryGroup,
+                skills: filter.Skills,
                 minSalary: filter.MinSalary,
                 maxSalary: filter.MaxSalary,
                 source: sourceFilter,
@@ -142,17 +147,21 @@ public class VacancyService : IVacancyService
     public async Task<VacancyDto> CreateAsync(CreateVacancyRequest request, CancellationToken ct = default)
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
+        string description = request.Description.Trim();
+        string? experience = request.Experience?.Trim();
         VacancyDB entity = new VacancyDB
         {
             Id = Guid.NewGuid(),
             Title = request.Title.Trim(),
             Company = request.Company.Trim(),
-            Description = request.Description.Trim(),
+            Description = description,
             Category = request.Category.Trim(),
             Location = request.Location.Trim(),
             FullAddress = request.FullAddress?.Trim(),
             Schedule = request.Schedule?.Trim(),
-            Experience = request.Experience?.Trim(),
+            Experience = experience,
+            // Досвід у місяцях виводимо з тексту: поля для нього в запиті немає, а фільтр каталогу працює з числом
+            ExperienceMonths = VacancyExperienceParser.ParseMonths(experience, description),
             SalaryMin = request.SalaryMin,
             SalaryMax = request.SalaryMax,
             Currency = request.Currency.ToUpperInvariant(),
@@ -188,6 +197,12 @@ public class VacancyService : IVacancyService
         if (request.FullAddress != null) entity.FullAddress = request.FullAddress.Trim();
         if (request.Schedule != null) entity.Schedule = request.Schedule.Trim();
         if (request.Experience != null) entity.Experience = request.Experience.Trim();
+        if (request.Experience != null || request.Description != null)
+        {
+            // Оновлюємо похідне число разом із текстом, інакше фільтр за досвідом розійдеться з описом
+            entity.ExperienceMonths = VacancyExperienceParser.ParseMonths(entity.Experience, entity.Description);
+        }
+
         if (request.SalaryMin.HasValue) entity.SalaryMin = request.SalaryMin;
         if (request.SalaryMax.HasValue) entity.SalaryMax = request.SalaryMax;
         if (request.Currency != null) entity.Currency = request.Currency.ToUpperInvariant();
@@ -229,10 +244,13 @@ public class VacancyService : IVacancyService
             Company = entity.Company,
             Description = entity.Description,
             Category = entity.Category,
+            CategoryGroup = entity.CategoryGroup,
             Location = entity.Location,
             FullAddress = entity.FullAddress,
             Schedule = entity.Schedule,
             Experience = entity.Experience,
+            ExperienceMonths = entity.ExperienceMonths,
+            WorkFormat = entity.WorkFormat,
             SalaryMin = entity.SalaryMin,
             SalaryMax = entity.SalaryMax,
             Currency = entity.Currency,
