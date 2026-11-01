@@ -35,6 +35,12 @@ public sealed record RawVacancy
     public string? FullAddress { get; init; }
     public string? Posted { get; init; }
     public string? Experience { get; init; }
+
+    /// <summary>
+    /// Мінімальний досвід у місяцях, якщо джерело дало його числом: Djinni — monthsOfExperience,
+    /// DOU — фасетна стрічка. null означає, що число треба виводити з тексту досвіду чи опису.
+    /// </summary>
+    public int? ExperienceMonths { get; init; }
     public string? Employment { get; init; }
     public string? Category { get; init; }
     public string? DescriptionHtml { get; init; }

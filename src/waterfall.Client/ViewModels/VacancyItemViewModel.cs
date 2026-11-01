@@ -196,11 +196,19 @@ public partial class VacancyItemViewModel : ObservableObject
     public string DetailsToggleText => IsDetailsExpanded ? "Згорнути ▲" : "Детальніше ▼";
 
     [RelayCommand]
-    private void ToggleDetails() => IsDetailsExpanded = !IsDetailsExpanded;
+    private void ToggleDetails()
+    {
+        IsDetailsExpanded = !IsDetailsExpanded;
+        if (IsDetailsExpanded)
+        {
+            _ = _gateway.RecordVacancyViewAsync(Id);
+        }
+    }
 
     [RelayCommand]
     private async Task OpenSourceAsync()
     {
+        _ = _gateway.RecordVacancyViewAsync(Id);
         if (HasSourceUrl && Uri.TryCreate(SourceUrl, UriKind.Absolute, out Uri? uri))
         {
             try
@@ -218,12 +226,11 @@ public partial class VacancyItemViewModel : ObservableObject
         }
     }
 
-    // # Mock
+    /// <summary>
+    /// Передає вакансію ШІ-консультанту (FR-010): вкладка ШІ відкриється й покаже аналіз.
+    /// </summary>
     [RelayCommand]
-    private void AnalyzeWithAi()
-    {
-        _reportError($"Запит на ШІ-аналіз вакансії «{Title}» передано асистенту.");
-    }
+    private void AnalyzeWithAi() => _messenger.Send(new AnalyzeVacancyRequestedMessage(Vacancy));
 
     public string? SourceText => Vacancy.Source switch
     {

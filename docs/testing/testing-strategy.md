@@ -3,38 +3,25 @@
 
 ## 1. Поточний статус
 
-У рішенні **526 тестів** у 6 проєктах (кількість — за `dotnet test`, 26.10.2026, після мерджу #136):
+У рішенні **567 тести** у 6 проєктах (кількість — за `dotnet test`, 01.11.2026):
 
 | Набір тестів | Модуль | Тестів | Що перевіряє |
 | :--- | :--- | :---: | :--- |
 | [`waterfall.Ingestion.Tests`](../../tests/waterfall.Ingestion.Tests/README.md) | збір вакансій | 186 | нормалізація полів, фоновий парсер, `BulkUpsertAsync` на справжній SQLite; розбір сторінок Djinni/Dou/Work.ua, `robots.txt` і темп запитів `SiteCrawler`; фікстури, заглушки, граничні випадки |
 | `waterfall.Auth.Tests` | автентифікація | 40 | сервіс автентифікації, JWT, хешування паролів, контролер, валідація запитів |
-| [`waterfall.Client.Tests`](../../tests/waterfall.Client.Tests/README.md) | клієнт / UI | 161 | `HttpGatewayService` (помилки мережі й сервера), viewmodels каталогу, «Обраного», входу і картки, розбір JWT; заглушки з керованими відповідями, `FakeTimeProvider`, property-based тест (FsCheck) |
-| [`waterfall.Repository.Tests`](../../tests/waterfall.Repository.Tests/README.md) | сховище (репозиторії) | 53 | SQLite in-memory: пошук за 4 полями та JSON, фільтрація, сортування, пагінація, `BulkUpsert`, ізоляція закладок та операції користувачів |
-| [`waterfall.Services.Tests`](../../tests/waterfall.Services.Tests/README.md) | бізнес-сервіси та кеш | 54 | Cache-Aside (PERF-001), Stale-Cache fallback (REL-001), збагачення `IsSaved`, каскадна інвалідація кешу, стійкість до битого JSON |
-| [`waterfall.Api.Tests`](../../tests/waterfall.Api.Tests/README.md) | REST API та безпека | 32 | Ендпоинти вакансій і закладок (HTTP 200/201/400/404/409), трасування запитів, витяг claims з JWT, захист від витоку даних у логи (CWE-532) |
+| [`waterfall.Client.Tests`](../../tests/waterfall.Client.Tests/README.md) | клієнт / UI | 168 | `HttpGatewayService` (помилки мережі й сервера), viewmodels каталогу, «Обраного», входу і картки, розбір JWT; заглушки з керованими відповідями, `FakeTimeProvider`, property-based тест (FsCheck) |
+| [`waterfall.Repository.Tests`](../../tests/waterfall.Repository.Tests/README.md) | сховище (репозиторії) | 61 | SQLite in-memory: пошук за 4 полями та JSON, фільтрація, сортування, пагінація, `BulkUpsert`, ізоляція закладок, операції користувачів і геокешу |
+| [`waterfall.Services.Tests`](../../tests/waterfall.Services.Tests/README.md) | бізнес-сервіси та кеш | 66 | Cache-Aside (PERF-001), Stale-Cache fallback (REL-001), збагачення `IsSaved`, каскадна інвалідація кешу, стійкість до битого JSON; адреса користувача в `UserPersonalData` |
+| [`waterfall.Api.Tests`](../../tests/waterfall.Api.Tests/README.md) | REST API та безпека | 46 | Ендпоїнти вакансій, закладок, автентифікації, профілю й геокодування (HTTP 200/201/400/401/404/409), трасування запитів, витяг claims з JWT, захист від витоку даних у логи (CWE-532) |
 | `src/mcp` (TypeScript) | MCP-сервер | — | тестів немає; лише статичні перевірки: ESLint з `eslint-plugin-security`, `tsc`, `npm audit` |
 
-Усі набори .NET прописані в CI (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)). З 19.10.2026 workflow-и виконуються на self-hosted раннерах курсу (PR #111), тож зелений прогін CI знову щось доводить: 26.10.2026 на `main` пройшли і тести (526, 0 падінь), і ворота покриття (77,7 %).
+Усі набори .NET прописані в CI (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)). З 19.10.2026 workflow-и виконуються на self-hosted раннерах курсу (PR #111), тож зелений прогін CI знову щось доводить: 01.11.2026 на `main` пройшли і тести (567, 0 падінь), і ворота покриття (76,5 %).
 
 ## 2. Покриття та філософія якості
 
 Замість штучної гонитви за «100% рядковим покриттям» через тривіальні перевірки вбудованих методів ORM чи авто-властивостей, набір тестів сфокусовано на критичній бізнес-логіці, стійкості (resilience) та граничних умовах.
 
-Загальне покриття по всьому рішенню: **80,3 % рядків, 82,5 % гілок, 93,8 % методів** (усі 6 наборів, coverlet + ReportGenerator з фільтрами з `ci.yml`, 19.10.2026). Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) виключає спільний [`tests/coverage.runsettings`](../../tests/coverage.runsettings). Ворота в CI запускають тести без нього і рахують ще й згенеровані рядки клієнта (~2000, зокрема `ClientJsonContext`), тому бачать **77,7 %** (26.10.2026, після #136; раніше — 81,7 %, до нових тестів клієнта — 80,6 %; [зведений дашборд](../../coverage-report/index.html) з 77,6 % згенеровано локально 18.10, ще до частини тестів сервісів).
-Покриття цільових сервісів та репозиторіїв:
-- `VacancyService`: **97,9 %**
-- `VacancyCacheService`: **98,7 %**
-- `SavedVacancyService`: **100 %**
-- `VacancyIngestionService`: **99,3 %**
-- `EfSavedVacancyRepository`: **96,2 %**
-- `EfUserRepository`: **100 %**
-- `ApiControllerBase`: **100 %**
-- `AuthController`: **100 %**
-- `AuthenticationService`: **98,5 %**
-- `VacanciesController` / `SavedVacanciesController`: **86,6 %**
-- `EfVacancyRepository`: **78,2 %** 
-- клієнт (`waterfall.Client`): **99,2 %** рядків, **98,3 %** гілок ([HTML-звіт](../../tests/waterfall.Client.Tests/coverage-report/index.html))
+Загальне покриття по всьому рішенню: **76,5 % рядків, 67,2 % гілок** (усі 6 наборів, coverlet + ReportGenerator з фільтрами з `ci.yml`, 01.11.2026). Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) виключає спільний [`tests/coverage.runsettings`](../../tests/coverage.runsettings).
 
 Що залишилось непокритим модульним тестуванням і чому:
 - **`Program.cs` та конфігурація хоста (0 %):** шаблонне завантаження веб-сервера ASP.NET Core; покривається smoke-тестами та e2e сценаріями при запуску.
@@ -44,7 +31,7 @@
 - **Клієнт:** лише властивості, що передають поле DTO (`Title`, `Description`, `Notes`), і неможливі комбінації умов у `FavoritesViewModel.IsEmpty`. Аналіз непокритого `catch` знайшов справжню ваду: відповідь у невідомому кодуванні (сторінка проксі в `windows-1251`) вилітала повз `ApiException`; виправлено з регресійними тестами. Проєкт `waterfall.UI` (XAML, code-behind, `SecureStorage`) у звіт не входить: це прив'язки без логіки, вони потребують MAUI-воркладів і перевіряються системними тестами. [HTML-звіт](../../tests/waterfall.Client.Tests/coverage-report/index.html)
 - **`src/mcp` (TypeScript):** MCP-сервер перевіряється статичними аналізаторами (ESLint з `eslint-plugin-security`, `tsc`, `npm audit`).
 
-[Єдиний зведений HTML-дашборд покриття](../../coverage-report/index.html) (доступний також через кореневий [`index.html`](../../index.html)).
+[Єдиний зведений HTML-дашборд покриття](../../coverage-report/index.html).
 
 ## 3. Плани рівнів тестування (Testing Pyramid & Scope)
 
@@ -135,3 +122,4 @@ Shrunk:
 | Структура документа, розділи про збір вакансій, плани | Данило | Чернетка тексту, підрахунок покриття | Цифри звірено зі звітом ReportGenerator і результатами `dotnet test` усіх наборів |
 | Розділи про каталог вакансій, кеш, сховище та API, фокус на якості тестів та стійкості, розширені плани рівнів тестування, безпеки, CI/CD | Денис| Допомога у формулюванні, рефакторинг тестів під бізнес-правила, розрахунок покриття зведеного звіту | Звірка цифр зі звітом ReportGenerator (`coverage-report/`), `dotnet test` (96 якісних тестів: 36 Repository, 35 Services, 25 Api) |
 | Клієнт у статусі, покритті й планах (3.1–3.3, 4.2–4.3); перерахунок кількості тестів і покриття без згенерованого коду (`tests/coverage.runsettings`); розділ 5 на «зараз» і «план» за фактичним `ci.yml`; підтвердження 6.1; бонус 6.3 (замінив опис нереалізованої властивості зарплат — вона лишилась планом у 4.3 — на реалізований тест FsCheck) | Константін | Чернетка тексту, аналіз непокритих рядків, підрахунок покриття | Цифри звірено зі зведеним звітом ReportGenerator по всіх 6 наборах (298 тестів, усі зелені), з runsettings і без нього, з фільтрами з `ci.yml`; стан CI — за анотаціями запусків GitHub Actions і API branch protection |
+| Оновлення статусу і описів наборів для гео/профілю (01.11.2026) | Дмитро | перерахунок і редагування | перевірено даними з CI |

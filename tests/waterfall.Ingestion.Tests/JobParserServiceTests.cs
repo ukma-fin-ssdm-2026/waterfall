@@ -358,6 +358,10 @@ public sealed class JobParserServiceTests : IDisposable
     {
         _web.Responses["https://jobs.dou.ua/vacancies/feeds/"] = (HttpStatusCode.OK, DouPageTests.Feed(DouPageTests.Item(1), DouPageTests.Item(2)));
         _web.Responses["https://jobs.dou.ua/companies/acme/vacancies/1/"] = (HttpStatusCode.OK, DouPageTests.JobPage());
+        // Фасети досвіду: вакансія 1 — «без досвіду», вакансія 2 — «від року». Обидві отримали мітку,
+        // тож решту фасетів уже не читаємо
+        _web.Responses["https://jobs.dou.ua/vacancies/feeds/?exp=0-1"] = (HttpStatusCode.OK, DouPageTests.Feed(DouPageTests.Item(1)));
+        _web.Responses["https://jobs.dou.ua/vacancies/feeds/?exp=1-3"] = (HttpStatusCode.OK, DouPageTests.Feed(DouPageTests.Item(2)));
         JobParserService parser = CreateParser(directory: null, douPages: 5);
 
         await parser.StartAsync(CancellationToken.None);
@@ -370,13 +374,38 @@ public sealed class JobParserServiceTests : IDisposable
                 "https://jobs.dou.ua/robots.txt",
                 "https://jobs.dou.ua/vacancies/feeds/",
                 "https://jobs.dou.ua/companies/acme/vacancies/1/",
-                "https://jobs.dou.ua/companies/acme/vacancies/2/"
+                "https://jobs.dou.ua/companies/acme/vacancies/2/",
+                "https://jobs.dou.ua/vacancies/feeds/?exp=0-1",
+                "https://jobs.dou.ua/vacancies/feeds/?exp=1-3"
             ],
             _web.Urls);
         Assert.All(_ingestion.Received, job => Assert.Equal(JobSource.Dou, job.Source));
+        // Мітка мінімального досвіду з фасетів: 0 місяців і 12 місяців
+        Assert.Equal([0, 12], _ingestion.Received.Select(job => job.ExperienceMonths));
         // Сторінка вакансії 1 уточнила поля, а сторінка 2 вакансією не була — лишилися дані зі стрічки
         Assert.Equal(["Middle Java Developer", "Вакансія 2"], _ingestion.Received.Select(job => job.Title));
         Assert.Equal(["Kvitka Bank", "Acme"], _ingestion.Received.Select(job => job.Company));
+    }
+
+    // AI: відсутність у фасеті не є негативною міткою досвіду; перевірено: тест падає, якщо фасети щось вигадують
+    [Fact]
+    public async Task Dou_VacancyAbsentFromFacets_KeepsUnknownExperience()
+    {
+        _web.Responses["https://jobs.dou.ua/vacancies/feeds/"] = (HttpStatusCode.OK, DouPageTests.Feed(DouPageTests.Item(3)));
+        foreach (string exp in new[] { "0-1", "1-3", "3-5", "5plus" })
+        {
+            _web.Responses[$"https://jobs.dou.ua/vacancies/feeds/?exp={exp}"] = (HttpStatusCode.OK, DouPageTests.Feed());
+        }
+
+        JobParserService parser = CreateParser(directory: null, douPages: 1);
+
+        await parser.StartAsync(CancellationToken.None);
+        await _ingestion.WaitForCallsAsync(1);
+        await parser.StopAsync(CancellationToken.None);
+
+        // У фасетах лише 25 останніх вакансій, тож відсутність нічого не доводить — досвід лишається невідомим
+        Assert.Null(Assert.Single(_ingestion.Received).ExperienceMonths);
+        Assert.Equal(4, _web.Urls.Count(url => url.Contains("exp=", StringComparison.Ordinal)));
     }
 
     [Fact]

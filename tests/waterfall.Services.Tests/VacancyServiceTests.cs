@@ -376,6 +376,75 @@ public sealed class VacancyServiceTests
         Assert.Equal(expectedCount, dto.Skills.Count);
     }
 
+    // AI: перевірка передачі нормалізованих фільтрів у репозиторій; перевірено: падає, якщо повернути null-заглушки
+    [Fact]
+    public async Task GetAllAsync_PassesNormalizedFiltersToRepository()
+    {
+        // Arrange
+        VacancyFilterParameters filter = new()
+        {
+            Search = "бухгалтер",
+            Location = "Київ",
+            WorkFormat = WorkFormat.Remote,
+            MaxExperienceMonths = 24,
+            CategoryGroup = "Finance",
+            Skills = ["1С", "Excel"],
+            SortBy = "title",
+            SortOrder = "asc"
+        };
+
+        // Act
+        await _service.GetAllAsync(filter);
+
+        // Assert
+        Assert.Equal("Київ", Assert.Single(_vacancyRepo.GetAllLocationCalls));
+        Assert.Equal(WorkFormat.Remote, Assert.Single(_vacancyRepo.GetAllWorkFormatCalls));
+        Assert.Equal(24, Assert.Single(_vacancyRepo.GetAllMaxExperienceCalls));
+        Assert.Equal("Finance", Assert.Single(_vacancyRepo.GetAllCategoryGroupCalls));
+        Assert.Equal(["1С", "Excel"], Assert.Single(_vacancyRepo.GetAllSkillsCalls));
+    }
+
+    [Fact]
+    public async Task CreateAsync_DerivesExperienceMonthsFromText()
+    {
+        // Arrange
+        CreateVacancyRequest request = new()
+        {
+            Title = "Middle .NET Developer",
+            Company = "Acme",
+            Description = "Цікава робота",
+            Category = ".NET",
+            Location = "Віддалено",
+            Experience = "2+ роки",
+            Source = JobSource.Djinni,
+            SourceUrl = "https://djinni.co/jobs/1/"
+        };
+
+        // Act
+        VacancyDto result = await _service.CreateAsync(request);
+
+        // Assert
+        Assert.Equal(24, result.ExperienceMonths);
+    }
+
+    [Fact]
+    public void MapToDto_ExposesNormalizedAttributes()
+    {
+        // Arrange
+        VacancyDB entity = CreateEntity("Data Analyst");
+        entity.CategoryGroup = "Data";
+        entity.WorkFormat = WorkFormat.Hybrid;
+        entity.ExperienceMonths = 36;
+
+        // Act
+        VacancyDto dto = VacancyService.MapToDto(entity);
+
+        // Assert
+        Assert.Equal("Data", dto.CategoryGroup);
+        Assert.Equal(WorkFormat.Hybrid, dto.WorkFormat);
+        Assert.Equal(36, dto.ExperienceMonths);
+    }
+
     [Theory]
     [InlineData("Djinni", JobSource.Djinni)]
     [InlineData("WorkUa", JobSource.WorkUa)]

@@ -66,7 +66,7 @@ public static class ServiceCollectionExtensions
 
         // Реалізації auth живуть в api (див. remarks в AuthenticationService): без стану — Singleton,
         // AuthenticationService залежить від scoped IUserRepository — Scoped.
-        services.AddSingleton<IPasswordHasher, AspNetPasswordHasher>();
+        services.AddSingleton<ISecurityService, SecurityService>();
         services.AddSingleton<IJwtTokenService, JwtTokenService>();
         services.AddScoped<IAuthenticationService, AuthenticationService>();
 

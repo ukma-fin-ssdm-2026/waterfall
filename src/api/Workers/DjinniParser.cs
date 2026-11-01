@@ -1,4 +1,5 @@
 // AI: розбір сторінок djinni.co (issue #62); перевірено: юніт-тести DjinniPageTests на розмітці справжніх сторінок (жовтень 2026), ручний запуск API проти djinni.co, самоперевірка автора (§8)
+// AI: збереження числового досвіду з monthsOfExperience; перевірено: тести DjinniPageTests
 
 using System.Globalization;
 using System.Net;
@@ -66,6 +67,7 @@ public sealed class DjinniParser : IJobSiteParser
         Location = FormatLocation(job),
         Posted = FormatPosted(Text(job, "datePosted")),
         Experience = FormatExperience(job),
+        ExperienceMonths = FormatExperienceMonths(job),
         Employment = FormatEmployment(job),
         Category = Text(job, "category"),
         // Опис у JSON-LD — звичайний текст; кодуємо його в HTML, щоб нормалізація не прийняла «List<T>» за тег
@@ -167,6 +169,17 @@ public sealed class DjinniParser : IJobSiteParser
             _ => "років"
         };
         return $"{years} {word} досвіду";
+    }
+
+    /// <summary>
+    /// monthsOfExperience → мінімальний досвід у місяцях. Рядок для показу лишає <see cref="FormatExperience"/>,
+    /// а фільтр каталогу працює з числом, тож число зберігаємо окремо, а не відновлюємо з тексту.
+    /// </summary>
+    private static int? FormatExperienceMonths(JsonElement job)
+    {
+        JsonElement requirements = Items(job, "experienceRequirements").FirstOrDefault();
+        decimal? months = Number(requirements, "monthsOfExperience");
+        return months is null ? null : (int)Math.Max(0, Math.Round(months.Value, MidpointRounding.AwayFromZero));
     }
 
     /// <summary>FULL_TIME → «Повна зайнятість» тощо; невідомий тип показуємо як є.</summary>

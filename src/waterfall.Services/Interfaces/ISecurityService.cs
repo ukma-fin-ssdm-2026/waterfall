@@ -28,12 +28,12 @@ public enum PasswordVerifyResult
 /// Інтерфейс хешування паролів (Security Service, Core Services Layer).
 /// Реалізація за замовчуванням — ASP.NET Identity PBKDF2; заміна на BCrypt/Argon2 — один клас + один рядок DI (SEC-001).
 /// </summary>
-public interface IPasswordHasher
+public interface ISecurityService
 {
     /// <summary>
     /// Створити стійкий хеш пароля (сіль вбудовано у формат).
     /// </summary>
-    string Hash(string password);
+    string HashPassword(string password);
 
     /// <summary>
     /// Перевірити пароль проти збереженого хеша.
@@ -44,5 +44,5 @@ public interface IPasswordHasher
     /// відповіді між гілками "неправильний логін" та "неправильний пароль" (THR-01)
     /// </param>
     /// <param name="providedPassword">Пароль із запиту (ніколи не логується, THR-08).</param>
-    PasswordVerifyResult Verify(string? hashedPassword, string providedPassword);
+    PasswordVerifyResult VerifyPassword(string? hashedPassword, string providedPassword);
 }
