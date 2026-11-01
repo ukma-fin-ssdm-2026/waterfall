@@ -5,7 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- **Robota.ua parser** (`RobotaUaParser`): reads schema.org `JobPosting` JSON-LD and vacancy links; wired into `JobParserService` (`Ingestion:RobotaUaPages`), URL domain check and UAH default in `VacancyIngestionService`, page count on the system settings screen. It gets no real vacancies yet: robota.ua answers `robots.txt` with a Cloudflare challenge (403), and its list page is rendered client-side.
+- **Robota.ua parser** (`RobotaUaParser`): reads schema.org `JobPosting` JSON-LD and vacancy links; wired into `JobParserService` (`Ingestion:RobotaUaPages`), URL domain check and UAH default in `VacancyIngestionService`, page count on the system settings screen.
+- **Headless-browser fetcher for Work.ua and Robota.ua** (`PlaywrightBrowserFetcher` / `IBrowserFetcher`): both sites sit behind Cloudflare and render their vacancy list client-side, so a plain `HttpClient` gets `403` or an empty Angular shell. `SiteCrawler` now fetches pages of sites marked `IBrowserOnlySite` through a single headless Chromium (`Microsoft.Playwright`), keeping the existing `robots.txt`, 2-second delay and page-limit behaviour unchanged. Djinni and DOU still use plain HTTP.
 
 ### Changed
 - **`robots.txt` answered with 401/403** now means the site is skipped and paused, like 5xx and 429; before, any 4xx counted as a missing file that allows everything.

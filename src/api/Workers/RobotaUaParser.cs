@@ -11,7 +11,7 @@ using Waterfall.Services.Models.Vacancies;
 namespace Waterfall.Api.Workers;
 
 /// <summary>robota.ua: вакансії читаються зі структурованих JobPosting-даних та посилань у списку.</summary>
-public sealed class RobotaUaParser : IJobSiteParser
+public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
 {
     private const string BaseHost = "https://robota.ua";
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(200);

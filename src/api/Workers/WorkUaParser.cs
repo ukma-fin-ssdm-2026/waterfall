@@ -13,7 +13,7 @@ namespace Waterfall.Api.Workers;
 /// work.ua, усі вакансії по всій Україні. Картка в списку дає назву, компанію, зарплату, місто й дату публікації,
 /// а сторінка вакансії — повний опис, графік, досвід, категорію й навички.
 /// </summary>
-public sealed class WorkUaParser : IJobSiteParser
+public sealed class WorkUaParser : IJobSiteParser, IBrowserOnlySite
 {
     private const string BaseHost = "https://www.work.ua";
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(200);

@@ -312,6 +312,48 @@ public sealed class JobParserServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task WorkUa_UsesBrowserWhenProvided_AndRobotsTxtIsReadViaBrowser()
+    {
+        FakeBrowserFetcher browser = new();
+        string list = WorkUaPageTests.ListPage(WorkUaPageTests.Card(11));
+        browser.Pages["https://www.work.ua/robots.txt"] = RobotsTxtTests.WorkUa;
+        browser.Pages["https://www.work.ua/jobs/?ss=1"] = list;
+        JobParserService parser = CreateParser(directory: null, workUaPages: 1, browserFetcher: browser);
+
+        await parser.StartAsync(CancellationToken.None);
+        await _ingestion.WaitForCallsAsync(1);
+        await parser.StopAsync(CancellationToken.None);
+
+        // Сторінки Work.ua просяться в браузера, а не через звичайний HTTP-клієнт
+        Assert.Contains("https://www.work.ua/robots.txt", browser.Urls);
+        Assert.Contains("https://www.work.ua/jobs/?ss=1", browser.Urls);
+        Assert.DoesNotContain("https://www.work.ua/robots.txt", _web.Urls);
+        Assert.Equal(JobSource.WorkUa, Assert.Single(_ingestion.Received).Source);
+    }
+
+    [Fact]
+    public async Task RobotaUa_UsesBrowserWhenProvided()
+    {
+        const string listing = """
+            <script type="application/ld+json">
+            {"@type":"JobPosting","identifier":"42","url":"https://robota.ua/company1/vacancy42",
+             "title":"QA Engineer","description":"Тестування продукту"}
+            </script>
+            """;
+        FakeBrowserFetcher browser = new();
+        browser.Pages["https://robota.ua/robots.txt"] = string.Empty;
+        browser.Pages["https://robota.ua/ua/zapros?page=1"] = listing;
+        JobParserService parser = CreateParser(directory: null, robotaUaPages: 1, browserFetcher: browser);
+
+        await parser.StartAsync(CancellationToken.None);
+        await _ingestion.WaitForCallsAsync(1);
+        await parser.StopAsync(CancellationToken.None);
+
+        Assert.Contains("https://robota.ua/ua/zapros?page=1", browser.Urls);
+        Assert.Equal(JobSource.RobotaUa, Assert.Single(_ingestion.Received).Source);
+    }
+
+    [Fact]
     public async Task Dou_ReadsFeedAndNewJobPages()
     {
         _web.Responses["https://jobs.dou.ua/vacancies/feeds/"] = (HttpStatusCode.OK, DouPageTests.Feed(DouPageTests.Item(1), DouPageTests.Item(2)));
@@ -507,7 +549,7 @@ public sealed class JobParserServiceTests : IDisposable
         Assert.Equal("1", Assert.Single(await crawler.CrawlAsync(CancellationToken.None)).Id);
     }
 
-    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0, int workUaPages = 0, int robotaUaPages = 0, int douPages = 0)
+    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0, int workUaPages = 0, int robotaUaPages = 0, int douPages = 0, IBrowserFetcher? browserFetcher = null)
     {
         ServiceProvider services = new ServiceCollection()
             .AddScoped<IVacancyIngestionService>(_ => _ingestion)
@@ -530,7 +572,8 @@ public sealed class JobParserServiceTests : IDisposable
             _web,
             Options.Create(options),
             new HostingEnvironment { ContentRootPath = _directory },
-            _logger);
+            _logger,
+            browserFetcher);
     }
 
     /// <summary>
@@ -592,6 +635,27 @@ public sealed class JobParserServiceTests : IDisposable
             }
 
             return Task.FromResult(message);
+        }
+    }
+
+    /// <summary>
+    /// Підробка браузера: повертає підготовлену розмітку й запам'ятовує адреси, за якими «відкривали» сторінки.
+    /// Будь-яка непідготовлена адреса отримує Fallback.
+    /// </summary>
+    private sealed class FakeBrowserFetcher : IBrowserFetcher
+    {
+        private readonly List<string> _urls = [];
+
+        public Dictionary<string, string> Pages { get; } = [];
+
+        public string Fallback { get; set; } = string.Empty;
+
+        public IReadOnlyList<string> Urls => _urls;
+
+        public Task<string> GetHtmlAsync(string url, CancellationToken ct)
+        {
+            _urls.Add(url);
+            return Task.FromResult(Pages.TryGetValue(url, out string? html) ? html : Fallback);
         }
     }
 

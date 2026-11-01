@@ -29,7 +29,8 @@ public class JobParserService : BackgroundService
         IHttpClientFactory httpClientFactory,
         IOptions<IngestionOptions> options,
         IHostEnvironment environment,
-        ILogger<JobParserService> logger)
+        ILogger<JobParserService> logger,
+        IBrowserFetcher? browserFetcher = null)
     {
         _scopeFactory = scopeFactory;
         _options = options.Value;
@@ -37,8 +38,8 @@ public class JobParserService : BackgroundService
         _sites =
         [
             new SiteCrawler(new DjinniParser(), _options.DjinniPages, _options.RequestDelay, httpClientFactory, logger),
-            new SiteCrawler(new WorkUaParser(), _options.WorkUaPages, _options.RequestDelay, httpClientFactory, logger),
-            new SiteCrawler(new RobotaUaParser(), _options.RobotaUaPages, _options.RequestDelay, httpClientFactory, logger),
+            new SiteCrawler(new WorkUaParser(), _options.WorkUaPages, _options.RequestDelay, httpClientFactory, logger, browserFetcher: browserFetcher),
+            new SiteCrawler(new RobotaUaParser(), _options.RobotaUaPages, _options.RequestDelay, httpClientFactory, logger, browserFetcher: browserFetcher),
             new SiteCrawler(new DouParser(), _options.DouPages, _options.RequestDelay, httpClientFactory, logger)
         ];
 

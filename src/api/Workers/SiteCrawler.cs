@@ -29,6 +29,12 @@ public interface IJobSiteParser
 }
 
 /// <summary>
+/// Сайт, сторінки якого звичайний HTTP-запит не відкриває: або Cloudflare відповідає боту 403,
+/// або список вакансій рендериться лише в браузері. Такі сайти обходяться через <see cref="IBrowserFetcher"/>.
+/// </summary>
+public interface IBrowserOnlySite : IJobSiteParser;
+
+/// <summary>
 /// Обходить один сайт, не навантажуючи його (THR-11, PERF-003): перевіряє robots.txt, робить паузу перед кожним запитом,
 /// читає кілька сторінок списку, а для нових вакансій — ще й їхні сторінки.
 /// Сторінку вакансії читає один раз: поки вакансія лишається в списку, дані з неї беруться з пам'яті.
@@ -52,6 +58,7 @@ public sealed class SiteCrawler
     private readonly int _pages;
     private readonly TimeSpan _requestDelay;
     private readonly IHttpClientFactory _httpClientFactory;
+    private readonly IBrowserFetcher? _browserFetcher;
     private readonly ILogger _logger;
     private readonly TimeProvider _time;
 
@@ -61,12 +68,13 @@ public sealed class SiteCrawler
     private TimeSpan _pause = TimeSpan.Zero;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
 
-    public SiteCrawler(IJobSiteParser site, int pages, TimeSpan requestDelay, IHttpClientFactory httpClientFactory, ILogger logger, TimeProvider? time = null)
+    public SiteCrawler(IJobSiteParser site, int pages, TimeSpan requestDelay, IHttpClientFactory httpClientFactory, ILogger logger, TimeProvider? time = null, IBrowserFetcher? browserFetcher = null)
     {
         _site = site;
         _pages = pages;
         _requestDelay = requestDelay;
         _httpClientFactory = httpClientFactory;
+        _browserFetcher = browserFetcher;
         _logger = logger;
         _time = time ?? TimeProvider.System;
     }
@@ -252,6 +260,21 @@ public sealed class SiteCrawler
     private async Task<RobotsTxt?> LoadRobotsAsync(HttpClient http, CancellationToken ct)
     {
         Uri robotsUrl = new(_site.Home, "/robots.txt");
+
+        // Сайт за Cloudflare пускає до robots.txt лише браузер, тож і його читаємо браузером
+        if (_browserFetcher is not null && _site is IBrowserOnlySite)
+        {
+            try
+            {
+                return RobotsTxt.Parse(await _browserFetcher.GetHtmlAsync(robotsUrl.ToString(), ct));
+            }
+            catch (Exception ex) when (IsSiteFailure(ex, ct))
+            {
+                _logger.LogWarning("{Url} недоступний у браузері ({Error}), тож сайт пропускаємо.", robotsUrl, ex.Message);
+                return null;
+            }
+        }
+
         using HttpResponseMessage response = await http.GetAsync(robotsUrl, ct);
         if (response.IsSuccessStatusCode)
         {
@@ -273,6 +296,14 @@ public sealed class SiteCrawler
     {
         // Пауза перед кожним запитом, щоб не навантажувати сайт і не отримати бан (THR-11, PERF-003)
         await Task.Delay(_requestDelay, ct);
+
+        // Сайти за Cloudflare чи з клієнтським рендером обходимо справжнім браузером: звичайний запит ботом
+        // вони не пускають (403) або віддають порожню оболонку без вакансій.
+        if (_browserFetcher is not null && _site is IBrowserOnlySite)
+        {
+            return await _browserFetcher.GetHtmlAsync(url, ct);
+        }
+
         using HttpResponseMessage response = await http.GetAsync(url, ct);
         if (RefusalCodes.Contains(response.StatusCode))
         {
