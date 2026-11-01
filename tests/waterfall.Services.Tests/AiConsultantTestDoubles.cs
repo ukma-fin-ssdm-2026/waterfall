@@ -265,10 +265,13 @@ public sealed class ScriptedLlmClientProvider : ILlmClientProvider
 
     public ScriptedChatClient Chat { get; } = new();
 
+    public ScriptedChatClient Analyze { get; } = new();
+
     public IChatClient GetClient(LlmRole role) => role switch
     {
         LlmRole.Extract => Extract,
         LlmRole.Chat => Chat,
+        LlmRole.Analyze => Analyze,
         _ => throw new NotSupportedException($"Роль {role} не використовується ШІ-консультантом.")
     };
 }

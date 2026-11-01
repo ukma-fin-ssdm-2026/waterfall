@@ -1,4 +1,5 @@
 // AI: реєстрація AiConsultantOptions та IAIConsultantService; перевірено: тести AIConsultantServiceTests і AIConsultantControllerTests
+// AI: реєстрація IVacancyAnalysisService для аналізу вакансій (FR-010); перевірено: тести VacancyAnalysisServiceTests і AIConsultantControllerTests
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using Microsoft.Extensions.DependencyInjection;
@@ -35,6 +36,7 @@ public static class ServiceCollectionExtensions
         // Налаштування ШІ-консультанта: секцію прив'язує шар API, а тут даємо робочі значення за замовчуванням
         services.AddOptions<AiConsultantOptions>();
         services.AddScoped<IAIConsultantService, AIConsultantService>();
+        services.AddScoped<IVacancyAnalysisService, VacancyAnalysisService>();
 
         return services;
     }

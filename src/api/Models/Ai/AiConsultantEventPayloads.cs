@@ -18,6 +18,9 @@ public static class AiConsultantEventNames
     /// <summary>Список вакансій із БД.</summary>
     public const string Vacancies = "vacancies";
 
+    /// <summary>Детермінована оцінка релевантності вибраних вакансій (лише <c>/analyze</c>).</summary>
+    public const string Relevance = "relevance";
+
     /// <summary>Порція тексту відповіді.</summary>
     public const string Delta = "delta";
 
@@ -99,6 +102,44 @@ public sealed record DoneEventPayload
     [JsonPropertyName("message_id")]
     public long MessageId { get; init; }
 }
+
+/// <summary>
+/// Дані події <c>relevance</c> для <c>/analyze</c>: детермінована оцінка кожної вакансії,
+/// обчислена ДО звернення до LLM (REL-003).
+/// </summary>
+public sealed record RelevanceEventPayload
+{
+    /// <summary>Оцінки в порядку переданих вакансій.</summary>
+    [JsonPropertyName("items")]
+    public IReadOnlyList<RelevanceItemPayload> Items { get; init; } = Array.Empty<RelevanceItemPayload>();
+}
+
+/// <summary>
+/// Оцінка релевантності однієї вакансії.
+/// </summary>
+public sealed record RelevanceItemPayload
+{
+    /// <summary>Ідентифікатор вакансії.</summary>
+    [JsonPropertyName("vacancy_id")]
+    public Guid VacancyId { get; init; }
+
+    /// <summary>Оцінка 0..100; null, якщо в користувача немає збережених вакансій.</summary>
+    [JsonPropertyName("score")]
+    public int? Score { get; init; }
+
+    /// <summary>Збіги, які підвищили оцінку (категорія, формати роботи, ключові слова).</summary>
+    [JsonPropertyName("matched")]
+    public IReadOnlyList<string> Matched { get; init; } = Array.Empty<string>();
+
+    /// <summary>Скільки збережених вакансій дали профіль (0 — збережених немає).</summary>
+    [JsonPropertyName("basis_count")]
+    public int BasisCount { get; init; }
+}
+
+/// <summary>
+/// Дані події <c>done</c> для <c>/analyze</c>: порожній об'єкт <c>{}</c> за контрактом.
+/// </summary>
+public sealed record AnalysisDoneEventPayload;
 
 /// <summary>
 /// Дані термінальної події <c>error</c>.

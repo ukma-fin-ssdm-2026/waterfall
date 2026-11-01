@@ -40,6 +40,8 @@ public sealed class AIConsultantControllerTests
 
     private const string MessagesPath = "/api/v1/ai-consultant/messages";
 
+    private const string AnalyzePath = "/api/v1/ai-consultant/analyze";
+
     private static VacancyDto CreateVacancy(string title = "Python Developer")
     {
         return new VacancyDto
@@ -94,6 +96,29 @@ public sealed class AIConsultantControllerTests
     private static HttpRequestMessage SendMessageRequest(Guid userId, string role, object body)
     {
         HttpRequestMessage request = new(HttpMethod.Post, MessagesPath)
+        {
+            Content = JsonContent.Create(body)
+        };
+        request.Headers.Add(TestAuthenticationHandler.UserHeader, userId.ToString());
+        request.Headers.Add(TestAuthenticationHandler.RoleHeader, role);
+        return request;
+    }
+
+    private static AIAnalysisTurn CreateAnalysisTurn(IReadOnlyList<VacancyDto>? vacancies = null)
+    {
+        List<VacancyDto> items = vacancies is null ? [CreateVacancy()] : vacancies.ToList();
+        return new AIAnalysisTurn
+        {
+            Vacancies = items,
+            Relevance = items
+                .Select((vacancy, index) => new VacancyRelevance(vacancy.Id, 72 - index, ["python", "віддалено"], 2))
+                .ToList()
+        };
+    }
+
+    private static HttpRequestMessage AnalyzeRequest(Guid userId, string role, object body)
+    {
+        HttpRequestMessage request = new(HttpMethod.Post, AnalyzePath)
         {
             Content = JsonContent.Create(body)
         };
@@ -394,6 +419,155 @@ public sealed class AIConsultantControllerTests
     }
 
     [Fact]
+    public async Task Analyze_Analyst_IsForbidden()
+    {
+        // Arrange
+        StubAnalysisService service = new();
+        await using ApiHost host = await ApiHost.StartAsync(new StubConsultantService(), analysisService: service);
+
+        // Act
+        HttpResponseMessage response = await host.Client.SendAsync(
+            AnalyzeRequest(SeekerId, "Analyst", new { vacancy_ids = new[] { Guid.NewGuid() } }));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Empty(service.PrepareCalls);
+    }
+
+    [Fact]
+    public async Task Analyze_ZeroOrFourIds_Returns400()
+    {
+        // Arrange
+        StubAnalysisService service = new();
+        await using ApiHost host = await ApiHost.StartAsync(new StubConsultantService(), analysisService: service);
+
+        // Act
+        HttpResponseMessage empty = await host.Client.SendAsync(
+            AnalyzeRequest(SeekerId, "JobSeeker", new { vacancy_ids = Array.Empty<Guid>() }));
+        HttpResponseMessage tooMany = await host.Client.SendAsync(
+            AnalyzeRequest(
+                SeekerId,
+                "JobSeeker",
+                new { vacancy_ids = new[] { Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid() } }));
+
+        // Assert
+        Assert.Equal(HttpStatusCode.BadRequest, empty.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, tooMany.StatusCode);
+        Assert.Empty(service.PrepareCalls);
+    }
+
+    [Fact]
+    public async Task Analyze_UnknownVacancy_Returns404()
+    {
+        // Arrange
+        Guid unknown = Guid.NewGuid();
+        StubAnalysisService service = new()
+        {
+            PrepareHandler = (_, _) => throw new VacancyNotFoundException(unknown)
+        };
+        await using ApiHost host = await ApiHost.StartAsync(new StubConsultantService(), analysisService: service);
+
+        // Act
+        HttpResponseMessage response = await host.Client.SendAsync(
+            AnalyzeRequest(SeekerId, "JobSeeker", new { vacancy_ids = new[] { unknown } }));
+        JsonElement error = Parse(await response.Content.ReadAsStringAsync());
+
+        // Assert
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal("application/json", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal("NOT_FOUND", error.GetProperty("error").GetProperty("code").GetString());
+    }
+
+    [Fact]
+    public async Task Analyze_StreamsRelevanceThenDeltasThenDone()
+    {
+        // Arrange
+        StubAnalysisService service = new()
+        {
+            Turn = CreateAnalysisTurn(),
+            StreamItems =
+            [
+                new AIAnalysisDelta("Вимоги: "),
+                new AIAnalysisDelta("Python."),
+                new AIAnalysisCompleted()
+            ]
+        };
+        await using ApiHost host = await ApiHost.StartAsync(new StubConsultantService(), analysisService: service);
+
+        // Act
+        HttpResponseMessage response = await host.Client.SendAsync(
+            AnalyzeRequest(SeekerId, "JobSeeker", new { vacancy_ids = new[] { service.Turn.Vacancies[0].Id } }));
+        List<(string Event, string Data)> events = await ReadEventsAsync(response);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("text/event-stream", response.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(new[] { "relevance", "delta", "delta", "done" }, events.Select(item => item.Event));
+
+        JsonElement relevance = Parse(events[0].Data);
+        JsonElement item = relevance.GetProperty("items")[0];
+        Assert.Equal(service.Turn.Vacancies[0].Id, item.GetProperty("vacancy_id").GetGuid());
+        Assert.Equal(72, item.GetProperty("score").GetInt32());
+        Assert.Equal(2, item.GetProperty("basis_count").GetInt32());
+        Assert.Equal("python", item.GetProperty("matched")[0].GetString());
+
+        Assert.Equal("Вимоги: ", Parse(events[1].Data).GetProperty("text").GetString());
+        Assert.Equal("Python.", Parse(events[2].Data).GetProperty("text").GetString());
+        Assert.Equal("{}", events[3].Data);
+        Assert.Equal(SeekerId, Assert.Single(service.PrepareCalls).UserId);
+    }
+
+    [Fact]
+    public async Task Analyze_LlmUnavailableAfterRelevance_SendsTerminalErrorEvent()
+    {
+        // Arrange: провайдер відмовив до першого delta, але relevance вже порахована без LLM
+        StubAnalysisService service = new()
+        {
+            Turn = CreateAnalysisTurn(),
+            StreamItems = Array.Empty<AIAnalysisStreamItem>(),
+            StreamException = new LlmUnavailableException(LlmFailureKind.NotConfigured)
+        };
+        await using ApiHost host = await ApiHost.StartAsync(new StubConsultantService(), analysisService: service);
+
+        // Act
+        HttpResponseMessage response = await host.Client.SendAsync(
+            AnalyzeRequest(SeekerId, "JobSeeker", new { vacancy_ids = new[] { service.Turn.Vacancies[0].Id } }));
+        List<(string Event, string Data)> events = await ReadEventsAsync(response);
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(new[] { "relevance", "error" }, events.Select(item => item.Event));
+        JsonElement error = Parse(events[^1].Data);
+        Assert.Equal("LLM_UNAVAILABLE", error.GetProperty("code").GetString());
+        Assert.Contains(
+            "релевантності",
+            error.GetProperty("message").GetString(),
+            StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Analyze_SharesRateLimitWithMessages()
+    {
+        // Arrange: одна політика на користувача для /messages і /analyze (THR-10)
+        StubConsultantService consultant = new() { StreamItems = SuccessfulStream() };
+        StubAnalysisService analysis = new() { Turn = CreateAnalysisTurn(), StreamItems = [new AIAnalysisCompleted()] };
+        await using ApiHost host = await ApiHost.StartAsync(consultant, messagesPerHour: 1, analysisService: analysis);
+
+        // Act
+        HttpResponseMessage message = await host.Client.SendAsync(
+            SendMessageRequest(SeekerId, "JobSeeker", new { text = "шукаю python" }));
+        HttpResponseMessage analyze = await host.Client.SendAsync(
+            AnalyzeRequest(SeekerId, "JobSeeker", new { vacancy_ids = new[] { Guid.NewGuid() } }));
+        JsonElement error = Parse(await analyze.Content.ReadAsStringAsync());
+
+        // Assert
+        Assert.Equal(HttpStatusCode.OK, message.StatusCode);
+        Assert.Equal(HttpStatusCode.TooManyRequests, analyze.StatusCode);
+        Assert.Equal("RATE_LIMITED", error.GetProperty("error").GetProperty("code").GetString());
+        Assert.Empty(analysis.PrepareCalls);
+    }
+
+    [Fact]
     public async Task DeleteSession_OwnSession_Returns204WithCurrentUser()
     {
         // Arrange
@@ -445,7 +619,10 @@ public sealed class AIConsultantControllerTests
 
         public HttpClient Client { get; }
 
-        public static async Task<ApiHost> StartAsync(StubConsultantService service, int messagesPerHour = 20)
+        public static async Task<ApiHost> StartAsync(
+            StubConsultantService service,
+            int messagesPerHour = 20,
+            StubAnalysisService? analysisService = null)
         {
             WebApplicationBuilder builder = WebApplication.CreateBuilder(new WebApplicationOptions
             {
@@ -475,6 +652,7 @@ public sealed class AIConsultantControllerTests
                 .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(TestAuthenticationHandler.SchemeName, _ => { });
             builder.Services.AddAuthorization();
             builder.Services.AddSingleton<IAIConsultantService>(service);
+            builder.Services.AddSingleton<IVacancyAnalysisService>(analysisService ?? new StubAnalysisService());
             builder.Services.AddWaterfallAiConsultantRateLimiting(builder.Configuration);
 
             WebApplication app = builder.Build();
@@ -588,6 +766,50 @@ public sealed class AIConsultantControllerTests
         {
             DeletedSessions.Add((sessionId, userId));
             return Task.FromResult(DeleteSucceeds);
+        }
+    }
+
+    /// <summary>
+    /// Підміна сервісу аналізу вакансій: контролер, SSE-події та rate limiting справжні, LLM не викликається.
+    /// </summary>
+    private sealed class StubAnalysisService : IVacancyAnalysisService
+    {
+        public AIAnalysisTurn Turn { get; set; } = CreateAnalysisTurn();
+
+        public IReadOnlyList<AIAnalysisStreamItem> StreamItems { get; set; } = Array.Empty<AIAnalysisStreamItem>();
+
+        public Exception? StreamException { get; set; }
+
+        public Func<Guid, IReadOnlyList<Guid>, Task<AIAnalysisTurn>>? PrepareHandler { get; set; }
+
+        public List<(Guid UserId, IReadOnlyList<Guid> VacancyIds)> PrepareCalls { get; } = [];
+
+        public Task<AIAnalysisTurn> PrepareAsync(
+            Guid userId,
+            IReadOnlyList<Guid> vacancyIds,
+            CancellationToken ct = default)
+        {
+            PrepareCalls.Add((userId, vacancyIds));
+            return PrepareHandler is not null
+                ? PrepareHandler(userId, vacancyIds)
+                : Task.FromResult(Turn);
+        }
+
+        public async IAsyncEnumerable<AIAnalysisStreamItem> StreamAnalysisAsync(
+            AIAnalysisTurn turn,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct = default)
+        {
+            foreach (AIAnalysisStreamItem item in StreamItems)
+            {
+                ct.ThrowIfCancellationRequested();
+                yield return item;
+                await Task.Yield();
+            }
+
+            if (StreamException is not null)
+            {
+                throw StreamException;
+            }
         }
     }
 }

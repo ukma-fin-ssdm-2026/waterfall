@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: дія /analyze з подією relevance перед LLM (FR-010); перевірено: тести AIConsultantControllerTests і VacancyAnalysisServiceTests
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -16,8 +17,9 @@ using Waterfall.Services.Models.Ai;
 namespace Waterfall.Api.Controllers;
 
 /// <summary>
-/// ШІ-консультант шукача роботи: діалог природною мовою, підбір вакансій із каталогу
-/// та стрімінг відповіді через Server-Sent Events (FR-002, FR-009, US-005).
+/// ШІ-консультант шукача роботи: діалог природною мовою, підбір вакансій із каталогу,
+/// стрімінг відповіді через Server-Sent Events (FR-002, FR-009, US-005) та аналіз вибраних
+/// вакансій за профілем збережених (FR-010).
 /// </summary>
 [ApiController]
 [Authorize(Roles = "JobSeeker")]
@@ -26,13 +28,16 @@ namespace Waterfall.Api.Controllers;
 public class AIConsultantController : ApiControllerBase
 {
     private readonly IAIConsultantService _consultantService;
+    private readonly IVacancyAnalysisService _analysisService;
     private readonly ILogger<AIConsultantController> _logger;
 
     public AIConsultantController(
         IAIConsultantService consultantService,
+        IVacancyAnalysisService analysisService,
         ILogger<AIConsultantController> logger)
     {
         _consultantService = consultantService;
+        _analysisService = analysisService;
         _logger = logger;
     }
 
@@ -139,6 +144,102 @@ public class AIConsultantController : ApiControllerBase
     }
 
     /// <summary>
+    /// Проаналізувати вибрані вакансії за профілем користувача та стрімити розбір через SSE.
+    /// </summary>
+    /// <remarks>
+    /// Послідовність подій: <c>relevance</c> (детерміновані оцінки 0..100, обчислені без LLM),
+    /// далі багато <c>delta</c> і завершальна <c>done</c> (<c>{}</c>).
+    /// Помилки до початку стрімінгу повертаються звичайним JSON: 400 (не 1..3 вакансії), 401, 403, 404
+    /// (хоч однієї вакансії немає в каталозі), 429 (спільний ліміт із <c>/messages</c>).
+    /// <para>
+    /// Свідоме відхилення від контракту #5: 503 <c>LLM_UNAVAILABLE</c> тут НЕ повертається перед
+    /// стрімінгом. Оцінка релевантності не потребує LLM, тому сервер спершу віддає корисну подію
+    /// <c>relevance</c>, а відмову провайдера повідомляє термінальною подією <c>error</c> з кодом
+    /// <c>LLM_UNAVAILABLE</c> (REL-003: відмова ШІ не забирає вже обчислений результат).
+    /// </para>
+    /// </remarks>
+    /// <param name="request">Від 1 до 3 ідентифікаторів вакансій каталогу.</param>
+    /// <param name="ct">Токен скасування операції.</param>
+    /// <response code="200">Потік подій SSE (<c>relevance</c>, <c>delta</c>, <c>done</c> або <c>error</c>).</response>
+    /// <response code="400">Не передано жодної вакансії або передано більше трьох.</response>
+    /// <response code="403">Користувач не є шукачем роботи.</response>
+    /// <response code="404">Хоч однієї з указаних вакансій немає в каталозі.</response>
+    /// <response code="429">Перевищено ліміт запитів до ШІ.</response>
+    [HttpPost("analyze")]
+    [EnableRateLimiting(AiConsultantRateLimitingExtensions.PolicyName)]
+    [SwaggerOperation(
+        Summary = "Проаналізувати вибрані вакансії (SSE)",
+        Description = "Обчислює детерміновану релевантність вакансій профілю збережених вакансій користувача "
+            + "(подія relevance), а потім стрімить розбір ШІ: обов'язкові й бажані вимоги, червоні прапорці "
+            + "та пояснення відповідності з посиланням на score. Якщо LLM недоступна — relevance лишається, "
+            + "а потік завершується подією error з кодом LLM_UNAVAILABLE.",
+        OperationId = "AnalyzeVacancies",
+        Tags = ["AiConsultant"])]
+    [ProducesResponseType(typeof(string), StatusCodes.Status200OK, "text/event-stream")]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> Analyze([FromBody] AIAnalysisRequest request, CancellationToken ct)
+    {
+        if (CurrentUserId is not Guid userId)
+        {
+            return ErrorUnauthorized("Потрібна автентифікація для аналізу вакансій.");
+        }
+
+        AIAnalysisTurn turn;
+        try
+        {
+            // Релевантність і промпт готуються без LLM, тому відмова провайдера не заважає
+            // віддати клієнту оцінки: вона приходить уже всередині SSE (див. remarks)
+            turn = await _analysisService.PrepareAsync(userId, request.VacancyIds, ct);
+        }
+        catch (VacancyNotFoundException exception)
+        {
+            return ErrorNotFound($"Вакансію з ID '{exception.VacancyId}' не знайдено в каталозі.");
+        }
+        catch (ArgumentException exception)
+        {
+            return ErrorBadRequest(exception.Message);
+        }
+
+        SseEventWriter.PrepareResponse(Response);
+
+        try
+        {
+            await SseEventWriter.WriteAsync(
+                Response,
+                AiConsultantEventNames.Relevance,
+                new RelevanceEventPayload
+                {
+                    Items = turn.Relevance
+                        .Select(item => new RelevanceItemPayload
+                        {
+                            VacancyId = item.VacancyId,
+                            Score = item.Score,
+                            Matched = item.Matched,
+                            BasisCount = item.BasisCount
+                        })
+                        .ToList()
+                },
+                ct);
+
+            await StreamAnalysisAsync(turn, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            _logger.LogInformation("Клієнт закрив SSE-з'єднання аналізу вакансій");
+        }
+        catch (IOException exception)
+        {
+            _logger.LogInformation(exception, "SSE-з'єднання аналізу вакансій обірвано");
+        }
+
+        return new EmptyResult();
+    }
+
+    /// <summary>
     /// Видалити діалог з ШІ-консультантом («очистити чат»).
     /// </summary>
     /// <param name="id">Ідентифікатор діалогу.</param>
@@ -236,6 +337,81 @@ public class AIConsultantController : ApiControllerBase
             await TryWriteErrorAsync(
                 AiConsultantErrorCodes.Internal,
                 "Відповідь ШІ завершилася некоректно. Спробуйте ще раз.",
+                ct);
+        }
+    }
+
+    /// <summary>
+    /// Стрімити розбір LLM для <c>/analyze</c>, перетворюючи елементи сервісу на події
+    /// <c>delta</c> і <c>done</c>. Подія <c>relevance</c> уже надіслана, тож відмова провайдера
+    /// не забирає вже обчислений результат (REL-003).
+    /// </summary>
+    private async Task StreamAnalysisAsync(AIAnalysisTurn turn, CancellationToken ct)
+    {
+        bool doneSent = false;
+        try
+        {
+            await foreach (AIAnalysisStreamItem item in _analysisService.StreamAnalysisAsync(turn, ct))
+            {
+                switch (item)
+                {
+                    case AIAnalysisDelta delta:
+                        await SseEventWriter.WriteAsync(
+                            Response,
+                            AiConsultantEventNames.Delta,
+                            new DeltaEventPayload { Text = delta.Text },
+                            ct);
+                        break;
+
+                    case AIAnalysisCompleted:
+                        await SseEventWriter.WriteAsync(
+                            Response,
+                            AiConsultantEventNames.Done,
+                            new AnalysisDoneEventPayload(),
+                            ct);
+                        doneSent = true;
+                        break;
+
+                    default:
+                        throw new InvalidOperationException(
+                            $"Невідомий елемент потоку аналізу вакансій: {item.GetType().Name}.");
+                }
+            }
+        }
+        catch (LlmUnavailableException exception)
+        {
+            _logger.LogWarning(
+                "Аналіз вакансій ({VacancyCount}) обірвано: LLM недоступна ({FailureKind})",
+                turn.Vacancies.Count,
+                exception.Kind);
+            await TryWriteErrorAsync(
+                AiConsultantErrorCodes.LlmUnavailable,
+                "ШІ-аналіз тимчасово недоступний. Оцінки релевантності вже показані й залишаються актуальними — "
+                    + "можете скористатися звичайним пошуком за фільтрами каталогу.",
+                ct);
+            return;
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is not IOException)
+        {
+            _logger.LogError(exception, "Помилка стрімінгу аналізу вакансій");
+            await TryWriteErrorAsync(
+                AiConsultantErrorCodes.Internal,
+                "Не вдалося сформувати аналіз вакансій. Спробуйте ще раз або скористайтеся звичайним пошуком.",
+                ct);
+            return;
+        }
+
+        if (!doneSent)
+        {
+            // Клієнт не має лишитися без термінальної події
+            _logger.LogError("Потік аналізу вакансій завершився без події done");
+            await TryWriteErrorAsync(
+                AiConsultantErrorCodes.Internal,
+                "Аналіз вакансій завершився некоректно. Спробуйте ще раз.",
                 ct);
         }
     }
