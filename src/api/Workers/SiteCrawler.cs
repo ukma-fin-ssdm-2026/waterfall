@@ -245,8 +245,9 @@ public sealed class SiteCrawler
     };
 
     /// <summary>
-    /// Відсутній robots.txt (4xx) дозволяє все, а збій сервера (5xx) — ні: тоді сайт пропускаємо (null)
-    /// й даємо йому відпочити. Так само, якщо сайт попросив не поспішати (429).
+    /// Відсутній robots.txt (404 та інші 4xx) дозволяє все, а збій сервера (5xx) — ні: тоді сайт пропускаємо (null)
+    /// й даємо йому відпочити. Так само, якщо сайт попросив не поспішати (429) або не пускає до robots.txt (401, 403 —
+    /// як перевірка Cloudflare на robota.ua): RFC 9309 таке дозволяє вважати відсутнім файлом, але сайт цим прямо закривається від ботів.
     /// </summary>
     private async Task<RobotsTxt?> LoadRobotsAsync(HttpClient http, CancellationToken ct)
     {
@@ -257,7 +258,8 @@ public sealed class SiteCrawler
             return RobotsTxt.Parse(await response.Content.ReadAsStringAsync(ct));
         }
 
-        if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.TooManyRequests)
+        if ((int)response.StatusCode >= 500
+            || response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
         {
             _logger.LogWarning("{Url} недоступний (код {Status}), тож сайт пропускаємо.", robotsUrl, (int)response.StatusCode);
             PauseAfterRefusal(response.Headers.RetryAfter);

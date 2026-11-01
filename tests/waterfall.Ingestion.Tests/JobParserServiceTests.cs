@@ -254,6 +254,8 @@ public sealed class JobParserServiceTests : IDisposable
     [Theory]
     [InlineData(HttpStatusCode.OK, "User-agent: *\nDisallow: /jobs")]
     [InlineData(HttpStatusCode.InternalServerError, "")] // за RFC 9309 збій robots.txt — заборона
+    [InlineData(HttpStatusCode.Forbidden, "")] // перевірка на ботів замість robots.txt (як Cloudflare на robota.ua) — теж заборона
+    [InlineData(HttpStatusCode.Unauthorized, "")]
     public async Task Djinni_RobotsTxtForbidsJobs_SiteIsSkipped(HttpStatusCode status, string robotsTxt)
     {
         _web.FirstPage = DjinniPageTests.Page(DjinniPageTests.Job(1));
