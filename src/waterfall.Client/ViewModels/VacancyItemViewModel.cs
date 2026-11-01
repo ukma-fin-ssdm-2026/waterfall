@@ -226,12 +226,11 @@ public partial class VacancyItemViewModel : ObservableObject
         }
     }
 
-    // # Mock
+    /// <summary>
+    /// Передає вакансію ШІ-консультанту (FR-010): вкладка ШІ відкриється й покаже аналіз.
+    /// </summary>
     [RelayCommand]
-    private void AnalyzeWithAi()
-    {
-        _reportError($"Запит на ШІ-аналіз вакансії «{Title}» передано асистенту.");
-    }
+    private void AnalyzeWithAi() => _messenger.Send(new AnalyzeVacancyRequestedMessage(Vacancy));
 
     public string? SourceText => Vacancy.Source switch
     {

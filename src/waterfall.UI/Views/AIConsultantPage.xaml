@@ -8,7 +8,7 @@
              Title="ШІ-консультант"
              BackgroundColor="{StaticResource DarkBg2}">
 
-    <Grid RowDefinitions="Auto,Auto,*,Auto,Auto">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto">
 
         <!-- Підказка та очищення контексту (FR-009) -->
         <Border Padding="14,10"
@@ -46,8 +46,17 @@
             </HorizontalStackLayout>
         </ScrollView>
 
+        <!-- Помилка, яку не вдалося показати в самому повідомленні (напр. «Обране» з картки в чаті) -->
+        <Border Grid.Row="2"
+                IsVisible="{Binding HasError}"
+                Style="{StaticResource ErrorBanner}">
+            <Label Text="{Binding ErrorMessage}"
+                   VerticalOptions="Center"
+                   Style="{StaticResource ErrorLabel}" />
+        </Border>
+
         <!-- Список повідомлень діалогу (US-005) -->
-        <CollectionView Grid.Row="2"
+        <CollectionView Grid.Row="3"
                         ItemsSource="{Binding Messages}"
                         SelectionMode="None"
                         Margin="12,0">
@@ -101,6 +110,13 @@
                                        TextColor="{StaticResource White}"
                                        FontSize="14" />
 
+                                <!-- Оцінка релевантності вакансії з результату /analyze (FR-010) -->
+                                <Label Text="{Binding RelevanceText}"
+                                       IsVisible="{Binding HasRelevance}"
+                                       FontFamily="OpenSansSemibold"
+                                       FontSize="13"
+                                       TextColor="{StaticResource Accent}" />
+
                                 <!-- Позначка розбіжності за US-005 AC-3 (<100%) -->
                                 <Border IsVisible="{Binding HasDisclaimer}"
                                         Style="{StaticResource ErrorBanner}"
@@ -109,6 +125,12 @@
                                            Style="{StaticResource ErrorLabel}"
                                            FontSize="12" />
                                 </Border>
+
+                                <!-- Які саме критерії знято, щоб знайти хоч щось (US-005 AC-3) -->
+                                <Label Text="{Binding RelaxedFilters}"
+                                       IsVisible="{Binding HasRelaxedFilters}"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="11" />
 
                                 <!-- Вкладені рекомендовані вакансії (US-005 AC-1) -->
                                 <VerticalStackLayout BindableLayout.ItemsSource="{Binding MatchedVacancies}"
@@ -126,6 +148,14 @@
                                     </BindableLayout.ItemTemplate>
                                 </VerticalStackLayout>
 
+                                <!-- REL-003: запасний шлях, коли ШІ недоступний або вичерпано ліміт запитів -->
+                                <Button Text="Перейти до каталогу"
+                                        IsVisible="{Binding ShowCatalogAction}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:AIConsultantViewModel}}, Path=GoToCatalogCommand}"
+                                        Style="{StaticResource LinkButton}"
+                                        HorizontalOptions="Start"
+                                        FontSize="12" />
+
                                 <Label Text="{Binding TimeText}"
                                        Style="{StaticResource MutedLabel}"
                                        FontSize="10"
@@ -138,7 +168,7 @@
         </CollectionView>
 
         <!-- Індикатор генерації відповіді (PERF-002: ≤ 1 сек індикатор) -->
-        <HorizontalStackLayout Grid.Row="3"
+        <HorizontalStackLayout Grid.Row="4"
                                IsVisible="{Binding IsThinking}"
                                Spacing="8"
                                Padding="16,8">
@@ -151,7 +181,7 @@
         </HorizontalStackLayout>
 
         <!-- Панель введення повідомлення -->
-        <Border Grid.Row="4"
+        <Border Grid.Row="5"
                 StrokeShape="Rectangle"
                 StrokeThickness="1"
                 Stroke="{StaticResource Secondary}"
