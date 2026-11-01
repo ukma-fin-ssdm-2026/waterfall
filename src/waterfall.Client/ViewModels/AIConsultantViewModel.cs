@@ -317,7 +317,7 @@ public partial class AIConsultantViewModel : ObservableObject
                 {
                     case AiRelevanceEvent relevance:
                         reply ??= AddBotMessage();
-                        reply.RelevanceText = FormatRelevance(relevance.Items.FirstOrDefault());
+                        reply.RelevanceText = FormatRelevance(relevance.Items.Count > 0 ? relevance.Items[0] : null);
                         break;
                     case AiDeltaEvent delta:
                         reply ??= AddBotMessage();
@@ -383,7 +383,8 @@ public partial class AIConsultantViewModel : ObservableObject
 
         try
         {
-            await _gateway.DeleteAiSessionAsync(sessionId);
+            // Очищення не скасовуємо разом зі стрімом: сесію на сервері треба видалити в будь-якому разі
+            await _gateway.DeleteAiSessionAsync(sessionId, CancellationToken.None);
         }
         catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
@@ -424,7 +425,7 @@ public partial class AIConsultantViewModel : ObservableObject
             return null;
         }
 
-        string? token = await _tokens.GetTokenAsync();
+        string? token = await _tokens.GetTokenAsync(CancellationToken.None);
         AuthSession? session = token is null ? null : AuthSession.FromToken(token);
         if (session is null || session.IsExpired(_time.GetUtcNow()))
         {
