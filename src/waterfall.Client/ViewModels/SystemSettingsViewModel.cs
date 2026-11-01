@@ -29,10 +29,20 @@ public partial class SystemSettingsViewModel : ObservableObject
         ["24:00:00"] = "24 години (24:00:00)"
     };
 
+    private readonly string? _settingsFilePath;
     private string? _loadedFilePath;
 
-    public SystemSettingsViewModel()
+    public SystemSettingsViewModel() : this(LocateAppSettingsFile())
     {
+    }
+
+    /// <summary>
+    /// Читає налаштування із заданого файлу й зберігає їх у нього ж. Тести передають сюди тимчасовий файл,
+    /// щоб не переписувати справжній src/api/appsettings.json. DI цей конструктор не обирає: рядка в контейнері немає.
+    /// </summary>
+    public SystemSettingsViewModel(string? settingsFilePath)
+    {
+        _settingsFilePath = settingsFilePath;
         IntervalOptions = new ObservableCollection<string>(IntervalMapping.Values);
         LoadSettingsFromIngestionService();
     }
@@ -118,7 +128,7 @@ public partial class SystemSettingsViewModel : ObservableObject
     /// </summary>
     public void LoadSettingsFromIngestionService()
     {
-        IngestionSettingsModel settings = ReadIngestionConfig();
+        IngestionSettingsModel settings = ReadIngestionConfig(_settingsFilePath);
 
         _loadedFilePath = settings.FilePath;
         ConfigFilePath = !string.IsNullOrWhiteSpace(settings.FilePath)
@@ -221,10 +231,8 @@ public partial class SystemSettingsViewModel : ObservableObject
         IsSuccessStatus = true;
     }
 
-    private static IngestionSettingsModel ReadIngestionConfig()
+    private static IngestionSettingsModel ReadIngestionConfig(string? resolvedPath)
     {
-        string? resolvedPath = LocateAppSettingsFile();
-
         if (resolvedPath != null && File.Exists(resolvedPath))
         {
             try
