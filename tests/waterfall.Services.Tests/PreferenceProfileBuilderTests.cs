@@ -22,7 +22,7 @@ public sealed class PreferenceProfileBuilderTests
         decimal? salaryMax = 2000,
         string currency = "USD",
         string description = "Python backend developer",
-        params string[] skills)
+        string[]? skills = null)
     {
         return new VacancyDto
         {
@@ -38,7 +38,7 @@ public sealed class PreferenceProfileBuilderTests
             SalaryMin = salaryMin,
             SalaryMax = salaryMax,
             Currency = currency,
-            Skills = skills,
+            Skills = skills ?? [],
             IsActive = true
         };
     }
@@ -168,11 +168,11 @@ public sealed class PreferenceProfileBuilderTests
             CreateVacancy(
                 "Python Developer",
                 description: "Python Django backend",
-                skills: "Python", "Django", "PostgreSQL"),
+                skills: ["Python", "Django", "PostgreSQL"]),
             CreateVacancy(
                 "Python Engineer",
                 description: "Python FastAPI services",
-                skills: "Python", "FastAPI")
+                skills: ["Python", "FastAPI"])
         ];
 
         // Act
@@ -200,7 +200,7 @@ public sealed class PreferenceProfileBuilderTests
                 categoryGroup: "Finance",
                 format: WorkFormat.Office,
                 description: "Ведення бухгалтерського обліку, податкова звітність, 1С",
-                skills: "1С", "Облік", "Податки")
+                skills: ["1С", "Облік", "Податки"])
         ];
 
         // Act
@@ -219,7 +219,7 @@ public sealed class PreferenceProfileBuilderTests
         // Arrange
         PreferenceProfile profile = PreferenceProfileBuilder.Build(
         [
-            CreateVacancy("Python Developer", skills: "Python")
+            CreateVacancy("Python Developer", skills: ["Python"])
         ]);
 
         // Act

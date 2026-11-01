@@ -22,7 +22,7 @@ public sealed class RelevanceScorerTests
         decimal? salaryMax = 2000,
         string currency = "USD",
         string description = "Python backend developer",
-        params string[] skills)
+        string[]? skills = null)
     {
         return new VacancyDto
         {
@@ -38,7 +38,7 @@ public sealed class RelevanceScorerTests
             SalaryMin = salaryMin,
             SalaryMax = salaryMax,
             Currency = currency,
-            Skills = skills,
+            Skills = skills ?? [],
             IsActive = true
         };
     }
@@ -50,7 +50,7 @@ public sealed class RelevanceScorerTests
             CreateVacancy(
                 "Python Developer",
                 description: "Python backend services on Django",
-                skills: "Python", "Django", "PostgreSQL")
+                skills: ["Python", "Django", "PostgreSQL"])
         ]);
     }
 
@@ -58,7 +58,7 @@ public sealed class RelevanceScorerTests
     public void Score_NoSavedVacancies_ReturnsNullScoreAndZeroBasis()
     {
         // Arrange
-        VacancyDto vacancy = CreateVacancy("Python Developer", skills: "Python");
+        VacancyDto vacancy = CreateVacancy("Python Developer", skills: ["Python"]);
 
         // Act
         VacancyRelevance relevance = RelevanceScorer.Score(PreferenceProfile.Empty, vacancy);
@@ -78,7 +78,7 @@ public sealed class RelevanceScorerTests
         VacancyDto vacancy = CreateVacancy(
             "Python Developer",
             description: "Python backend services on Django",
-            skills: "Python", "Django", "PostgreSQL");
+            skills: ["Python", "Django", "PostgreSQL"]);
 
         // Act
         VacancyRelevance relevance = RelevanceScorer.Score(profile, vacancy);
@@ -99,7 +99,7 @@ public sealed class RelevanceScorerTests
         VacancyDto close = CreateVacancy(
             "Python Developer",
             description: "Python backend services on Django",
-            skills: "Python", "Django");
+            skills: ["Python", "Django"]);
         VacancyDto far = CreateVacancy(
             "Java Developer",
             format: WorkFormat.Office,
@@ -108,7 +108,7 @@ public sealed class RelevanceScorerTests
             salaryMin: 6000,
             salaryMax: 8000,
             description: "Java Spring enterprise applications",
-            skills: "Java", "Spring");
+            skills: ["Java", "Spring"]);
 
         // Act
         VacancyRelevance closeRelevance = RelevanceScorer.Score(profile, close);
@@ -159,7 +159,7 @@ public sealed class RelevanceScorerTests
                 salaryMax: 30000,
                 currency: "UAH",
                 description: "Ведення бухгалтерського обліку, податкова звітність, 1С",
-                skills: "1С", "Облік", "Податки")
+                skills: ["1С", "Облік", "Податки"])
         ]);
 
         VacancyDto accountant = CreateVacancy(
@@ -171,7 +171,7 @@ public sealed class RelevanceScorerTests
             salaryMax: 30000,
             currency: "UAH",
             description: "Облік, податкова звітність, 1С",
-            skills: "1С", "Облік");
+            skills: ["1С", "Облік"]);
 
         VacancyDto developer = CreateVacancy(
             "Python Developer",
@@ -181,7 +181,7 @@ public sealed class RelevanceScorerTests
             salaryMin: 4000,
             salaryMax: 5000,
             description: "Python backend services",
-            skills: "Python");
+            skills: ["Python"]);
 
         // Act
         VacancyRelevance accountantRelevance = RelevanceScorer.Score(profile, accountant);
@@ -202,15 +202,15 @@ public sealed class RelevanceScorerTests
         // Arrange: зарплата вакансії в іншій валюті не порівнюється, складова просто не враховується
         PreferenceProfile profile = PreferenceProfileBuilder.Build(
         [
-            CreateVacancy("Python Developer", salaryMin: 1000, salaryMax: 2000, currency: "USD", skills: "Python")
+            CreateVacancy("Python Developer", salaryMin: 1000, salaryMax: 2000, currency: "USD", skills: ["Python"])
         ]);
-        VacancyDto sameCurrency = CreateVacancy("Python Developer", salaryMin: 1000, salaryMax: 2000, skills: "Python");
+        VacancyDto sameCurrency = CreateVacancy("Python Developer", salaryMin: 1000, salaryMax: 2000, skills: ["Python"]);
         VacancyDto otherCurrency = CreateVacancy(
             "Python Developer",
             salaryMin: 1000,
             salaryMax: 2000,
             currency: "EUR",
-            skills: "Python");
+            skills: ["Python"]);
 
         // Act
         VacancyRelevance same = RelevanceScorer.Score(profile, sameCurrency);
