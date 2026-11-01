@@ -1,8 +1,10 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Waterfall.Repository.Entities;
+using Waterfall.Repository.Normalization;
 
 namespace Waterfall.Repository.Data;
 
@@ -27,10 +29,38 @@ public class WaterfallDbContext : DbContext
     public DbSet<ChatMessageDB> ChatMessages => Set<ChatMessageDB>();
     public DbSet<ChatMessageVacancyDB> ChatMessageVacancies => Set<ChatMessageVacancyDB>();
 
+    // AI: похідні поля вакансії (SearchText, WorkFormat, CategoryGroup) обчислюються на кожному записі; перевірено: тести репозиторію та нормалізатора
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        NormalizeVacancies();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        NormalizeVacancies();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         // У SQLite lower() без цього не працює з кирилицею, і пошук каталогу був би чутливим до регістру
         optionsBuilder.AddInterceptors(SqliteUnicodeLowerInterceptor.Instance);
+    }
+
+    /// <summary>
+    /// Перераховує похідні атрибути вакансій перед записом: пошук, формат роботи й широку категорію.
+    /// Так парсери, POST/PUT каталогу та сідування дають однакові дані без окремих викликів у кожному місці.
+    /// </summary>
+    private void NormalizeVacancies()
+    {
+        foreach (EntityEntry<VacancyDB> entry in ChangeTracker.Entries<VacancyDB>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                VacancyNormalizer.Apply(entry.Entity);
+            }
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

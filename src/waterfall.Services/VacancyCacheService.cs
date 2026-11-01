@@ -1,7 +1,9 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: ключ кешу враховує всі фільтри й сортування; перевірено: тести VacancyCacheServiceTests
 
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Primitives;
+using Waterfall.Repository.Entities;
 using Waterfall.Services.Models.Common;
 using Waterfall.Services.Models.Vacancies;
 
@@ -69,7 +71,7 @@ public class VacancyCacheService : IVacancyCacheService
 
         _memoryCache.Set(key, result, options);
 
-        if (filter.Page == 1 && string.IsNullOrWhiteSpace(filter.Search) && string.IsNullOrWhiteSpace(filter.Category) && filter.OnlyActive)
+        if (IsPlainFirstPage(filter))
         {
             _staleCatalog = result;
             _lastRefreshedAt = DateTimeOffset.UtcNow;
@@ -137,8 +139,34 @@ public class VacancyCacheService : IVacancyCacheService
         return (Interlocked.Read(ref _hits), Interlocked.Read(ref _misses));
     }
 
+    /// <summary>
+    /// Кешувати як Stale-Cache можна лише «чисту» першу сторінку без фільтрів: інакше застарілий результат
+    /// одного запиту видавався б за результат іншого (REL-001).
+    /// </summary>
+    private static bool IsPlainFirstPage(VacancyFilterParameters filter) =>
+        filter.Page == 1
+        && filter.OnlyActive
+        && string.IsNullOrWhiteSpace(filter.Search)
+        && string.IsNullOrWhiteSpace(filter.Category)
+        && string.IsNullOrWhiteSpace(filter.Experience)
+        && string.IsNullOrWhiteSpace(filter.Location)
+        && string.IsNullOrWhiteSpace(filter.CategoryGroup)
+        && filter.WorkFormat is null or WorkFormat.None
+        && filter.MaxExperienceMonths is null
+        && filter.Skills is null or { Count: 0 }
+        && filter.MinSalary is null
+        && filter.MaxSalary is null
+        && filter.Source is null or JobSource.Unknown;
+
+    // Ключ враховує кожне поле фільтра й сортування: інакше «за спаданням» віддавалося б із кешу «за зростанням»
     private static string BuildFilterKey(VacancyFilterParameters f)
     {
-        return $"catalog:p={f.Page}:ps={f.PageSize}:act={f.OnlyActive}:q={f.Search?.Trim().ToLower()}:cat={f.Category?.Trim().ToLower()}:exp={f.Experience?.Trim().ToLower()}:min={f.MinSalary}:max={f.MaxSalary}:src={f.Source}";
+        string skills = f.Skills is { Count: > 0 } terms ? string.Join(",", terms) : string.Empty;
+        return $"catalog:p={f.Page}:ps={f.PageSize}:act={f.OnlyActive}" +
+               $":q={f.Search?.Trim().ToLowerInvariant()}:cat={f.Category?.Trim().ToLowerInvariant()}" +
+               $":exp={f.Experience?.Trim().ToLowerInvariant()}:min={f.MinSalary}:max={f.MaxSalary}:src={f.Source}" +
+               $":wf={(int?)f.WorkFormat}:maxexp={f.MaxExperienceMonths}:cg={f.CategoryGroup?.Trim()}" +
+               $":loc={f.Location?.Trim().ToLowerInvariant()}:sk={skills}" +
+               $":sb={f.SortBy?.Trim().ToLowerInvariant()}:so={f.SortOrder?.Trim().ToLowerInvariant()}";
     }
 }
