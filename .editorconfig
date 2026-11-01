@@ -107,3 +107,10 @@ dotnet_naming_rule.public_members_must_be_pascal_case.style = pascal_case_style
 dotnet_naming_symbols.public_symbols.applicable_kinds = class, struct, enum, property, method, event
 dotnet_naming_symbols.public_symbols.applicable_accessibilities = public, internal
 dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+# --- НАЛАШТУВАННЯ ВИНЯТКІВ ДІАГНОСТИКИ ---
+
+# Це правило спрацьовує на багатьох методах, якщо у файлі
+# хоч раз використовувався CancellationToken і відповідно несе
+# мало користі, оскільки поведінка за замовчуванням нас влаштовує
+dotnet_diagnostic.S8949.severity = suggestion

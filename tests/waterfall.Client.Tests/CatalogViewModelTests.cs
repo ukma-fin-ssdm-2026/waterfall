@@ -360,4 +360,43 @@ public class CatalogViewModelTests
         _vm.SelectedSortOption = "За зарплатою (від найвищої ↓)";
         Assert.Equal(["C Engineer", "B Developer", "A Architect"], _vm.Vacancies.Select(v => v.Title));
     }
+
+    [Fact]
+    public async Task SearchText_WhenProvided_RecordsSearchInGateway()
+    {
+        Task load = _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(FakeGateway.Page(1, 0, false));
+        await load;
+
+        _vm.SearchText = "Python backend";
+        Task searchTask = _vm.SearchCommand.ExecuteAsync(null);
+
+        FakeGateway.CatalogCall call = await _gateway.WaitForCatalogCallAsync(2);
+        Assert.Equal("Python backend", call.Search);
+        call.Response.SetResult(FakeGateway.Page(1, 1, false, "Python dev"));
+        await searchTask;
+
+        Assert.Contains("Python backend", _gateway.RecordedSearches);
+    }
+
+    [Fact]
+    public async Task ResetFilters_ResetsFieldsToDefaultAndReloadsCatalog_Test33()
+    {
+        _vm.SearchText = "Python";
+        _vm.SkillFilter = "Django";
+        _vm.MinSalaryFilter = "1000";
+        _vm.MaxSalaryFilter = "3000";
+
+        Task resetTask = _vm.ResetFiltersCommand.ExecuteAsync(null);
+        FakeGateway.CatalogCall call = await _gateway.WaitForCatalogCallAsync(1);
+        Assert.Null(call.Search);
+        call.Response.SetResult(FakeGateway.Page(1, 1, false, "Any vacancy"));
+        await resetTask;
+
+        Assert.Equal(string.Empty, _vm.SearchText);
+        Assert.Equal(string.Empty, _vm.SkillFilter);
+        Assert.Equal(string.Empty, _vm.MinSalaryFilter);
+        Assert.Equal(string.Empty, _vm.MaxSalaryFilter);
+        Assert.Single(_vm.Vacancies);
+    }
 }
