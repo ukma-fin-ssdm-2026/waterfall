@@ -1,4 +1,5 @@
 // AI: моки та тестові дублери репозиторіїв (RepositoryMocks, FakeVacancyRepository, FakeSavedVacancyRepository, Lab 06); перевірено: запуск dotnet test, самоперевірка автора (Денис Сидоренко, §8)
+// AI: фіксація переданих нормалізованих фільтрів; перевірено: тести VacancyServiceTests
 
 using Microsoft.Extensions.Logging;
 using Waterfall.Repository.Entities;
@@ -38,6 +39,11 @@ public sealed class FakeVacancyRepository : IVacancyRepository
     public bool ShouldThrowOnGetAll { get; set; }
     public List<string?> GetAllSearchCalls { get; } = [];
     public List<string?> GetAllSourceCalls { get; } = [];
+    public List<string?> GetAllLocationCalls { get; } = [];
+    public List<WorkFormat?> GetAllWorkFormatCalls { get; } = [];
+    public List<int?> GetAllMaxExperienceCalls { get; } = [];
+    public List<string?> GetAllCategoryGroupCalls { get; } = [];
+    public List<IReadOnlyList<string>?> GetAllSkillsCalls { get; } = [];
     public List<VacancyDB> CreatedVacancies { get; } = [];
     public List<VacancyDB> UpdatedVacancies { get; } = [];
     public List<Guid> DeletedIds { get; } = [];
@@ -48,6 +54,10 @@ public sealed class FakeVacancyRepository : IVacancyRepository
         string? experience = null,
         string? location = null,
         string? schedule = null,
+        WorkFormat? workFormat = null,
+        int? maxExperienceMonths = null,
+        string? categoryGroup = null,
+        IReadOnlyList<string>? skills = null,
         decimal? minSalary = null,
         decimal? maxSalary = null,
         string? source = null,
@@ -65,6 +75,11 @@ public sealed class FakeVacancyRepository : IVacancyRepository
 
         GetAllSearchCalls.Add(search);
         GetAllSourceCalls.Add(source);
+        GetAllLocationCalls.Add(location);
+        GetAllWorkFormatCalls.Add(workFormat);
+        GetAllMaxExperienceCalls.Add(maxExperienceMonths);
+        GetAllCategoryGroupCalls.Add(categoryGroup);
+        GetAllSkillsCalls.Add(skills);
         IReadOnlyList<VacancyDB> items = Vacancies
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
@@ -237,4 +252,123 @@ public sealed class FakeVacancyCacheService : IVacancyCacheService
     public PagedResult<VacancyDto>? GetStaleCatalog() => StaleCatalogToReturn;
 
     public (long Hits, long Misses) GetMetrics() => (Hits, Misses);
+}
+
+public sealed class FakeSearchQueryRepository : ISearchQueryRepository
+{
+    public List<SearchQueryDB> Queries { get; } = [];
+    public List<string> AddedQueryTexts { get; } = [];
+
+    public Task AddAsync(SearchQueryDB entity, CancellationToken ct = default)
+    {
+        if (entity.Id == Guid.Empty)
+        {
+            entity.Id = Guid.NewGuid();
+        }
+
+        Queries.Add(entity);
+        AddedQueryTexts.Add(entity.QueryText);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<SearchQueryDB>> GetRecentAsync(Guid userId, int limit, CancellationToken ct = default)
+    {
+        IReadOnlyList<SearchQueryDB> items = Queries
+            .Where(q => q.UserId == userId)
+            .OrderByDescending(q => q.SearchedAt)
+            .Take(Math.Max(0, limit))
+            .ToList();
+        return Task.FromResult(items);
+    }
+
+    public Task<SearchQueryDB?> GetLatestAsync(Guid userId, CancellationToken ct = default)
+    {
+        SearchQueryDB? latest = Queries
+            .Where(q => q.UserId == userId)
+            .OrderByDescending(q => q.SearchedAt)
+            .FirstOrDefault();
+        return Task.FromResult(latest);
+    }
+
+    public Task<int> GetCountAsync(Guid userId, CancellationToken ct = default)
+    {
+        return Task.FromResult(Queries.Count(q => q.UserId == userId));
+    }
+
+    public Task<bool> DeleteAllForUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        int removed = Queries.RemoveAll(q => q.UserId == userId);
+        return Task.FromResult(removed > 0);
+    }
+}
+
+public sealed class FakeVacancyViewRepository : IVacancyViewRepository
+{
+    public List<VacancyViewDB> Views { get; } = [];
+    public bool RecentViewExistsToReturn { get; set; }
+
+    public Task AddAsync(VacancyViewDB entity, CancellationToken ct = default)
+    {
+        if (entity.Id == Guid.Empty)
+        {
+            entity.Id = Guid.NewGuid();
+        }
+
+        Views.Add(entity);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> ExistsRecentAsync(Guid userId, Guid vacancyId, TimeSpan within, CancellationToken ct = default)
+    {
+        if (RecentViewExistsToReturn)
+        {
+            return Task.FromResult(true);
+        }
+
+        bool exists = Views.Any(v => v.UserId == userId && v.VacancyId == vacancyId);
+        return Task.FromResult(exists);
+    }
+
+    public Task<IReadOnlyList<VacancyViewDB>> GetForUserAsync(Guid userId, CancellationToken ct = default)
+    {
+        IReadOnlyList<VacancyViewDB> items = Views
+            .Where(v => v.UserId == userId)
+            .OrderByDescending(v => v.ViewedAt)
+            .ToList();
+        return Task.FromResult(items);
+    }
+}
+
+public sealed class FakeUserRepository : IUserRepository
+{
+    public List<UserDB> Users { get; } = [];
+
+    public Task<UserDB?> GetByEmailAsync(string normalizedEmail, CancellationToken ct = default)
+    {
+        UserDB? match = Users.FirstOrDefault(u => u.Email.Equals(normalizedEmail, StringComparison.OrdinalIgnoreCase));
+        return Task.FromResult(match);
+    }
+
+    public Task<UserDB?> GetByIdAsync(Guid id, CancellationToken ct = default)
+    {
+        UserDB? match = Users.FirstOrDefault(u => u.Id == id);
+        return Task.FromResult(match);
+    }
+
+    public Task<UserDB> CreateAsync(UserDB entity, CancellationToken ct = default)
+    {
+        Users.Add(entity);
+        return Task.FromResult(entity);
+    }
+
+    public Task UpdateAsync(UserDB entity, CancellationToken ct = default)
+    {
+        int index = Users.FindIndex(u => u.Id == entity.Id);
+        if (index >= 0)
+        {
+            Users[index] = entity;
+        }
+
+        return Task.CompletedTask;
+    }
 }

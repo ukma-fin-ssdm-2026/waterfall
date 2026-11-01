@@ -46,6 +46,9 @@ internal sealed class FakeUserRepository : IUserRepository
         return Task.FromResult(user);
     }
 
+    public Task<UserDB?> GetByIdAsync(Guid id, CancellationToken ct = default)
+        => throw new NotSupportedException("GetByIdAsync не використовується цими тестами.");
+
     public Task<UserDB> CreateAsync(UserDB entity, CancellationToken ct = default)
     {
         if (ThrowUniqueViolationOnCreate)
@@ -74,15 +77,15 @@ internal sealed class FakeUserRepository : IUserRepository
     }
 }
 
-internal sealed class FakePasswordHasher : IPasswordHasher
+internal sealed class FakePasswordHasher : ISecurityService
 {
     public List<(string? Hash, string Password)> VerifyCalls { get; } = [];
     public Func<string?, string, PasswordVerifyResult> VerifyFunc { get; set; } = (_, _) => PasswordVerifyResult.Success;
     public Func<string, string> HashFunc { get; set; } = password => "hash_" + password;
 
-    public string Hash(string password) => HashFunc(password);
+    public string HashPassword(string password) => HashFunc(password);
 
-    public PasswordVerifyResult Verify(string? hashedPassword, string providedPassword)
+    public PasswordVerifyResult VerifyPassword(string? hashedPassword, string providedPassword)
     {
         VerifyCalls.Add((hashedPassword, providedPassword));
         return VerifyFunc(hashedPassword, providedPassword);

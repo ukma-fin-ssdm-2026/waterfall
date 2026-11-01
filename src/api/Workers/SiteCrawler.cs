@@ -1,4 +1,5 @@
 // AI: ввічливий обхід сайтів-джерел вакансій; перевірено: юніт-тести JobParserServiceTests з підробленими сайтами, ручний запуск API проти djinni.co і work.ua, самоперевірка автора (§8)
+// AI: читання фасетних стрічок досвіду тим самим ввічливим механізмом; перевірено: тести JobParserServiceTests
 
 using System.Net;
 using System.Net.Http.Headers;
@@ -26,6 +27,19 @@ public interface IJobSiteParser
 
     /// <summary>Те, чого немає в списку, зі сторінки однієї вакансії; поля, яких на сторінці немає, лишаються null.</summary>
     RawVacancy ParseJobPage(string html);
+}
+
+/// <summary>Стрічка, у якій сайт згрупував вакансії за мінімальним досвідом; <see cref="Months"/> — нижня межа групи.</summary>
+public sealed record ExperienceFacet(string Url, int Months);
+
+/// <summary>
+/// Сайт, який віддає додаткові стрічки за рівнем досвіду (у DOU це фасети RSS: exp=0-1, 1-3, 3-5, 5plus).
+/// Обхід читає їх тим самим ввічливим механізмом, що й сторінки списку, і ставить вакансіям мінімальний досвід у місяцях.
+/// </summary>
+public interface IExperienceFacetSource
+{
+    /// <summary>Стрічки досвіду від найнижчої вимоги до найвищої.</summary>
+    IReadOnlyList<ExperienceFacet> ExperienceFacets { get; }
 }
 
 /// <summary>
@@ -115,6 +129,12 @@ public sealed class SiteCrawler
             {
                 crawl.Items.Add(await WithJobPageAsync(http, robots, job, crawl, ct));
             }
+        }
+
+        // Мінімальний досвід із фасетних стрічок — лише для вакансій, у яких джерело не дало числа
+        if (crawl.Items.Count > 0)
+        {
+            crawl.Items = await ApplyExperienceFacetsAsync(http, robots, crawl.Items, ct);
         }
 
         RememberJobPages(crawl);
@@ -233,6 +253,7 @@ public sealed class SiteCrawler
     public static RawVacancy WithJobPage(RawVacancy fromList, RawVacancy fromPage) => fromList with
     {
         Title = fromPage.Title ?? fromList.Title,
+        ExperienceMonths = fromPage.ExperienceMonths ?? fromList.ExperienceMonths,
         Company = fromPage.Company ?? fromList.Company,
         Salary = fromPage.Salary ?? fromList.Salary,
         Location = fromPage.Location ?? fromList.Location,
@@ -243,6 +264,79 @@ public sealed class SiteCrawler
         DescriptionHtml = fromPage.DescriptionHtml ?? fromList.DescriptionHtml,
         Tags = fromPage.Tags ?? fromList.Tags
     };
+
+    /// <summary>
+    /// Дочитує фасетні стрічки досвіду (наприклад, DOU exp=0-1 … 5plus) і проставляє вакансіям нижню межу досвіду.
+    /// Запитів рівно стільки, скільки потрібно: читаємо, поки всі вакансії без числа не отримали мітку.
+    /// Вакансія, що потрапила в кілька фасетів (рік досвіду є і в 0-1, і в 1-3), бере вищу нижню межу.
+    /// </summary>
+    private async Task<List<RawVacancy>> ApplyExperienceFacetsAsync(
+        HttpClient http, RobotsTxt robots, List<RawVacancy> rawItems, CancellationToken ct)
+    {
+        if (_site is not IExperienceFacetSource source)
+        {
+            return rawItems;
+        }
+
+        int unlabelled = rawItems.Count(item => item.ExperienceMonths is null);
+        if (unlabelled == 0)
+        {
+            return rawItems;
+        }
+
+        Dictionary<string, int> labels = new(StringComparer.Ordinal);
+        foreach (ExperienceFacet facet in source.ExperienceFacets)
+        {
+            if (!robots.IsAllowed(new Uri(facet.Url).PathAndQuery))
+            {
+                _logger.LogWarning("robots.txt {Site} не дозволяє читати фасет досвіду {Url}, тож мітки беремо лише з попередніх.", _site.Name, facet.Url);
+                break;
+            }
+
+            List<RawVacancy> facetItems;
+            try
+            {
+                facetItems = _site.ParseListPage(await GetPageAsync(http, facet.Url, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // Фасет — лише уточнення досвіду: будь-який збій (мережа, розмітка) не має ламати збір
+                _logger.LogWarning("Фасет досвіду {Url} недоступний ({Error}); досвід цих вакансій виведемо з тексту.", facet.Url, ex.Message);
+                if (ex is SiteRefusedException refusal)
+                {
+                    PauseAfterRefusal(refusal.RetryAfter);
+                }
+
+                break;
+            }
+
+            foreach (RawVacancy item in facetItems)
+            {
+                if (item.Id is not null)
+                {
+                    labels[item.Id] = Math.Max(labels.GetValueOrDefault(item.Id), facet.Months);
+                }
+            }
+
+            unlabelled = rawItems.Count(item => item.ExperienceMonths is null && (item.Id is null || !labels.ContainsKey(item.Id)));
+            if (unlabelled == 0)
+            {
+                break;
+            }
+        }
+
+        for (int i = 0; i < rawItems.Count; i++)
+        {
+            if (rawItems[i].ExperienceMonths is null
+                && rawItems[i].Id is { } id
+                && labels.TryGetValue(id, out int months))
+            {
+                rawItems[i] = rawItems[i] with { ExperienceMonths = months };
+            }
+        }
+
+        return rawItems;
+    }
 
     /// <summary>
     /// Відсутній robots.txt (404 та інші 4xx) дозволяє все, а збій сервера (5xx) — ні: тоді сайт пропускаємо (null)
@@ -317,7 +411,7 @@ public sealed class SiteCrawler
     /// <summary>Те, що накопичується за один обхід сайту.</summary>
     private sealed class CrawlState
     {
-        public List<RawVacancy> Items { get; } = [];
+        public List<RawVacancy> Items { get; set; } = [];
 
         // Id вакансій, уже бачених у цьому обході
         public HashSet<string> SeenIds { get; } = [];

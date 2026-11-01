@@ -25,13 +25,13 @@ namespace Waterfall.Api.Services;
 public sealed class AuthenticationService : IAuthenticationService
 {
     private readonly IUserRepository _users;
-    private readonly IPasswordHasher _passwordHasher;
+    private readonly ISecurityService _passwordHasher;
     private readonly IJwtTokenService _jwt;
     private readonly ILogger<AuthenticationService> _logger;
 
     public AuthenticationService(
         IUserRepository users,
-        IPasswordHasher passwordHasher,
+        ISecurityService passwordHasher,
         IJwtTokenService jwt,
         ILogger<AuthenticationService> logger)
     {
@@ -55,7 +55,7 @@ public sealed class AuthenticationService : IAuthenticationService
         {
             Id = Guid.NewGuid(),
             Email = email,
-            PasswordHash = _passwordHasher.Hash(request.Password),
+            PasswordHash = _passwordHasher.HashPassword(request.Password),
             Role = request.Role.ToString(),
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -90,7 +90,7 @@ public sealed class AuthenticationService : IAuthenticationService
         // Без цього гілка «немає такого email» була б помітно швидшою і дозволяла б перебирати
         // зареєстровані адреси за часом відповіді. Виклик із null-хешем змушує IPasswordHasher
         // виконати еквівалентну фіктивну роботу проти заглушки.
-        PasswordVerifyResult result = _passwordHasher.Verify(user?.PasswordHash, request.Password);
+        PasswordVerifyResult result = _passwordHasher.VerifyPassword(user?.PasswordHash, request.Password);
 
         if (user is null || result == PasswordVerifyResult.Failed)
         {
@@ -100,7 +100,7 @@ public sealed class AuthenticationService : IAuthenticationService
 
         if (result == PasswordVerifyResult.SuccessRehashNeeded)
         {
-            user.PasswordHash = _passwordHasher.Hash(request.Password);
+            user.PasswordHash = _passwordHasher.HashPassword(request.Password);
             await _users.UpdateAsync(user, ct);
             _logger.LogInformation("Пароль перехешовано під час входу: {UserId}", user.Id);
         }

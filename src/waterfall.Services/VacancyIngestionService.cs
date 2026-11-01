@@ -1,4 +1,5 @@
 // AI: нормалізація сирих вакансій і збереження в БД (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API, самоперевірка автора (§8)
+// AI: досвід у місяцях із джерела з запасним розбором тексту; перевірено: тести VacancyIngestionServiceTests
 
 using System.Globalization;
 using System.Net;
@@ -8,6 +9,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
+using Waterfall.Repository.Normalization;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Vacancies;
 
@@ -117,6 +119,7 @@ public class VacancyIngestionService : IVacancyIngestionService
         }
 
         (decimal? salaryMin, decimal? salaryMax, string currency) = ParseSalary(raw.Salary, source.Currency);
+        string? experience = NullIfEmpty(Cut(CleanText(raw.Experience), 100));
 
         string? fullAddress = !string.IsNullOrWhiteSpace(raw.FullAddress)
             ? Cut(CleanText(raw.FullAddress), 300)
@@ -135,7 +138,9 @@ public class VacancyIngestionService : IVacancyIngestionService
             Location = Cut(OrDefault(CleanText(raw.Location), "Не вказано"), 200),
             FullAddress = fullAddress,
             Schedule = NullIfEmpty(Cut(CleanText(raw.Employment), 100)),
-            Experience = NullIfEmpty(Cut(CleanText(raw.Experience), 100)),
+            Experience = experience,
+            // Точне число місяців від джерела (Djinni, фасети DOU) не перезаписуємо вгадуванням із тексту
+            ExperienceMonths = raw.ExperienceMonths ?? VacancyExperienceParser.ParseMonths(experience, description),
             SalaryMin = salaryMin,
             SalaryMax = salaryMax,
             Currency = currency,

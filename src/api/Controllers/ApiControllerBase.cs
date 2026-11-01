@@ -1,3 +1,4 @@
+// AI: хелпер 503 для недоступного LLM (REL-003); перевірено: тести AIConsultantControllerTests (503 LLM_UNAVAILABLE)
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using System.IdentityModel.Tokens.Jwt;
@@ -108,6 +109,44 @@ public abstract class ApiControllerBase : ControllerBase
 
         // Повертаємо HTTP 401 разом із нашим уніфікованим JSON
         return Unauthorized(error);
+    }
+
+    /// <summary>
+    /// Власний хелпер для повернення помилки 403 Forbidden.
+    /// Використовується, коли автентифікований користувач не має права на дію (наприклад,
+    /// запис активності доступний лише JobSeeker — data-model.md §7, інваріант 2).
+    /// </summary>
+    /// <param name="message">Опис причини відмови в доступі.</param>
+    protected ObjectResult ErrorForbidden(string message)
+    {
+        // Створюємо власну структуру помилки
+        ApiErrorResponse error = ApiErrorResponse.Create(
+            code: "FORBIDDEN",
+            message: message,
+            requestId: RequestId);
+
+        // Повертаємо HTTP 403 разом із нашим уніфікованим JSON
+        return StatusCode(StatusCodes.Status403Forbidden, error);
+    }
+
+    /// <summary>
+    /// Власний хелпер для повернення помилки 503 Service Unavailable.
+    /// Використовується, коли залежний зовнішній сервіс (наприклад, LLM API ШІ-консультанта)
+    /// тимчасово недоступний: клієнт має отримати зрозумілу відмову, а не 500 (REL-003).
+    /// Формує відповідь із переданим кодом (типово "SERVICE_UNAVAILABLE") та RequestId.
+    /// </summary>
+    /// <param name="message">Опис причини та порада, що робити користувачу.</param>
+    /// <param name="code">Машинний код помилки; для ШІ-консультанта — "LLM_UNAVAILABLE".</param>
+    protected ObjectResult ErrorServiceUnavailable(string message, string code = "SERVICE_UNAVAILABLE")
+    {
+        // Створюємо власну структуру помилки
+        ApiErrorResponse error = ApiErrorResponse.Create(
+            code: code,
+            message: message,
+            requestId: RequestId);
+
+        // Повертаємо HTTP 503 разом із нашим уніфікованим JSON
+        return StatusCode(StatusCodes.Status503ServiceUnavailable, error);
     }
 
     /// <summary>

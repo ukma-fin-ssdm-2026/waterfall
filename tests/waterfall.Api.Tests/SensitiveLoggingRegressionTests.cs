@@ -116,7 +116,7 @@ public sealed class SensitiveLoggingRegressionTests
         {
             Id = Guid.NewGuid(),
             Email = SensitiveEmail.ToLowerInvariant(),
-            PasswordHash = hasher.Hash(SensitivePassword),
+            PasswordHash = hasher.HashPassword(SensitivePassword),
             Role = UserRole.JobSeeker.ToString(),
             CreatedAt = DateTimeOffset.UtcNow
         };
@@ -196,6 +196,9 @@ public sealed class SensitiveLoggingRegressionTests
             return Task.FromResult(user);
         }
 
+        public Task<UserDB?> GetByIdAsync(Guid id, CancellationToken ct = default)
+            => throw new NotSupportedException("GetByIdAsync не використовується цими тестами.");
+
         public Task<UserDB> CreateAsync(UserDB entity, CancellationToken ct = default)
         {
             _users.Add(entity);
@@ -205,11 +208,11 @@ public sealed class SensitiveLoggingRegressionTests
         public Task UpdateAsync(UserDB entity, CancellationToken ct = default) => Task.CompletedTask;
     }
 
-    private sealed class FakePasswordHasher : IPasswordHasher
+    private sealed class FakePasswordHasher : ISecurityService
     {
-        public string Hash(string password) => "fake_hash_" + password;
+        public string HashPassword(string password) => "fake_hash_" + password;
 
-        public PasswordVerifyResult Verify(string? hashedPassword, string providedPassword) => PasswordVerifyResult.Success;
+        public PasswordVerifyResult VerifyPassword(string? hashedPassword, string providedPassword) => PasswordVerifyResult.Success;
     }
 
     private sealed class FakeJwtTokenService : IJwtTokenService

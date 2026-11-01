@@ -46,6 +46,7 @@ public class RobotsTxtTests
 
     [Theory]
     [InlineData("/vacancies/feeds/", true)]
+    [InlineData("/vacancies/feeds/?exp=5plus", true)] // фасети досвіду — той самий дозволений розділ
     [InlineData("/companies/acme/vacancies/364458/", true)]
     [InlineData("/vacancies/?search=java", true)] // правило лише для Yandex
     [InlineData("/ajax-login/", false)]
