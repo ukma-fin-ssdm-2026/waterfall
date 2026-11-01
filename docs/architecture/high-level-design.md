@@ -96,7 +96,7 @@
 3. **Storage Service (`IStorageService`):** центральний сервіс оркестрації бізнес-операцій із вакансіями, збереженими списками та координації оновлень.
 4. **Analytics & Statistics Service (`IAnalyticsService`):** формування аналітичних звітів ринку праці та статистики активності користувачів.
 5. **AI Consultant Service (`IAIConsultantService`):** підготовка контексту та взаємодія із зовнішніми LLM API з контролем таймауту (REL-003).
-6. **Security Service (`ISecurityService`):** криптографічні операції, стійке хешування паролів (BCrypt) та захист чутливих конфігурацій (SEC-001).
+6. **Security Service (`ISecurityService`):** криптографічні операції, стійке хешування паролів (PBKDF2) та захист чутливих конфігурацій (SEC-001).
 
 **Стан реалізації компонентів (01.11.2026).** `AI Consultant Service` реалізовано: `AIConsultantController` надає `POST /api/v1/ai-consultant/messages` (SSE: `meta`, `vacancies`, `delta`, `done`, `error`) і `DELETE /api/v1/ai-consultant/sessions/{id}`; сервіс витягує структурований фільтр через LLM (`LlmRole.Extract`), зберігає контекст діалогу (`ChatSession.context_filter_json`, FR-009), шукає вакансії в каталозі, за 0 збігів послаблює критерії (до 3 найближчих вакансій) і стрімить відповідь (`LlmRole.Chat`) лише з полів знайдених вакансій (FUNC-001). Ліміт повідомлень на користувача (`AiConsultant:MessagesPerHour`) і маскування email/телефонів перед відправкою до LLM закривають THR-06 і THR-10. `POST /api/v1/ai-consultant/analyze` (FR-010, аналіз до 3 вакансій) та `Analytics & Statistics Service` (FR-003, US-006/US-007) **заплановані**: ендпоінтів і сервісів у коді ще немає.
 

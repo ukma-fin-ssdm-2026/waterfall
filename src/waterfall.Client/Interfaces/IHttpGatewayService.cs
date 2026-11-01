@@ -63,4 +63,24 @@ public interface IHttpGatewayService
     /// Двостороння синхронізація геокешу з сервером (вивантаження офлайн знайдених координат та отримання нових).
     /// </summary>
     Task<Waterfall.Client.Models.Geo.GeoSyncResponseDto?> SyncGeoCacheAsync(Waterfall.Client.Models.Geo.GeoSyncRequestDto request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Отримати особисту статистику активності користувача (FR-007, US-008).
+    /// </summary>
+    Task<Waterfall.Client.Models.Profile.UserStatsDto?> GetPersonalStatsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Записати виконаний пошуковий запит в історію (FR-007).
+    /// </summary>
+    Task<bool> RecordSearchAsync(string query, CancellationToken ct = default);
+
+    /// <summary>
+    /// Очистити історію пошукових запитів (FR-007).
+    /// </summary>
+    Task<bool> ClearSearchHistoryAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Записати перегляд вакансії в історію (FR-007).
+    /// </summary>
+    Task<bool> RecordVacancyViewAsync(Guid vacancyId, CancellationToken ct = default);
 }

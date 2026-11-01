@@ -7,7 +7,7 @@
 - **Бекенд-платформа:** ASP.NET Core Web API (.NET 10, C#)
 - **Формат обміну даними:** JSON (`application/json`)
 - **Стратегія версіонування:** Версія в шляху URL (`/api/v1/...`). Це забезпечує явність контракту, зворотну сумісність для мобільних клієнтів .NET MAUI та легку підтримку життєвого циклу API.
-- **Автентифікація:** Відкритий доступ для каталогу вакансій та пошуку; JWT Bearer токени для збережених вакансій та персоналізованої статистики (заплановано в наступних етапах).
+- **Автентифікація:** Відкритий доступ для каталогу вакансій, пошуку, реєстрації/входу та геокодування; JWT Bearer — для збережених вакансій (`/saved-vacancies`) і профілю (`/profile`). Access-JWT (HS256) діє 15 хвилин, роль міститься в claims.
 
 ---
 
@@ -54,6 +54,30 @@
   - Належить до конкретної вакансії (`Vacancy`).
   - Належить профілю поточного шукача роботи.
 
+### 2.3. Ресурс Auth (Автентифікація)
+- **Кінцева точка (URI):** `/api/v1/auth`
+- **Опис:** Реєстрація нового користувача та вхід із видачею access-JWT. Обидва ендпоінти відкриті (`AllowAnonymous`).
+- **Атрибути запиту (`RegisterRequest` / `LoginRequest`):**
+  - `email` (string, 3–80 символів): Унікальна електронна пошта, використовується як логін.
+  - `password` (string, 12–32 символи, мінімум одна цифра): Пароль; зберігається лише як хеш (SEC-001).
+  - `role` (enum: `JobSeeker`, `Analyst`): Роль користувача (лише під час реєстрації).
+- **Відповідь (`AuthResponse`):** `token` (access-JWT, HS256, 15 хв), `expires_at`, `user_id`, `email`, `role`.
+- **Зв'язки:** JWT використовується як `Authorization: Bearer` для `/saved-vacancies` і `/profile`; `user_id` береться лише з перевіреного токена (THR-12).
+
+### 2.4. Ресурс Profile (Профіль користувача)
+- **Кінцева точка (URI):** `/api/v1/profile`
+- **Опис:** Персональні дані користувача — домашня/поточна адреса, яка використовується для розрахунку відстані до вакансій. Доступ лише з JWT; історія переглядів та пошукових запитів.
+- **Атрибути (`UserAddressDto`):**
+  - `address` (string/null, до 300 символів): Адреса користувача; під час збереження обрізаються зайві пробіли, порожня адреса відхиляється `400`.
+- **Зв'язки:** Запис у `UserPersonalData` (1:1 з користувачем); адреса передається клієнтському `GeoDistanceService`.
+
+### 2.5. Ресурс Geo (Геокодування та геокеш)
+- **Кінцева точка (URI):** `/api/v1/geo`
+- **Опис:** Отримання координат адреси (з постійного кешу `GeoLocationCache` або через Photon/Wikipedia) та двостороння синхронізація офлайн-кешу клієнта. Ендпоінти відкриті.
+- **Атрибути (`CoordinatesDto`):** `latitude`, `longitude`.
+- **Синхронізація (`GeoSyncRequestDto` / `GeoSyncResponseDto`):** список `{ id, address, latitude, longitude, created_at }`; клієнт надсилає знайдені офлайн записи, сервер повертає всі актуальні.
+- **Зв'язки:** Кеш спільний для всіх користувачів і не містить `user_id`; результати Wikipedia не кешуються.
+
 ---
 
 ## 3. Таблиця кінцевих точок (Endpoint Mapping)
@@ -69,6 +93,16 @@
 | **GET** | `/api/v1/saved-vacancies/{id}` | Отримання збереженої вакансії | — | `200 OK` (`SavedVacancyDto`) | `404 Not Found` |
 | **POST** | `/api/v1/saved-vacancies` | Додавання вакансії до збережених | `SaveVacancyRequest` | `201 Created` (+ `Location`) | `400 Bad Request`, `404 Not Found`, `409 Conflict` |
 | **DELETE** | `/api/v1/saved-vacancies/{id}` | Видалення зі збережених | — | `204 No Content` | `404 Not Found` |
+| **POST** | `/api/v1/auth/register` | Реєстрація користувача | `RegisterRequest` | `201 Created` (`AuthResponse`) | `400 Bad Request`, `409 Conflict` |
+| **POST** | `/api/v1/auth/login` | Вхід і видача access-JWT | `LoginRequest` | `200 OK` (`AuthResponse`) | `400 Bad Request`, `401 Unauthorized` |
+| **GET** | `/api/v1/profile/address` | Отримання адреси профілю | — (JWT) | `200 OK` (`UserAddressDto`) | `401 Unauthorized` |
+| **PUT** | `/api/v1/profile/address` | Збереження/оновлення адреси | `UserAddressDto` | `200 OK` (`UserAddressDto`) | `400 Bad Request`, `401 Unauthorized` |
+| **GET** | `/api/v1/geo/coordinates` | Координати адреси | — (`?address=`) | `200 OK` (`CoordinatesDto`) | `400 Bad Request`, `404 Not Found` |
+| **POST** | `/api/v1/geo/sync` | Двостороння синхронізація геокешу | `GeoSyncRequestDto` | `200 OK` (`GeoSyncResponseDto`) | `400 Bad Request` |
+| **GET** | `/api/v1/profile/stats` | Отримання персональної статистики | — (JWT) | `200 OK` (`UserStatsDto`) | `401 Unauthorized` |
+| **POST** | `/api/v1/profile/searches` | Записати пошуковий запит | `RecordSearchRequest` | `202 Accepted`, `204 No Content` | `400 Bad Request`, `401 Unauthorized`, `403 Forbidden` |
+| **DELETE** | `/api/v1/profile/searches` | Очистити історію пошукових запитів | — (JWT) | `204 No Content` | `401 Unauthorized` |
+| **POST** | `/api/v1/profile/views` | Відправити запис про перегляд вакансії | `RecordVacancyViewRequest` | `202 Accepted` | `401 Unauthorized`, `403 Forbidden`, `404 Not Found` |
 
 ---
 
@@ -129,6 +163,12 @@
 - **Деталізація:** Масив `details` вказує на конкретне некоректне поле та отримане значення.
 - **Трасування:** Поле `request_id` дублюється в заголовках відповіді `X-Correlation-Id` та `X-Request-Id` для швидкого пошуку в логах.
 
+### 4.5. Автентифікація та авторизація (JWT)
+- Реєстрація та вхід повертають access-JWT (HS256, 15 хв); роль користувача дублюється в claims `role`.
+- `user_id` для операцій із профілем і збереженими вакансіями береться лише з перевіреного токена, а не з параметрів запиту (THR-12).
+- Відкриті ендпоінти: каталог, автентифікація, геокодування; захищені: `/saved-vacancies` і `/profile`.
+- Помилки: `401` — невірні облікові дані або відсутній/прострочений токен; `403` — недостатньо прав для ролі.
+
 ---
 
 ## 5. Використання ШІ та внесок
@@ -137,3 +177,4 @@
 |--------|--------|----|---------------|
 | Специфікація та проєктування REST API (моделі ресурсів, ендпоінти, обробка помилок, автогенерація OpenAPI) | Денис | генерація початкової структури документа, узгодження описів полів та схем запитів/відповідей | ручне проєктування архітектури, ретельна перевірка та ручне редагування специфікації, коду та документації |
 | Поля `experience_months`, `work_format`, `category_group` і параметри фільтрації каталогу | Садиков Константін | так, текст опису | самоперевірка автора (§8); звірка з фактичним OpenAPI (`openapi-generated.yaml`) і тестами каталогу |
+| Ресурси Auth, Profile і Geo | Дмитро | доповнення описів і схем | звірка з `AuthController`, `ProfileController`, `GeoController` і `docs/api/openapi-generated.yaml` |

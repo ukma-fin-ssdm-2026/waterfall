@@ -221,4 +221,43 @@ internal sealed class FakeGateway : IHttpGatewayService
 
     public Task<Waterfall.Client.Models.Geo.GeoSyncResponseDto?> SyncGeoCacheAsync(Waterfall.Client.Models.Geo.GeoSyncRequestDto request, CancellationToken ct = default) =>
         Task.FromResult(SyncHandler != null ? SyncHandler(request) : new Waterfall.Client.Models.Geo.GeoSyncResponseDto());
+
+    public Waterfall.Client.Models.Profile.UserStatsDto? PersonalStats { get; set; } = new()
+    {
+        SavedVacanciesCount = 3,
+        TotalSearches = 5,
+        TopTechnologies = [new() { Name = "Python", Count = 10 }, new() { Name = "Java", Count = 2 }],
+        TopCategories = [new() { Name = "Backend", Count = 12 }],
+        RecentSearches = ["Python", ".NET", "Junior", "Remote", "React"]
+    };
+
+    public List<string> RecordedSearches { get; } = [];
+    public List<Guid> RecordedVacancyViews { get; } = [];
+    public int ClearSearchHistoryCalls { get; private set; }
+
+    public Task<Waterfall.Client.Models.Profile.UserStatsDto?> GetPersonalStatsAsync(CancellationToken ct = default) =>
+        Task.FromResult(PersonalStats);
+
+    public Task<bool> RecordSearchAsync(string query, CancellationToken ct = default)
+    {
+        RecordedSearches.Add(query);
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> ClearSearchHistoryAsync(CancellationToken ct = default)
+    {
+        ClearSearchHistoryCalls++;
+        if (PersonalStats is not null)
+        {
+            PersonalStats.RecentSearches = [];
+            PersonalStats.TotalSearches = 0;
+        }
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> RecordVacancyViewAsync(Guid vacancyId, CancellationToken ct = default)
+    {
+        RecordedVacancyViews.Add(vacancyId);
+        return Task.FromResult(true);
+    }
 }
