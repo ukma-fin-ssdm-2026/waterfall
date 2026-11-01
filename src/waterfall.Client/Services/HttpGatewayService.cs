@@ -122,6 +122,71 @@ public sealed class HttpGatewayService : IHttpGatewayService
         }
     }
 
+    public async Task<UserStatsDto?> GetPersonalStatsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(new HttpRequestMessage(HttpMethod.Get, "api/v1/profile/stats"), Json.UserStatsDto, ct);
+        }
+        catch (ApiException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> RecordSearchAsync(string query, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return false;
+        }
+
+        try
+        {
+            using HttpResponseMessage response = await SendCoreAsync(
+                Post("api/v1/profile/searches", new RecordSearchRequest { Query = query.Trim() }, Json.RecordSearchRequest),
+                ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (ApiException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> ClearSearchHistoryAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using HttpResponseMessage response = await SendCoreAsync(new HttpRequestMessage(HttpMethod.Delete, "api/v1/profile/searches"), ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (ApiException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> RecordVacancyViewAsync(Guid vacancyId, CancellationToken ct = default)
+    {
+        if (vacancyId == Guid.Empty)
+        {
+            return false;
+        }
+
+        try
+        {
+            using HttpResponseMessage response = await SendCoreAsync(
+                Post("api/v1/profile/views", new RecordVacancyViewRequest { VacancyId = vacancyId }, Json.RecordVacancyViewRequest),
+                ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (ApiException)
+        {
+            return false;
+        }
+    }
+
     private async Task<AuthResponse> AuthenticateAsync(HttpRequestMessage request, CancellationToken ct)
     {
         AuthResponse response = await SendAsync(request, Json.AuthResponse, ct);
