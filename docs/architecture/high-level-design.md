@@ -93,7 +93,7 @@
 Усі внутрішні сервіси взаємодіють між собою через механізм **Dependency Injection (C# Interfaces)** у межах єдиного процесу бекенду:
 1. **Authentication Service (`IAuthenticationService`):** автентифікація, реєстрація та валідація токенів користувачів.
 2. **Cache Service (`ICacheService`):** керування In-Memory кешем за патерном Cache-Aside для прискорення видачі каталогу (PERF-001) та підтримки режиму Stale-Cache (REL-001).
-3. **Storage Service (`IStorageService`):** центральний сервіс оркестрації бізнес-операцій із вакансіями, збереженими списками та координації оновлень.
+3. **Storage Service (`IStorageService`):** центральний сервіс оркестрації бізнес-операцій із вакансіями, збереженими списками та координації оновлень. *Заплановано: окремого `IStorageService` у коді ще немає, цю роль зараз виконують `IVacancyService` (каталог) і `ISavedVacancyService` («Обране»).*
 4. **Analytics & Statistics Service (`IAnalyticsService`):** формування аналітичних звітів ринку праці та статистики активності користувачів.
 5. **AI Consultant Service (`IAIConsultantService`):** підготовка контексту та взаємодія із зовнішніми LLM API з контролем таймауту (REL-003).
 6. **Security Service (`ISecurityService`):** криптографічні операції, стійке хешування паролів (PBKDF2) та захист чутливих конфігурацій (SEC-001).
