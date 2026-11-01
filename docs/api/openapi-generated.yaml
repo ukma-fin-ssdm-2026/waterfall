@@ -7,6 +7,220 @@ servers:
   - url: http://localhost:3000
     description: Локальний сервер розробки
 paths:
+  /api/v1/ai-consultant/messages:
+    post:
+      tags:
+        - AiConsultant
+      summary: Надіслати репліку ШІ-консультанту та отримати відповідь потоком SSE.
+      description: "Послідовність подій: `meta`, `vacancies`, багато `delta`, завершальна `done`.\r\nПомилки до початку стрімінгу повертаються звичайним JSON (400/401/403/404/429/503),\r\nпісля початку — термінальною подією `error`."
+      operationId: SendAiConsultantMessage
+      requestBody:
+        description: Текст запиту та (необов'язково) id поточного діалогу.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIConsultantMessageRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/AIConsultantMessageRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/AIConsultantMessageRequest'
+      responses:
+        '200':
+          description: Потік подій SSE.
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Невалідне тіло запиту.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '403':
+          description: Користувач не є шукачем роботи.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Діалог не знайдено або він належить іншому користувачу.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '429':
+          description: Перевищено ліміт запитів до ШІ.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '503':
+          description: LLM недоступна; слід скористатися звичайним пошуком (REL-003).
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/ai-consultant/analyze:
+    post:
+      tags:
+        - AiConsultant
+      summary: Проаналізувати вибрані вакансії за профілем користувача та стрімити розбір через SSE.
+      description: "Послідовність подій: `relevance` (детерміновані оцінки 0..100, обчислені без LLM),\r\nдалі багато `delta` і завершальна `done` (`{}`).\r\nПомилки до початку стрімінгу повертаються звичайним JSON: 400 (не 1..3 вакансії), 401, 403, 404\r\n(хоч однієї вакансії немає в каталозі), 429 (спільний ліміт із `/messages`).\r\n\r\nСвідоме відхилення від контракту #5: 503 `LLM_UNAVAILABLE` тут НЕ повертається перед\r\nстрімінгом. Оцінка релевантності не потребує LLM, тому сервер спершу віддає корисну подію\r\n`relevance`, а відмову провайдера повідомляє термінальною подією `error` з кодом\r\n`LLM_UNAVAILABLE` (REL-003: відмова ШІ не забирає вже обчислений результат)."
+      operationId: AnalyzeVacancies
+      requestBody:
+        description: Від 1 до 3 ідентифікаторів вакансій каталогу.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIAnalysisRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/AIAnalysisRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/AIAnalysisRequest'
+      responses:
+        '200':
+          description: 'Потік подій SSE (`relevance`, `delta`, `done` або `error`).'
+          content:
+            text/event-stream:
+              schema:
+                type: string
+        '400':
+          description: Не передано жодної вакансії або передано більше трьох.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '403':
+          description: Користувач не є шукачем роботи.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Хоч однієї з указаних вакансій немає в каталозі.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '429':
+          description: Перевищено ліміт запитів до ШІ.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  '/api/v1/ai-consultant/sessions/{id}':
+    delete:
+      tags:
+        - AiConsultant
+      summary: Видалити діалог з ШІ-консультантом («очистити чат»).
+      description: Видаляє діалог разом з історією повідомлень. Чужий діалог недоступний (404).
+      operationId: DeleteAiConsultantSession
+      parameters:
+        - name: id
+          in: path
+          description: Ідентифікатор діалогу.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Діалог видалено.
+        '404':
+          description: Діалог не знайдено або він належить іншому користувачу.
+          content:
+            text/plain:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+            text/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/auth/register:
     post:
       tags:
@@ -440,7 +654,7 @@ paths:
       tags:
         - Vacancies
       summary: Отримати список вакансій із фільтрацією та пагінацією.
-      description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\nмінімальної зарплати та джерела агрегації."
+      description: "Повертає список вакансій за заданими параметрами пошуку (назва, навички), фільтрами категорій,\r\nмінімальної зарплати та джерела агрегації."
       operationId: GetVacancies
       parameters:
         - name: Page
@@ -510,6 +724,53 @@ paths:
             type: string
             example: 3+ роки
           example: 3+ роки
+        - name: MaxExperienceMonths
+          in: query
+          description: "Верхня межа мінімального досвіду в місяцях, включно з межею (0 — без досвіду, 12 — від року).\r\nВакансії з невідомим досвідом не відсіюються: невідоме не означає «забагато»."
+          schema:
+            maximum: 600
+            minimum: 0
+            type: integer
+            format: int32
+            example: 24
+          example: 24
+        - name: WorkFormat
+          in: query
+          description: "Фільтр за форматом роботи. Прапорці: можна вибрати кілька форматів — повертаються вакансії,\r\nякі дозволяють будь-який із них."
+          schema:
+            $ref: '#/components/schemas/WorkFormat'
+          example: Remote
+        - name: CategoryGroup
+          in: query
+          description: Фільтр за широкою канонічною категорією з довідника Waterfall.Services.Models.Vacancies.CategoryGroups.All — точний збіг.
+          schema:
+            maxLength: 100
+            minLength: 0
+            type: string
+            example: Software Development
+          example: Software Development
+        - name: Location
+          in: query
+          description: 'Фільтр за містом: підрядок без урахування регістру, зокрема кирилицею.'
+          schema:
+            maxLength: 200
+            minLength: 0
+            type: string
+            example: Київ
+          example: Київ
+        - name: Skills
+          in: query
+          description: "Навички для пошуку. Кожен термін має знайтися в тегах або в тексті вакансії, терміни поєднуються через AND.\r\nПриймається і повторюваний параметр (`?skills=C%23&skills=.NET`), і список через кому (`?skills=C%23,.NET`)."
+          schema:
+            type: array
+            items:
+              type: string
+            example:
+              - C#
+              - SQL
+          example:
+            - C#
+            - SQL
         - name: Source
           in: query
           description: 'Фільтр за джерелом агрегації (WorkUa, RobotaUa, Djinni, Dou).'
@@ -518,7 +779,7 @@ paths:
           example: Djinni
         - name: OnlyActive
           in: query
-          description: "Ознака вибірки тільки активних вакансій (за замовчуванням true).\nЯкщо false — повертає як активні, так і закриті (архівні) вакансії."
+          description: "Ознака вибірки тільки активних вакансій (за замовчуванням true).\r\nЯкщо false — повертає як активні, так і закриті (архівні) вакансії."
           schema:
             type: boolean
             example: true
@@ -675,6 +936,43 @@ paths:
                 $ref: '#/components/schemas/ApiErrorResponse'
 components:
   schemas:
+    AIAnalysisRequest:
+      required:
+        - vacancy_ids
+      type: object
+      properties:
+        vacancy_ids:
+          maxItems: 3
+          minItems: 1
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Ідентифікатори вакансій для аналізу (1..3; дублікати згортаються).
+          example:
+            - 11111111-1111-1111-1111-111111111111
+            - 22222222-2222-2222-2222-222222222222
+      additionalProperties: false
+      description: "Тіло запиту на аналіз вакансій (FR-010): від 1 до 3 ідентифікаторів вакансій каталогу.\r\nІм'я поля — snake_case, як у контракті API (клієнт MAUI надсилає саме його)."
+    AIConsultantMessageRequest:
+      required:
+        - text
+      type: object
+      properties:
+        session_id:
+          type: string
+          description: Ідентифікатор діалогу; null означає новий діалог.
+          format: uuid
+          nullable: true
+          example: 6f9619ff-8b86-d011-b42d-00c04fc964ff
+        text:
+          maxLength: 1000
+          minLength: 1
+          type: string
+          description: Текст запиту природною мовою (1..1000 символів).
+          example: Хочу віддалену роботу на Python для джуніора
+      additionalProperties: false
+      description: "Тіло запиту до ШІ-консультанта: нова репліка в діалозі.\r\nІмена полів — snake_case, як у контракті API (клієнт MAUI надсилає саме їх)."
     ApiErrorResponse:
       type: object
       properties:
@@ -1130,7 +1428,7 @@ components:
         - JobSeeker
         - Analyst
       type: string
-      description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\n1 = Analyst (доступ до агрегованої аналітики)."
+      description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\r\n1 = Analyst (доступ до агрегованої аналітики)."
     UserStatsDto:
       type: object
       properties:
@@ -1161,7 +1459,7 @@ components:
           description: Останні пошукові запити (новіші спершу).
           nullable: true
       additionalProperties: false
-      description: "Відповідь `GET api/v1/profile/stats` — статистика активності користувача (FR-007, US-008).\nПоведінкові ПД (data-model.md §5): повертається лише самому користувачеві (THR-12)."
+      description: "Відповідь `GET api/v1/profile/stats` — статистика активності користувача (FR-007, US-008).\r\nПоведінкові ПД (data-model.md §5): повертається лише самому користувачеві (THR-12)."
     VacancyDto:
       type: object
       properties:
@@ -1190,6 +1488,11 @@ components:
           description: 'Професійна категорія / напрям (.NET, QA, Frontend, DevOps).'
           nullable: true
           example: .NET
+        categoryGroup:
+          type: string
+          description: Широка канонічна категорія з довідника Waterfall.Services.Models.Vacancies.CategoryGroups.All (IT і не-IT напрями).
+          nullable: true
+          example: Software Development
         location:
           type: string
           description: 'Місто та формат роботи (наприклад, Віддалено, Київ).'
@@ -1210,6 +1513,14 @@ components:
           description: Вимоги до досвіду роботи.
           nullable: true
           example: 5+ років
+        experienceMonths:
+          type: integer
+          description: Мінімальний необхідний досвід у місяцях (0 — без досвіду); null — джерело досвід не вказало.
+          format: int32
+          nullable: true
+          example: 60
+        workFormat:
+          $ref: '#/components/schemas/WorkFormat'
         salaryMin:
           type: number
           description: Мінімальна заробітна плата у валюті currency.
@@ -1262,7 +1573,7 @@ components:
           description: 'Ознака активності (true — активна, false — закрита/архівна).'
         isSaved:
           type: boolean
-          description: "Ознака збереження вакансії поточним користувачем у закладки.\nОбчислюється динамічно за таблицею збережених вакансій."
+          description: "Ознака збереження вакансії поточним користувачем у закладки.\r\nОбчислюється динамічно за таблицею збережених вакансій."
       additionalProperties: false
       description: 'DTO представлення вакансії для клієнтів API (Web API, .NET MAUI).'
     VacancyDtoPagedResult:
@@ -1304,7 +1615,7 @@ components:
           description: Чи існує наступна сторінка.
           readOnly: true
       additionalProperties: false
-      description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\nМістить сторінку елементів та метадані пагінації."
+      description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\r\nМістить сторінку елементів та метадані пагінації."
     ValidationErrorDetail:
       type: object
       properties:
@@ -1319,6 +1630,14 @@ components:
             - null
           nullable: true
       additionalProperties: false
+    WorkFormat:
+      enum:
+        - None
+        - Remote
+        - Hybrid
+        - Office
+      type: string
+      description: "Формат роботи вакансії. Прапорці, бо джерела описують формат словами, і вакансія може дозволяти кілька\r\n(«Віддалено або офіс у Києві»): фільтр каталогу тоді працює як «будь-який із вибраних»."
   securitySchemes:
     Bearer:
       type: http
@@ -1328,6 +1647,8 @@ components:
 security:
   - Bearer: [ ]
 tags:
+  - name: AIConsultant
+    description: 'ШІ-консультант: підбір вакансій звичайною мовою (SSE)'
   - name: Auth
     description: Реєстрація та вхід користувачів платформи Waterfall (JWT)
   - name: Geo

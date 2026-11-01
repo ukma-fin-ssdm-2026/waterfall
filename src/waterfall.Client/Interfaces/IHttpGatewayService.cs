@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using Waterfall.Client.Models.Ai;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SavedVacancies;
@@ -83,4 +84,20 @@ public interface IHttpGatewayService
     /// Записати перегляд вакансії в історію (FR-007).
     /// </summary>
     Task<bool> RecordVacancyViewAsync(Guid vacancyId, CancellationToken ct = default);
+    /// Чат з ШІ-консультантом (FR-002, FR-009). Події стрімляться в міру надходження; сервер сам
+    /// зберігає контекст сесії, тож <paramref name="sessionId"/> = null починає новий діалог.
+    /// Помилки до початку потоку — <see cref="AiConsultantException"/> з кодом сервера
+    /// (<c>RATE_LIMITED</c>, <c>LLM_UNAVAILABLE</c>, 401/403/404).
+    /// </summary>
+    IAsyncEnumerable<AiStreamEvent> SendAiMessageAsync(Guid? sessionId, string text, CancellationToken ct = default);
+
+    /// <summary>
+    /// Видалити сесію діалогу (очищення чату); 404 означає, що сесії вже немає.
+    /// </summary>
+    Task DeleteAiSessionAsync(Guid sessionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Аналіз 1–3 вакансій ШІ-консультантом (FR-010): детермінована релевантність плюс текстовий розбір.
+    /// </summary>
+    IAsyncEnumerable<AiStreamEvent> AnalyzeVacanciesAsync(IReadOnlyList<Guid> vacancyIds, CancellationToken ct = default);
 }

@@ -40,13 +40,16 @@ public static class MauiProgram
                 sp.GetService<Waterfall.Client.Interfaces.ILocalGeoCacheService>()));
         builder.Services.AddSingleton<Waterfall.Client.Interfaces.IAddressAutocompleteService, Waterfall.Client.Services.PhotonAddressAutocompleteService>();
         builder.Services.AddSingleton<IMessenger>(WeakReferenceMessenger.Default);
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.INavigationService, ShellNavigationService>();
         builder.Services.AddWaterfallClient<SecureStorageTokenStore>(new Uri(ApiBaseUrl));
 
         builder.Services.AddTransient<CatalogViewModel>();
         builder.Services.AddTransient<CatalogPage>();
         builder.Services.AddTransient<RecommendationsViewModel>();
         builder.Services.AddTransient<RecommendationsPage>();
-        builder.Services.AddTransient<AIConsultantViewModel>();
+        // Один екземпляр на застосунок: вкладку Shell створює ліниво, а запит на аналіз вакансії
+        // може надійти з каталогу раніше — той самий VM має вже слухати повідомлення.
+        builder.Services.AddSingleton<AIConsultantViewModel>();
         builder.Services.AddTransient<AIConsultantPage>();
         builder.Services.AddTransient<AnalyticsViewModel>();
         builder.Services.AddTransient<AnalyticsPage>();
@@ -95,6 +98,12 @@ public static class MauiProgram
 #endif
         });
 
-        return builder.Build();
+        MauiApp app = builder.Build();
+
+        // Створюємо ШІ-консультант одразу, щоб кнопка «ШІ-аналіз» у каталозі працювала
+        // навіть якщо вкладка «ШІ-чат» ще жодного разу не відкривалася.
+        app.Services.GetRequiredService<AIConsultantViewModel>();
+
+        return app;
     }
 }

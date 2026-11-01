@@ -1,7 +1,9 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: відкладені виклики «Обраного» і входу через TaskCompletionSource (Lab 06); перевірено: тести, що на них спираються, dotnet test.
 
+using System.Runtime.CompilerServices;
 using Waterfall.Client.Interfaces;
+using Waterfall.Client.Models.Ai;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SavedVacancies;
@@ -259,5 +261,62 @@ internal sealed class FakeGateway : IHttpGatewayService
     {
         RecordedVacancyViews.Add(vacancyId);
         return Task.FromResult(true);
+    }
+    /// <summary>
+    /// Події SSE-потоку чату в тому порядку, який задав тест.
+    /// </summary>
+    public Func<Guid?, string, CancellationToken, IAsyncEnumerable<AiStreamEvent>> AiChatStream { get; set; } =
+        static (_, _, _) => AiStreams.Of();
+
+    /// <summary>
+    /// (session_id, текст) кожного запиту до чату — session_id null для нового діалогу.
+    /// </summary>
+    public List<(Guid? SessionId, string Text)> AiChatRequests { get; } = [];
+
+    /// <summary>
+    /// Сигналізує, що запит чату вже надіслано (тест може скасувати потік саме в цей момент).
+    /// </summary>
+    public TaskCompletionSource ChatStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public Func<IReadOnlyList<Guid>, CancellationToken, IAsyncEnumerable<AiStreamEvent>> AiAnalyzeStream { get; set; } =
+        static (_, _) => AiStreams.Of();
+
+    public List<IReadOnlyList<Guid>> AnalyzeRequests { get; } = [];
+
+    public List<Guid> DeletedSessions { get; } = [];
+
+    /// <summary>
+    /// Відповідь на DeleteAiSessionAsync; null — успіх.
+    /// </summary>
+    public Exception? DeleteSessionError { get; set; }
+
+    public async IAsyncEnumerable<AiStreamEvent> SendAiMessageAsync(
+        Guid? sessionId,
+        string text,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        AiChatRequests.Add((sessionId, text));
+        ChatStarted.TrySetResult();
+        await foreach (AiStreamEvent streamEvent in AiChatStream(sessionId, text, ct))
+        {
+            yield return streamEvent;
+        }
+    }
+
+    public Task DeleteAiSessionAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        DeletedSessions.Add(sessionId);
+        return DeleteSessionError is null ? Task.CompletedTask : Task.FromException(DeleteSessionError);
+    }
+
+    public async IAsyncEnumerable<AiStreamEvent> AnalyzeVacanciesAsync(
+        IReadOnlyList<Guid> vacancyIds,
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        AnalyzeRequests.Add(vacancyIds);
+        await foreach (AiStreamEvent streamEvent in AiAnalyzeStream(vacancyIds, ct))
+        {
+            yield return streamEvent;
+        }
     }
 }

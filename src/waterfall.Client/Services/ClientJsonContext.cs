@@ -2,6 +2,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Waterfall.Client.Models.Ai;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Geo;
@@ -36,4 +37,14 @@ namespace Waterfall.Client.Services;
 [JsonSerializable(typeof(List<GeoSyncItemDto>))]
 [JsonSerializable(typeof(GeoSyncRequestDto))]
 [JsonSerializable(typeof(GeoSyncResponseDto))]
+[JsonSerializable(typeof(AiMessageRequest))]
+[JsonSerializable(typeof(AiAnalyzeRequest))]
+[JsonSerializable(typeof(AiMetaEvent))]
+[JsonSerializable(typeof(AiAppliedFilter))]
+[JsonSerializable(typeof(AiVacanciesEvent))]
+[JsonSerializable(typeof(AiDeltaEvent))]
+[JsonSerializable(typeof(AiDoneEvent))]
+[JsonSerializable(typeof(AiErrorEvent))]
+[JsonSerializable(typeof(AiRelevanceEvent))]
+[JsonSerializable(typeof(AiRelevanceItem))]
 internal sealed partial class ClientJsonContext : JsonSerializerContext;

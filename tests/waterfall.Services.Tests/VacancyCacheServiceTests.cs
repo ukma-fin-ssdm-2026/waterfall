@@ -223,4 +223,69 @@ public sealed class VacancyCacheServiceTests : IDisposable
         Assert.Null(detailAfter);
         Assert.Null(pagedAfter);
     }
+
+    // AI: ключ кешу враховує сортування й нові фільтри; перевірено: падає без цих полів у ключі
+    [Fact]
+    public async Task GetPagedVacanciesAsync_SortOrderAndFilters_ProduceDifferentKeys()
+    {
+        // Arrange
+        PagedResult<VacancyDto> result = new()
+        {
+            Items = [CreateSampleDto()],
+            TotalCount = 1,
+            Page = 1,
+            PageSize = 10
+        };
+        VacancyFilterParameters ascending = new() { SortBy = "publishedAt", SortOrder = "asc" };
+        await _cacheService.SetPagedVacanciesAsync(ascending, result);
+
+        // Act + Assert: інший напрямок сортування — це інший результат, а не влучання в кеш
+        VacancyFilterParameters descending = new() { SortBy = "publishedAt", SortOrder = "desc" };
+        Assert.Null(await _cacheService.GetPagedVacanciesAsync(descending));
+        Assert.NotNull(await _cacheService.GetPagedVacanciesAsync(ascending));
+
+        // Формат роботи
+        VacancyFilterParameters remote = new() { WorkFormat = Waterfall.Repository.Entities.WorkFormat.Remote };
+        Assert.Null(await _cacheService.GetPagedVacanciesAsync(remote));
+
+        // Навички
+        VacancyFilterParameters skills = new() { Skills = ["C#"] };
+        Assert.Null(await _cacheService.GetPagedVacanciesAsync(skills));
+
+        // Локація
+        VacancyFilterParameters location = new() { Location = "Київ" };
+        Assert.Null(await _cacheService.GetPagedVacanciesAsync(location));
+
+        // Верхня межа досвіду
+        VacancyFilterParameters experience = new() { MaxExperienceMonths = 24 };
+        Assert.Null(await _cacheService.GetPagedVacanciesAsync(experience));
+
+        // Широка категорія
+        VacancyFilterParameters group = new() { CategoryGroup = "QA" };
+        Assert.Null(await _cacheService.GetPagedVacanciesAsync(group));
+    }
+
+    [Fact]
+    public async Task GetStaleCatalog_PlainFirstPageWithoutFilters_IsRemembered()
+    {
+        // Arrange
+        PagedResult<VacancyDto> result = new()
+        {
+            Items = [CreateSampleDto()],
+            TotalCount = 1,
+            Page = 1,
+            PageSize = 10
+        };
+
+        // Фільтри поза «чистою» першою сторінкою не мають ставати Stale-Cache для інших запитів
+        await _cacheService.SetPagedVacanciesAsync(new VacancyFilterParameters { Location = "Київ" }, result);
+        await _cacheService.SetPagedVacanciesAsync(new VacancyFilterParameters { WorkFormat = Waterfall.Repository.Entities.WorkFormat.Remote }, result);
+        Assert.Null(_cacheService.GetStaleCatalog());
+
+        // Act
+        await _cacheService.SetPagedVacanciesAsync(new VacancyFilterParameters(), result);
+
+        // Assert
+        Assert.NotNull(_cacheService.GetStaleCatalog());
+    }
 }

@@ -1,3 +1,4 @@
+// AI: реєстрація IChatSessionRepository; перевірено: dotnet test waterfall.Repository.Tests
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using System;
@@ -19,7 +20,8 @@ public static class ServiceCollectionExtensions
     /// Реєструє <see cref="WaterfallDbContext"/> (з підтримкою SQLite або SQL Server)
     /// та реалізації репозиторіїв доступу до даних (<see cref="IVacancyRepository"/>,
     /// <see cref="ISavedVacancyRepository"/>, <see cref="IUserRepository"/>,
-    /// <see cref="ISearchQueryRepository"/>, <see cref="IVacancyViewRepository"/>).
+    /// <see cref="ISearchQueryRepository"/>, <see cref="IVacancyViewRepository"/>,
+    /// <see cref="IChatSessionRepository"/>).
     /// </summary>
     /// <param name="services">Колекція сервісів DI-контейнера.</param>
     /// <param name="configuration">Конфігурація застосунку (секції DatabaseProvider та ConnectionStrings:DefaultConnection).</param>
@@ -49,6 +51,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IGeoLocationCacheRepository, EfGeoLocationCacheRepository>();
         services.AddScoped<ISearchQueryRepository, EfSearchQueryRepository>();
         services.AddScoped<IVacancyViewRepository, EfVacancyViewRepository>();
+        services.AddScoped<IChatSessionRepository, EfChatSessionRepository>();
 
         return services;
     }
