@@ -1,3 +1,4 @@
+// AI: реєстрація IChatSessionRepository; перевірено: dotnet test waterfall.Repository.Tests
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using System;

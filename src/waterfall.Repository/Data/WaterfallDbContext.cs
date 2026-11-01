@@ -1,3 +1,4 @@
+// AI: DbSet-и та мапінг діалогів з ШІ (FR-009); перевірено: тести EfChatSessionRepositoryTests на in-memory SQLite
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using Microsoft.EntityFrameworkCore;
@@ -70,6 +71,14 @@ public class WaterfallDbContext : DbContext
         // Складений ключ (message_id, vacancy_id) не дає зберегти ту саму вакансію в одній відповіді двічі
         modelBuilder.Entity<ChatMessageVacancyDB>()
             .HasKey(link => new { link.MessageId, link.VacancyId });
+
+        // Два каскадні шляхи до ChatMessageVacancy (Vacancy → link і ChatSession → ChatMessage → link)
+        // SQL Server відхиляє, тож з боку вакансії видалення заборонене, а не каскадне
+        modelBuilder.Entity<ChatMessageVacancyDB>()
+            .HasOne(link => link.Vacancy)
+            .WithMany()
+            .HasForeignKey(link => link.VacancyId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Автор репліки зберігається рядком ("User"/"Assistant"), щоб вміст таблиці читався без декодування
         modelBuilder.Entity<ChatMessageDB>()
