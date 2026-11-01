@@ -73,7 +73,6 @@
 * [**static-analysis.md**](./docs/code-quality/static-analysis.md) — статичний аналіз безпеки
 * [**review-report.md**](./docs/code-quality/review-report.md) — огляд коду команди [pun-intended-team](https://github.com/ukma-fin-ssdm-2026/pun-intended-team)
 * [**TeamCharter.md §9**](./TeamCharter.md#9-політика-якості-та-огляду-коду) — стандарти коду, лінтери, чекліст Peer Review, Definition of Done
-* Застосунок (Windows): `dotnet run --project src/waterfall.UI -f net10.0-windows10.0.19041.0` (поруч має працювати API)
 * Перед комітом: `dotnet format waterfall.slnx --verify-no-changes`; хук `gitleaks` — `pre-commit install` (див. [`.pre-commit-config.yaml`](./.pre-commit-config.yaml))
 
 ### Тестування та налагодження (Лаб 6)
@@ -95,37 +94,88 @@
 
 ### Запуск
 
-1. Необхідно мати .NET 10.
-2. Секрети (JWT): `Jwt:Key` (мінімум 32 символи) живе **лише** у змінній середовища `Jwt__Key` або .NET User Secrets. Без ключа сервер падає на старті з `InvalidOperationException`; регенерація docs (`--generate-openapi-and-exit`) перевірку пропускає.
-- Генерація надійного ключа (≥256 біт; свіжий на кожне середовище:
-   ```bash
-   # Linux/macOS:
-   openssl rand -base64 32
-   ```
-   ```powershell
-   # Windows PowerShell (.NET, без openssl):
-   [Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
-   ```
-   ```bash
-   # Кросплатформно через Python:
-   python3 -c "import secrets; print(secrets.token_urlsafe(32))"
-   ```
-- Застосувати ключ — локальна розробка:
-   ```bash
-   dotnet user-secrets set "Jwt:Key" "<вставити згенероване>" --project src/api
-   ```
-- Застосувати ключ — продакшн / CI:
-   ```bash
-   # Linux/macOS:
-   export Jwt__Key="<вставити згенероване>"
-   ```
-   ```powershell
-   # Windows PowerShell:
-   $env:Jwt__Key = "<вставити згенероване>"
-   ```
-3. Скачати залежності: `dotnet restore src/api/Waterfall.Api.csproj`
-4. Забілдити: `dotnet build src/api/Waterfall.Api.csproj`
-5. Запустити: `dotnet run --project src/api`
+#### Необхідно
+* **.NET SDK 10.**
+* **MAUI workload** (для UI): `dotnet workload restore`.
+* **Node.js та npm** (тільки для MCP-сервера, див. нижче).
+
+#### Крок 0. Секрети JWT
+API вимагає ключ `Jwt:Key` (мінімум 32 символи). Він живе **лише** у змінній середовища `Jwt__Key` або у .NET User Secrets. Без ключа сервер падає на старті з `InvalidOperationException`; регенерація docs (`--generate-openapi-and-exit`) перевірку пропускає.
+
+Генерація надійного ключа (≥256 біт; свіжий на кожне середовище):
+```bash
+# Linux/macOS:
+openssl rand -base64 32
+```
+```powershell
+# Windows PowerShell (.NET, без openssl):
+[Convert]::ToBase64String((1..32 | ForEach-Object { Get-Random -Maximum 256 }))
+```
+```bash
+# Кросплатформно через Python:
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+Застосувати ключ — локальна розробка:
+```bash
+dotnet user-secrets set "Jwt:Key" "<вставити згенероване>" --project src/api
+```
+
+Застосувати ключ — продакшн / CI:
+```bash
+# Linux/macOS:
+export Jwt__Key="<вставити згенероване>"
+```
+```powershell
+# Windows PowerShell:
+$env:Jwt__Key = "<вставити згенероване>"
+```
+
+#### Запуск API
+```bash
+dotnet restore src/api/Waterfall.Api.csproj
+dotnet build src/api/Waterfall.Api.csproj
+dotnet run --project src/api
+```
+API слухає `http://localhost:3000` (і `https://localhost:3001`); жива документація — `http://localhost:3000/api-docs` (Swagger UI).
+
+Перший запуск створює `src/api/waterfall.db` із сід-даними. Тестові облікові записи:
+* `seeker1@waterfall.com` / `DevSeeker1234`
+* `seeker2@waterfall.com` / `DevSeeker1234`
+* `analyst@waterfall.com` / `DevAnalyst1234`
+
+#### Запуск Windows UI
+UI звертається до `http://localhost:3000`, тому **API має бути запущений першим**.
+```bash
+dotnet run --project src/waterfall.UI -f net10.0-windows10.0.19041.0
+```
+Для збирання Windows UI потрібен встановлений MAUI workload: `dotnet workload restore`.
+
+#### Тести та якість коду
+```bash
+dotnet test -f net10.0
+```
+
+**Генерація звіту покриття:**
+```bash
+# 1. Прогін всіх тестів зі збором покриття
+dotnet test -c Release -f net10.0 --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults
+
+# 2. Відновити інструменти та зібрати звіт (потрібен dotnet-reportgenerator-globaltool)
+dotnet tool restore
+dotnet tool run reportgenerator \
+  -reports:"TestResults/**/coverage.cobertura.xml" \
+  -targetdir:"coverage-report" \
+  -reporttypes:"TextSummary;Html" \
+  -assemblyfilters:"+waterfall.*;+Waterfall.*" \
+  -classfilters:"-Microsoft.AspNetCore.OpenApi.Generated*;-*Program*"
+```
+Звіт доступний у `coverage-report/index.html` та `coverage-report/Summary.txt`.
+
+Перевірка форматування (без `--verify-no-changes` для виправлення):
+```bash
+dotnet format waterfall.slnx --verify-no-changes
+```
 
 ### MCP-сервер
 TypeScript MCP-сервер в [`src/mcp/`](./src/mcp/), згенерований зі специфікації
