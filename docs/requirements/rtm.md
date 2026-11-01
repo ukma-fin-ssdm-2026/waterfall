@@ -42,10 +42,10 @@
 | Test-13…15 | `RecommendationsViewModelTests` (`LoadRecommendations_*`, `Refresh_*`) | частково: сценарії 13–15 не відтворені окремими тестами |
 | Test-16…21 | — | план: `AIConsultantViewModel` без тестів (US-005) |
 | Test-22…27 | — | план: `AnalyticsViewModel` без тестів (US-006, US-007) |
-| Test-28…30 | — | план: US-008 без тестів |
+| Test-28…30 | `UserStatsServiceTests`, `LoginViewModelTests` (`RestoreSession_LoadsPersonalStats_WhenJobSeeker_Test28`, `VacancySaveChanged_UpdatesSavedCountAndReloadsStats_Test29`, `LoadPersonalStats_EmptyActivity_ShowsEmptyState_Test30`), `HttpGatewayServiceTests` | виконано |
 | Test-31 | `ci.yml` (6 наборів, 526 тестів) + зведений звіт ReportGenerator | виконано (line 77.7%, branch 74.3%, 26.10.2026) |
 | Test-32 | `VacancyItemViewModelTests.SalaryText_CoversAllRangeShapes` | виконано |
-| Test-33 | — | план: скидання фільтрів не покрито |
+| Test-33 | `CatalogViewModelTests.ResetFilters_ResetsFieldsToDefaultAndReloadsCatalog_Test33` | виконано |
 | Test-34, Test-35 | `VacancyItemSkillsTests` (`VisibleSkills_*`) | виконано |
 
 Прогалини, які лишилися поза таблицею:
