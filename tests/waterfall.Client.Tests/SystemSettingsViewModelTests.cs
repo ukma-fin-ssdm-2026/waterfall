@@ -28,6 +28,7 @@ public class SystemSettingsViewModelTests
         // Перевірка завантажених параметрів сервісу
         Assert.True(vm.DouPages > 0);
         Assert.True(vm.WorkUaPages > 0);
+        Assert.True(vm.RobotaUaPages > 0);
         Assert.True(vm.DjinniPages > 0);
         Assert.NotEmpty(vm.RequestDelay);
     }

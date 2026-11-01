@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Robota.ua parser** (`RobotaUaParser`): reads schema.org `JobPosting` JSON-LD and vacancy links; wired into `JobParserService` (`Ingestion:RobotaUaPages`), URL domain check and UAH default in `VacancyIngestionService`, page count on the system settings screen. It gets no real vacancies yet: robota.ua answers `robots.txt` with a Cloudflare challenge (403), and its list page is rendered client-side.
+
 ### Refactoring
 - **HTML parsing helpers deduplication** (*Extract Class*): Moved `Load`, `Text` and `Clean`, copied across `WorkUaParser`, `DouParser` and `DjinniParser`, into one shared `Html` class (removes the duplicated block `WorkUaParser.cs:101-118` ↔ `DouParser.cs:128-144` reported by SonarQube Cloud).
 - **Crawl loop decomposition** (*Extract Method, Introduce Parameter Object*): Split `SiteCrawler.CrawlAsync` into `ReadListPageAsync`, `WithJobPageAsync`, `ReadJobPageAsync` and `RememberJobPages`, keeping the state of one crawl in `CrawlState`; cognitive complexity of `CrawlAsync` 35 → 9.

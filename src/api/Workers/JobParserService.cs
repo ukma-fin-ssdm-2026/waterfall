@@ -9,7 +9,7 @@ using Waterfall.Services.Models.Vacancies;
 namespace Waterfall.Api.Workers;
 
 /// <summary>
-/// Job Parser Service: раз на <see cref="IngestionOptions.Interval"/> завантажує найсвіжіші вакансії з djinni.co, work.ua і jobs.dou.ua
+/// Job Parser Service: раз на <see cref="IngestionOptions.Interval"/> завантажує найсвіжіші вакансії з djinni.co, work.ua, robota.ua і jobs.dou.ua
 /// (а якщо задано каталог — ще й JSON-дампи) та передає їх на нормалізацію й збереження
 /// (<see cref="IVacancyIngestionService.ProcessRawVacanciesAsync"/>).
 /// Збій сайту чи одного файлу записується в журнал і не зупиняє ні інші джерела, ні API.
@@ -38,6 +38,7 @@ public class JobParserService : BackgroundService
         [
             new SiteCrawler(new DjinniParser(), _options.DjinniPages, _options.RequestDelay, httpClientFactory, logger),
             new SiteCrawler(new WorkUaParser(), _options.WorkUaPages, _options.RequestDelay, httpClientFactory, logger),
+            new SiteCrawler(new RobotaUaParser(), _options.RobotaUaPages, _options.RequestDelay, httpClientFactory, logger),
             new SiteCrawler(new DouParser(), _options.DouPages, _options.RequestDelay, httpClientFactory, logger)
         ];
 
@@ -56,8 +57,8 @@ public class JobParserService : BackgroundService
         }
 
         _logger.LogInformation(
-            "Фоновий збір вакансій: djinni.co — {DjinniPages} стор., work.ua — {WorkUaPages} стор., jobs.dou.ua — {DouPages} стор., каталог з дампами — {Directory}, інтервал {Interval}.",
-            _options.DjinniPages, _options.WorkUaPages, _options.DouPages, _directory ?? "вимкнено", _options.Interval);
+            "Фоновий збір вакансій: djinni.co — {DjinniPages} стор., work.ua — {WorkUaPages} стор., robota.ua — {RobotaUaPages} стор., jobs.dou.ua — {DouPages} стор., каталог з дампами — {Directory}, інтервал {Interval}.",
+            _options.DjinniPages, _options.WorkUaPages, _options.RobotaUaPages, _options.DouPages, _directory ?? "вимкнено", _options.Interval);
 
         using PeriodicTimer timer = new(_options.Interval);
         try
@@ -154,6 +155,9 @@ public class IngestionOptions
     /// <summary>Скільки перших сторінок усіх вакансій work.ua читати за раз (по 14 вакансій); 0 — не звертатися до сайту.</summary>
     public int WorkUaPages { get; set; } = 3;
 
+    /// <summary>Скільки перших сторінок вакансій robota.ua читати за раз; 0 — не звертатися до сайту.</summary>
+    public int RobotaUaPages { get; set; } = 1;
+
     /// <summary>RSS-стрічка jobs.dou.ua — одна сторінка з 50 найсвіжішими вакансіями: 1 — читати, 0 — не звертатися до сайту.</summary>
     public int DouPages { get; set; } = 1;
 
@@ -192,7 +196,7 @@ public sealed class IngestionOptionsValidator : IValidateOptions<IngestionOption
                 $"Ingestion:RequestDelay має бути не менше {MinRequestDelay.TotalSeconds} с, а задано {options.RequestDelay.TotalSeconds} с"));
         }
 
-        foreach ((string setting, int pages) in new[] { ("DjinniPages", options.DjinniPages), ("WorkUaPages", options.WorkUaPages), ("DouPages", options.DouPages) })
+        foreach ((string setting, int pages) in new[] { ("DjinniPages", options.DjinniPages), ("WorkUaPages", options.WorkUaPages), ("RobotaUaPages", options.RobotaUaPages), ("DouPages", options.DouPages) })
         {
             if (pages is < 0 or > MaxPages)
             {

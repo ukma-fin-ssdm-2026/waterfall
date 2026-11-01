@@ -148,13 +148,31 @@ public class VacancyIngestionServiceTests
 
     [Theory]
     [InlineData(JobSource.Unknown)]
-    [InlineData(JobSource.RobotaUa)] // збирати з Robota.ua ще не вміємо, тож і домену для перевірки посилань немає
     public void Normalize_UnsupportedSource_IsRejected(JobSource source)
     {
         (VacancyDB? vacancy, string? error) = VacancyIngestionService.Normalize(Raw() with { Source = source }, Now);
 
         Assert.Null(vacancy);
         Assert.Contains("невідоме джерело", error);
+    }
+
+    [Fact]
+    public void Normalize_RobotaUa_ChecksRobotaDomainAndDefaultsToHryvnias()
+    {
+        RawVacancy raw = Raw() with
+        {
+            Source = JobSource.RobotaUa,
+            Url = "https://robota.ua/company123/vacancy456/",
+            Salary = "45 000"
+        };
+
+        (VacancyDB? vacancy, string? error) = VacancyIngestionService.Normalize(raw, Now);
+
+        Assert.Null(error);
+        Assert.NotNull(vacancy);
+        Assert.Equal("RobotaUa", vacancy.Source);
+        Assert.Equal((45000m, 45000m, "UAH"), (vacancy.SalaryMin, vacancy.SalaryMax, vacancy.Currency));
+        Assert.Contains("robota.ua", VacancyIngestionService.Normalize(raw with { Url = "https://robota.ua.evil.example/vacancy456" }, Now).Error);
     }
 
     [Theory]
