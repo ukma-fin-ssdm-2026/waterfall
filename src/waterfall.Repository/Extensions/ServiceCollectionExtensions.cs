@@ -18,7 +18,8 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Реєструє <see cref="WaterfallDbContext"/> (з підтримкою SQLite або SQL Server)
     /// та реалізації репозиторіїв доступу до даних (<see cref="IVacancyRepository"/>,
-    /// <see cref="ISavedVacancyRepository"/>, <see cref="IUserRepository"/>).
+    /// <see cref="ISavedVacancyRepository"/>, <see cref="IUserRepository"/>,
+    /// <see cref="ISearchQueryRepository"/>, <see cref="IVacancyViewRepository"/>).
     /// </summary>
     /// <param name="services">Колекція сервісів DI-контейнера.</param>
     /// <param name="configuration">Конфігурація застосунку (секції DatabaseProvider та ConnectionStrings:DefaultConnection).</param>
@@ -46,6 +47,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ISavedVacancyRepository, EfSavedVacancyRepository>();
         services.AddScoped<IUserRepository, EfUserRepository>();
         services.AddScoped<IGeoLocationCacheRepository, EfGeoLocationCacheRepository>();
+        services.AddScoped<ISearchQueryRepository, EfSearchQueryRepository>();
+        services.AddScoped<IVacancyViewRepository, EfVacancyViewRepository>();
 
         return services;
     }

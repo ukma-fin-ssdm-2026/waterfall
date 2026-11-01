@@ -196,6 +196,9 @@ public sealed class SensitiveLoggingRegressionTests
             return Task.FromResult(user);
         }
 
+        public Task<UserDB?> GetByIdAsync(Guid id, CancellationToken ct = default)
+            => throw new NotSupportedException("GetByIdAsync не використовується цими тестами.");
+
         public Task<UserDB> CreateAsync(UserDB entity, CancellationToken ct = default)
         {
             _users.Add(entity);
