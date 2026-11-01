@@ -510,6 +510,53 @@ paths:
             type: string
             example: 3+ роки
           example: 3+ роки
+        - name: MaxExperienceMonths
+          in: query
+          description: "Верхня межа мінімального досвіду в місяцях, включно з межею (0 — без досвіду, 12 — від року).\nВакансії з невідомим досвідом не відсіюються: невідоме не означає «забагато»."
+          schema:
+            maximum: 600
+            minimum: 0
+            type: integer
+            format: int32
+            example: 24
+          example: 24
+        - name: WorkFormat
+          in: query
+          description: "Фільтр за форматом роботи. Прапорці: можна вибрати кілька форматів — повертаються вакансії,\nякі дозволяють будь-який із них."
+          schema:
+            $ref: '#/components/schemas/WorkFormat'
+          example: Remote
+        - name: CategoryGroup
+          in: query
+          description: Фільтр за широкою канонічною категорією з довідника Waterfall.Services.Models.Vacancies.CategoryGroups.All — точний збіг.
+          schema:
+            maxLength: 100
+            minLength: 0
+            type: string
+            example: Software Development
+          example: Software Development
+        - name: Location
+          in: query
+          description: 'Фільтр за містом: підрядок без урахування регістру, зокрема кирилицею.'
+          schema:
+            maxLength: 200
+            minLength: 0
+            type: string
+            example: Київ
+          example: Київ
+        - name: Skills
+          in: query
+          description: "Навички для пошуку. Кожен термін має знайтися в тегах або в тексті вакансії, терміни поєднуються через AND.\nПриймається і повторюваний параметр (`?skills=C%23&skills=.NET`), і список через кому (`?skills=C%23,.NET`)."
+          schema:
+            type: array
+            items:
+              type: string
+            example:
+              - C#
+              - SQL
+          example:
+            - C#
+            - SQL
         - name: Source
           in: query
           description: 'Фільтр за джерелом агрегації (WorkUa, RobotaUa, Djinni, Dou).'
@@ -1190,6 +1237,11 @@ components:
           description: 'Професійна категорія / напрям (.NET, QA, Frontend, DevOps).'
           nullable: true
           example: .NET
+        categoryGroup:
+          type: string
+          description: Широка канонічна категорія з довідника Waterfall.Services.Models.Vacancies.CategoryGroups.All (IT і не-IT напрями).
+          nullable: true
+          example: Software Development
         location:
           type: string
           description: 'Місто та формат роботи (наприклад, Віддалено, Київ).'
@@ -1210,6 +1262,14 @@ components:
           description: Вимоги до досвіду роботи.
           nullable: true
           example: 5+ років
+        experienceMonths:
+          type: integer
+          description: Мінімальний необхідний досвід у місяцях (0 — без досвіду); null — джерело досвід не вказало.
+          format: int32
+          nullable: true
+          example: 60
+        workFormat:
+          $ref: '#/components/schemas/WorkFormat'
         salaryMin:
           type: number
           description: Мінімальна заробітна плата у валюті currency.
@@ -1319,6 +1379,14 @@ components:
             - null
           nullable: true
       additionalProperties: false
+    WorkFormat:
+      enum:
+        - None
+        - Remote
+        - Hybrid
+        - Office
+      type: string
+      description: "Формат роботи вакансії. Прапорці, бо джерела описують формат словами, і вакансія може дозволяти кілька\n(«Віддалено або офіс у Києві»): фільтр каталогу тоді працює як «будь-який із вибраних»."
   securitySchemes:
     Bearer:
       type: http
