@@ -40,7 +40,12 @@
 | Test-11 | `SEC_001_ZeroPlainTextPasswordsInDatabaseStorage`, `PasswordHasherTests.Hash_DoesNotContainPlaintext` | виконано |
 | Test-12 | `LoginViewModelTests.Restore_*`, `AuthSessionTests.FromToken_*` | частково: відновлення після краху застосунку вручну |
 | Test-13…15 | `RecommendationsViewModelTests` (`LoadRecommendations_*`, `Refresh_*`) | частково: сценарії 13–15 не відтворені окремими тестами |
-| Test-16…21 | — | план: `AIConsultantViewModel` без тестів (US-005) |
+| Test-16 | `AIConsultantServiceTests.PrepareAsync_NewSession_CreatesOwnedSessionAndStoresUserMessage`, `PrepareAsync_ExactMatches_DoNotRelaxAnyCriterion`, `AIConsultantControllerTests.SendMessage_OwnSession_StreamsMetaVacanciesDeltasDoneInOrder` | виконано (бекенд: події `meta`→`vacancies`→`delta`→`done`); `AIConsultantViewModel` у клієнті поки без тестів |
+| Test-17 | `AIConsultantServiceTests.PrepareAsync_Refinement_KeepsPreviousFilterAndChangesOnlyTheNewCriterion`, `PrepareAsync_ClearKeys_RemoveCriterionFromPreviousFilter`, `PrepareAsync_HistoryWindow_LimitsContextSentToLlm` | виконано (бекенд) |
+| Test-18 | `AIConsultantServiceTests.PrepareAsync_Relaxation_DropsTheCriterionThatUnblocksTheMostResults`, `PrepareAsync_Relaxation_StopsAfterThreeCriteria`, `PrepareAsync_EmptyCatalogWithCriteria_ReportsNoResultsWithoutInventingVacancies`, `AIConsultantControllerTests.SendMessage_RelaxedResults_DescribeRelaxedCriteriaAndDisclaimer` | виконано (бекенд: `exact=false`, `relaxed` ≤ 3, disclaimer) |
+| Test-19 | — | план: p95 ≤ 30 с не вимірювався (потрібен живий LLM-провайдер); потік віддає `meta`/`vacancies` до першого `delta`, тож індикатор клієнта з'являється одразу |
+| Test-20 | `AIConsultantControllerTests.SendMessage_LlmUnavailable_Returns503BeforeStreaming`, `SendMessage_SummaryFailsAfterVacancies_SendsTerminalErrorEvent`, `SendMessage_AfterLimit_Returns429RateLimited`, `SendMessage_RateLimit_IsPerUser`, `AIConsultantServiceTests.PrepareAsync_ExtractionFailure_PropagatesLlmUnavailableAndCreatesNoSession` | виконано (заглушка LLM у тестах; ручний прогін без ключів дає `503 LLM_UNAVAILABLE`) |
+| Test-21 | `AIConsultantServiceTests.PrepareAsync_SummaryPrompt_ContainsExactlyTheReturnedVacancies`, `StreamAnswerAsync_PersistsFullTextAndExactlyTheSentVacancyLinks`, `EfChatSessionRepositoryTests.AddAssistantMessageAsync_UnknownVacancy_ViolatesForeignKeyAndPersistsNothing` | виконано (промпт містить рівно вакансії з БД; FK на `Vacancies` відхиляє вигадану) |
 | Test-22…27 | — | план: `AnalyticsViewModel` без тестів (US-006, US-007) |
 | Test-28…30 | — | план: US-008 без тестів |
 | Test-31 | `ci.yml` (6 наборів, 526 тестів) + зведений звіт ReportGenerator | виконано (line 77.7%, branch 74.3%, 26.10.2026) |
@@ -60,3 +65,4 @@
 | RTM | Дмитро | структурування та тести | самоперевірка автора (§8) |
 | Розділ «Зв'язок із тест-планом (Лаб 7)»: колонка ID → автотести, прогалини простежуваності | Константін | Звірка назв тестів зі списком методів у `tests/**` | Кожну назву тесту знайдено пошуком у коді; стан «виконано/частково/план» — за наявністю методу й прогоном `dotnet test` (526 тестів, 0 падінь) |
 | ID кейсів плану (TP-xx) у стовпці «Тестові випадки», оновлені рядки Test-03…Test-05 | Данило | Звірка ID і назв тестів | Кожен TP-xx звірено з колонкою «Вимога» в `test-plan.md`; назви тестів знайдено пошуком у `tests/**` |
+| Test-16…Test-21: заміна «план» на назви автотестів ШІ-консультанта | Садиков Константін | Звірка назв методів у `tests/waterfall.Api.Tests` і `tests/waterfall.Services.Tests` | Кожну назву тесту знайдено пошуком у коді; `dotnet test` відповідних проєктів (див. звіт PR) |
