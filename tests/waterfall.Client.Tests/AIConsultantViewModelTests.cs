@@ -320,6 +320,121 @@ public class AIConsultantViewModelTests
     }
 
     [Fact]
+    public async Task Analyze_LlmFailsAfterRelevance_KeepsScoreAndOffersCatalog()
+    {
+        // REL-003: оцінка релевантності не потребує LLM, тож лишається корисною після збою розбору
+        Guid vacancyId = Guid.NewGuid();
+        _gateway.AiAnalyzeStream = (_, _) => AiStreams.Of(
+            new AiRelevanceEvent { Items = [new AiRelevanceItem { VacancyId = vacancyId, Score = 55, BasisCount = 2 }] },
+            new AiErrorEvent { Code = AiConsultantException.LlmUnavailableCode, Message = "LLM недоступна" });
+
+        AIConsultantViewModel vm = CreateViewModel();
+
+        await vm.AnalyzeVacancyCommand.ExecuteAsync(new VacancyDto { Id = vacancyId, Title = "Python Developer" });
+
+        AIChatMessageViewModel reply = vm.Messages[2];
+        Assert.Contains("55/100", reply.RelevanceText);
+        Assert.Contains("каталозі", reply.Text);
+        Assert.True(reply.ShowCatalogAction);
+        Assert.False(vm.IsThinking);
+    }
+
+    [Fact]
+    public async Task Analyze_RateLimitedBeforeStream_ShowsLimitMessage()
+    {
+        _gateway.AiAnalyzeStream = (_, _) => AiStreams.Fail(new AiConsultantException(
+            HttpStatusCode.TooManyRequests, null, "ліміт", AiConsultantException.RateLimitedCode));
+
+        AIConsultantViewModel vm = CreateViewModel();
+
+        await vm.AnalyzeVacancyCommand.ExecuteAsync(new VacancyDto { Id = Guid.NewGuid(), Title = "QA" });
+
+        AIChatMessageViewModel reply = vm.Messages[2];
+        Assert.Contains("ліміт", reply.Text);
+        Assert.True(reply.ShowCatalogAction);
+    }
+
+    [Fact]
+    public async Task Analyze_ServerUnreachable_ShowsConnectionErrorWithoutCatalogAction()
+    {
+        _gateway.AiAnalyzeStream = (_, _) => AiStreams.Fail(new ApiException(null, null, "Не вдалося з'єднатися з сервером."));
+
+        AIConsultantViewModel vm = CreateViewModel();
+
+        await vm.AnalyzeVacancyCommand.ExecuteAsync(new VacancyDto { Id = Guid.NewGuid(), Title = "QA" });
+
+        AIChatMessageViewModel reply = vm.Messages[2];
+        Assert.Contains("з'єднатися", reply.Text);
+        Assert.False(reply.ShowCatalogAction);
+        Assert.False(vm.IsThinking);
+    }
+
+    [Fact]
+    public async Task AnalyzeRequestFromCard_OpensAiTabThenStreamsAnalysis()
+    {
+        // Картка в каталозі шле повідомлення; вкладка ШІ має відкритися до початку стріму
+        WeakReferenceMessenger messenger = new();
+        Guid vacancyId = Guid.NewGuid();
+        TaskCompletionSource streamed = new();
+        _gateway.AiAnalyzeStream = (_, _) =>
+        {
+            Assert.Equal(["//aiconsultant"], _navigation.Routes);
+            streamed.TrySetResult();
+            return AiStreams.Of(new AiDeltaEvent { Text = "Розбір." }, new AiDoneEvent());
+        };
+        AIConsultantViewModel vm = CreateViewModel(messenger: messenger);
+
+        messenger.Send(new AnalyzeVacancyRequestedMessage(new VacancyDto { Id = vacancyId, Title = "Python Developer" }));
+        await streamed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        await WaitUntilAsync(() => !vm.IsThinking && vm.Messages.Count == 3);
+
+        Assert.Equal(vacancyId, Assert.Single(Assert.Single(_gateway.AnalyzeRequests)));
+        Assert.Equal("Розбір.", vm.Messages[2].Text);
+    }
+
+    [Fact]
+    public async Task GoToCatalog_NavigatesToCatalogTab()
+    {
+        AIConsultantViewModel vm = CreateViewModel();
+
+        await vm.GoToCatalogCommand.ExecuteAsync(null);
+
+        Assert.Equal(["//catalog"], _navigation.Routes);
+    }
+
+    [Fact]
+    public async Task Send_RelaxedCriteria_AreNamedInUkrainian()
+    {
+        _gateway.AiChatStream = (_, _, _) => AiStreams.Of(
+            new AiMetaEvent { SessionId = Guid.NewGuid() },
+            new AiVacanciesEvent
+            {
+                Items = [new VacancyDto { Id = Guid.NewGuid(), Title = "Бухгалтер" }],
+                Exact = false,
+                Relaxed = ["location", "max_experience_months", "min_salary", "category_group", "search", "brand_new_key"]
+            });
+
+        AIConsultantViewModel vm = CreateViewModel();
+
+        await vm.SendMessageCommand.ExecuteAsync(null);
+
+        Assert.Equal(
+            "Знято для розширення пошуку: локація, досвід, зарплата, категорія, пошуковий запит, brand new key",
+            vm.Messages[2].RelaxedFilters);
+    }
+
+    [Fact]
+    public async Task SendQuickPrompt_SendsThePromptText()
+    {
+        _gateway.AiChatStream = (_, _, _) => AiStreams.Of(new AiDoneEvent { MessageId = 1 });
+        AIConsultantViewModel vm = CreateViewModel();
+
+        await vm.SendQuickPromptCommand.ExecuteAsync(vm.QuickPrompts[1]);
+
+        Assert.Equal(vm.QuickPrompts[1], Assert.Single(_gateway.AiChatRequests).Text);
+    }
+
+    [Fact]
     public async Task CancelActiveStream_StopsThinking_AndLeavesPartialReply()
     {
         _gateway.AiChatStream = (_, _, ct) => AiStreams.WaitForCancel(ct);
@@ -349,7 +464,20 @@ public class AIConsultantViewModelTests
         Assert.Equal(vacancy, received?.Vacancy);
     }
 
-    private AIConsultantViewModel CreateViewModel(bool authenticated = true, UserRole role = UserRole.JobSeeker)
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        DateTime deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!condition())
+        {
+            Assert.True(DateTime.UtcNow < deadline, "умова не виконалася за 5 с");
+            await Task.Delay(10);
+        }
+    }
+
+    private AIConsultantViewModel CreateViewModel(
+        bool authenticated = true,
+        UserRole role = UserRole.JobSeeker,
+        IMessenger? messenger = null)
     {
         if (authenticated)
         {
@@ -358,7 +486,7 @@ public class AIConsultantViewModelTests
 
         AIConsultantViewModel vm = new(
             _gateway,
-            new WeakReferenceMessenger(),
+            messenger ?? new WeakReferenceMessenger(),
             tokens: _tokens,
             time: _time,
             navigation: _navigation)
