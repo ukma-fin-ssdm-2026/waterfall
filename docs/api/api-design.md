@@ -63,7 +63,7 @@
 
 ### 2.4. Ресурс Profile (Профіль користувача)
 - **Кінцева точка (URI):** `/api/v1/profile`
-- **Опис:** Персональні дані користувача — домашня/поточна адреса, яка використовується для розрахунку відстані до вакансій. Доступ лише з JWT.
+- **Опис:** Персональні дані користувача — домашня/поточна адреса, яка використовується для розрахунку відстані до вакансій. Доступ лише з JWT; історія переглядів та пошукових запитів.
 - **Атрибути (`UserAddressDto`):**
   - `address` (string/null, до 300 символів): Адреса користувача; під час збереження обрізаються зайві пробіли, порожня адреса відхиляється `400`.
 - **Зв'язки:** Запис у `UserPersonalData` (1:1 з користувачем); адреса передається клієнтському `GeoDistanceService`.
@@ -96,6 +96,10 @@
 | **PUT** | `/api/v1/profile/address` | Збереження/оновлення адреси | `UserAddressDto` | `200 OK` (`UserAddressDto`) | `400 Bad Request`, `401 Unauthorized` |
 | **GET** | `/api/v1/geo/coordinates` | Координати адреси | — (`?address=`) | `200 OK` (`CoordinatesDto`) | `400 Bad Request`, `404 Not Found` |
 | **POST** | `/api/v1/geo/sync` | Двостороння синхронізація геокешу | `GeoSyncRequestDto` | `200 OK` (`GeoSyncResponseDto`) | `400 Bad Request` |
+| **GET** | `/api/v1/profile/stats` | Отримання персональної статистики | — (JWT) | `200 OK` (`UserStatsDto`) | `401 Unauthorized` |
+| **POST** | `/api/v1/profile/searches` | Записати пошуковий запит | `RecordSearchRequest` | `202 Accepted`, `204 No Content` | `400 Bad Request`, `401 Unauthorized`, `403 Forbidden` |
+| **DELETE** | `/api/v1/profile/searches` | Очистити історію пошукових запитів | — (JWT) | `204 No Content` | `401 Unauthorized` |
+| **POST** | `/api/v1/profile/views` | Відправити запис про перегляд вакансії | `RecordVacancyViewRequest` | `202 Accepted` | `401 Unauthorized`, `403 Forbidden`, `404 Not Found` |
 
 ---
 
