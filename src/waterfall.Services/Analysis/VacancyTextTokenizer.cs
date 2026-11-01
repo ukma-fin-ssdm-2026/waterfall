@@ -22,7 +22,7 @@ public static class VacancyTextTokenizer
     /// </summary>
     private static readonly HashSet<string> ShortTokens = new(StringComparer.Ordinal)
     {
-        "1c", "1с", "3d", "ai", "ba", "bi", "go", "hr", "ml", "pm", "qa", "seo", "sre", "ui", "ux"
+        "1c", "1с", "3d", "ai", "ba", "bi", "c#", "f#", "go", "hr", "ml", "pm", "qa", "seo", "sre", "ui", "ux"
     };
 
     /// <summary>
@@ -73,9 +73,11 @@ public static class VacancyTextTokenizer
         HashSet<string> seen = new(StringComparer.Ordinal);
         StringBuilder current = new();
 
-        foreach (char character in text.ToLowerInvariant())
+        string lower = text.ToLowerInvariant();
+        for (int i = 0; i < lower.Length; i++)
         {
-            if (char.IsLetterOrDigit(character))
+            char character = lower[i];
+            if (char.IsLetterOrDigit(character) || IsTechSymbol(lower, i, current.Length > 0))
             {
                 current.Append(character);
                 continue;
@@ -86,6 +88,27 @@ public static class VacancyTextTokenizer
 
         Flush(current, tokens, seen);
         return tokens;
+    }
+
+    /// <summary>
+    /// Символи, що є частиною назв технологій: «c#», «c++», «.net», «asp.net», «node.js».
+    /// Крапка входить у токен лише перед літерою чи цифрою, тож кінець речення її не захоплює.
+    /// </summary>
+    private static bool IsTechSymbol(string text, int index, bool insideToken)
+    {
+        char character = text[index];
+        if (character is '#' or '+')
+        {
+            return insideToken;
+        }
+
+        if (character != '.' || index + 1 >= text.Length || !char.IsLetterOrDigit(text[index + 1]))
+        {
+            return false;
+        }
+
+        // «.net» на початку слова або «asp.net» усередині
+        return insideToken || index == 0 || !char.IsLetterOrDigit(text[index - 1]);
     }
 
     /// <summary>
@@ -135,7 +158,7 @@ public static class VacancyTextTokenizer
             return false;
         }
 
-        // «2024», «100» — не навичка; «1с», «3d» лишаємо, бо це реальні назви технологій
+        // «2024», «100», «3.5» — не навичка; «1с», «3d» лишаємо, бо це реальні назви технологій
         return token.Any(char.IsLetter);
     }
 }
