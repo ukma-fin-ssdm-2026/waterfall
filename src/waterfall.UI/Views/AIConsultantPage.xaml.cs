@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.Collections.Specialized;
 using Waterfall.Client.ViewModels;
 
 namespace waterfall.UI.Views;
@@ -13,6 +14,21 @@ public partial class AIConsultantPage : ContentPage
         InitializeComponent();
         _viewModel = viewModel;
         BindingContext = viewModel;
+        viewModel.Messages.CollectionChanged += OnMessagesChanged;
+    }
+
+    /// <summary>
+    /// Нове повідомлення (зокрема аналіз, запущений з картки каталогу) прокручуємо в поле зору.
+    /// </summary>
+    private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action != NotifyCollectionChangedAction.Add || _viewModel.Messages.Count == 0)
+        {
+            return;
+        }
+
+        object last = _viewModel.Messages[^1];
+        Dispatcher.Dispatch(() => MessagesView.ScrollTo(last, position: ScrollToPosition.Start, animate: true));
     }
 
     /// <summary>

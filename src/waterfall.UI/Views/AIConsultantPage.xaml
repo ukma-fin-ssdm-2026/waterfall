@@ -56,7 +56,8 @@
         </Border>
 
         <!-- Список повідомлень діалогу (US-005) -->
-        <CollectionView Grid.Row="3"
+        <CollectionView x:Name="MessagesView"
+                        Grid.Row="3"
                         ItemsSource="{Binding Messages}"
                         SelectionMode="None"
                         Margin="12,0">
