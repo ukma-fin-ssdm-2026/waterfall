@@ -252,7 +252,7 @@ public class VacancyService : IVacancyService
         return Enum.TryParse(source, true, out JobSource s) ? s : JobSource.Unknown;
     }
 
-    private static IReadOnlyList<string> ParseSkills(string? json)
+    internal static IReadOnlyList<string> ParseSkills(string? json)
     {
         if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
         try
