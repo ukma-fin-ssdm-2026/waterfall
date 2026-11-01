@@ -96,7 +96,7 @@
 3. **Storage Service (`IStorageService`):** центральний сервіс оркестрації бізнес-операцій із вакансіями, збереженими списками та координації оновлень.
 4. **Analytics & Statistics Service (`IAnalyticsService`):** формування аналітичних звітів ринку праці та статистики активності користувачів.
 5. **AI Consultant Service (`IAIConsultantService`):** підготовка контексту та взаємодія із зовнішніми LLM API з контролем таймауту (REL-003).
-6. **Security Service (`ISecurityService`):** криптографічні операції, стійке хешування паролів (BCrypt) та захист чутливих конфігурацій (SEC-001).
+6. **Security Service (`ISecurityService`):** криптографічні операції, стійке хешування паролів (PBKDF2) та захист чутливих конфігурацій (SEC-001).
 
 ### 3.5. Зовнішній збір та рівень доступу до даних (External Ingestion + Repository Layer)
 1. **Job Parser Service (`IJobParserService`, окремий пакет External Ingestion):** фоновий збір відкритих вакансій (Work.ua, Robota.ua, Djinni) через `HttpClient` з контролем ліміту запитів (≤ 2 req/s) та ізоляцією збоїв джерел (REL-001).

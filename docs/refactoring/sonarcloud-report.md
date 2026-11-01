@@ -145,4 +145,11 @@ Security Rating фіксуємо завжди, тому він не входит
 * **Аналіз виконаного Pull Request #139:** [SonarQube Cloud — PR #139](https://sonarcloud.io/summary/new_code?id=ukma-fin-ssdm-2026_waterfall&pullRequest=139) *(Quality Gate: Passed, 0 New Issues, 0 Duplications, Rating: A)*.
 * **Оновлений стан гілки main:** [SonarQube Cloud — main Summary](https://sonarcloud.io/summary/overall?id=ukma-fin-ssdm-2026_waterfall&branch=main).
 
+## Бонуси
 
+### Quality Gate як обов'язкова перевірка PR (Бонус 1)
+SonarQube Cloud було додано до обов'язкових перевірок в Ruleset для main - якщо перевірка не проходить, то замержити не вийде.
+
+PR, який перевірка заблокувала: https://github.com/ukma-fin-ssdm-2026/waterfall/pull/149 ([посилання на прогін в CI](https://github.com/ukma-fin-ssdm-2026/waterfall/pull/149/checks?check_run_id=124911581079))
+
+Прогін в CI після виправлення: https://github.com/ukma-fin-ssdm-2026/waterfall/pull/149/checks?check_run_id=124926519082
