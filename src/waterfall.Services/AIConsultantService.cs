@@ -69,6 +69,18 @@ public sealed class AIConsultantService : IAIConsultantService
         "skills"
     ];
 
+    /// <summary>
+    /// Ключі, що задають суть запиту (що за робота). Їх послаблюємо лише після «умов»
+    /// (місто, формат, досвід, зарплата): інакше на «бухгалтер у Львові» прийшли б
+    /// львівські розробники замість бухгалтерів з іншого міста.
+    /// </summary>
+    private static readonly HashSet<string> CoreFilterKeys = new(StringComparer.Ordinal)
+    {
+        "search",
+        "category_group",
+        "skills"
+    };
+
     /// <summary>Дозволені значення формату роботи (закритий словник).</summary>
     private static readonly string[] WorkFormatValues = ["remote", "hybrid", "office"];
 
@@ -530,10 +542,12 @@ public sealed class AIConsultantService : IAIConsultantService
             return new SearchOutcome(exact.Items, true, Array.Empty<string>(), null);
         }
 
-        // Найбільше «звузив» той критерій, зняття якого відкриває найбільше вакансій;
+        // Спершу знімаємо «умови», потім суть запиту (CoreFilterKeys). У межах групи
+        // найбільше «звузив» той критерій, зняття якого відкриває найбільше вакансій;
         // за рівної кількості — порядок ключів у FilterKeys (детермінованість)
         List<string> order = probes
-            .OrderByDescending(probe => probe.Count)
+            .OrderBy(probe => CoreFilterKeys.Contains(probe.Key))
+            .ThenByDescending(probe => probe.Count)
             .ThenBy(probe => Array.IndexOf(FilterKeys, probe.Key))
             .Select(probe => probe.Key)
             .ToList();

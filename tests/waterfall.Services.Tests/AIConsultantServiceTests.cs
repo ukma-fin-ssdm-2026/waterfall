@@ -386,9 +386,9 @@ public sealed class AIConsultantServiceTests
     }
 
     [Fact]
-    public async Task PrepareAsync_Relaxation_StopsAfterThreeCriteria()
+    public async Task PrepareAsync_Relaxation_DropsConditionsBeforeTheSubjectOfTheQuery()
     {
-        // Arrange: кожна вакансія провалює щонайменше два критерії, тож потрібно зняти три
+        // Arrange: «Python Developer» провалює дві умови (формат і зарплату), «Java Developer» — суть запиту
         _catalog.Vacancies.AddRange(
         [
             CreateVacancy("Python Developer", WorkFormat.Office, 12, 1000),
@@ -400,12 +400,33 @@ public sealed class AIConsultantServiceTests
         // Act
         AIConsultantTurn turn = await service.PrepareAsync(_userId, null, "python, віддалено, від 3000");
 
-        // Assert
+        // Assert: знято лише умови, python лишився
         Assert.False(turn.Exact);
-        Assert.Equal(3, turn.Relaxed.Count);
-        Assert.DoesNotContain("skills", turn.Relaxed);
+        Assert.Equal(new[] { "work_format", "min_salary" }, turn.Relaxed);
         Assert.Single(turn.Vacancies);
         Assert.Equal("Python Developer", turn.Vacancies[0].Title);
+    }
+
+    [Fact]
+    public async Task PrepareAsync_Relaxation_KeepsTheProfessionEvenWhenDroppingItUnblocksMore()
+    {
+        // Arrange: у Львові є лише розробники (їх більше), бухгалтер є лише віддалено з Києва
+        _catalog.Vacancies.AddRange(
+        [
+            CreateVacancy("Бухгалтер", WorkFormat.Remote, 12, 1000, location: "Київ", categoryGroup: "Finance"),
+            CreateVacancy("Developer A", WorkFormat.Office, 12, 2000, location: "Львів"),
+            CreateVacancy("Developer B", WorkFormat.Office, 12, 2000, location: "Львів")
+        ]);
+        _llm.Extract.Respond("{\"category_group\":\"Finance\",\"location\":\"Львів\"}");
+        AIConsultantService service = CreateService();
+
+        // Act
+        AIConsultantTurn turn = await service.PrepareAsync(_userId, null, "бухгалтер у Львові");
+
+        // Assert
+        Assert.False(turn.Exact);
+        Assert.Equal(new[] { "location" }, turn.Relaxed);
+        Assert.Equal("Бухгалтер", Assert.Single(turn.Vacancies).Title);
     }
 
     [Fact]
