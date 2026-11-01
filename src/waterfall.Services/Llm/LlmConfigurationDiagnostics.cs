@@ -37,10 +37,10 @@ internal sealed class LlmConfigurationDiagnostics : IHostedService
             if (LlmApiKeyResolver.Resolve(provider) is null)
             {
                 _logger.LogWarning(
-                    "LLM: для провайдера {Provider} не задано ключ (змінна середовища {ApiKeyEnv} або Llm:Providers:{Provider}:ApiKey); його ланки пропускатимуться",
+                    "LLM: для провайдера {Provider} не задано ключ (змінна середовища {ApiKeyEnv} або {ConfigKey}); його ланки пропускатимуться",
                     providerName,
                     provider.ApiKeyEnv ?? "не задана",
-                    providerName);
+                    $"Llm:Providers:{providerName}:ApiKey");
             }
         }
 

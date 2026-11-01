@@ -115,11 +115,11 @@ public sealed class LlmClientProvider : ILlmClientProvider, IDisposable
             if (apiKey is null)
             {
                 _logger.LogWarning(
-                    "LLM: провайдер {Provider} для ролі {Role} пропущено — немає ключа ({ApiKeyEnv} або Llm:Providers:{Provider}:ApiKey)",
+                    "LLM: провайдер {Provider} для ролі {Role} пропущено — немає ключа ({ApiKeyEnv} або {ConfigKey})",
                     entry.Provider,
                     role,
                     provider.ApiKeyEnv ?? "змінна середовища не задана",
-                    entry.Provider);
+                    $"Llm:Providers:{entry.Provider}:ApiKey");
 
                 continue;
             }

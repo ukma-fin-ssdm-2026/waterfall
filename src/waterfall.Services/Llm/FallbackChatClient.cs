@@ -354,6 +354,11 @@ public sealed class FallbackChatClient : IChatClient
 
     private void LogSuccess(LlmChatAttempt attempt, Stopwatch stopwatch)
     {
+        if (!_logger.IsEnabled(LogLevel.Information))
+        {
+            return;
+        }
+
         _logger.LogInformation(
             "LLM: роль {Role}, провайдер {Provider}, модель {Model}, статус ok, {ElapsedMs} мс",
             _role,
