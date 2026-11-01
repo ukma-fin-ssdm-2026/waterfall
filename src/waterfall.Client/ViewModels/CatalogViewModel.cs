@@ -1485,6 +1485,10 @@ public partial class CatalogViewModel : ObservableObject
         try
         {
             PagedResult<VacancyDto> page = await _gateway.GetVacanciesAsync(query, 1, PageSize, ct);
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                _ = _gateway.RecordSearchAsync(query, ct);
+            }
             Vacancies.Clear();
             _loadedDtos.Clear();
             _loadedQuery = query;

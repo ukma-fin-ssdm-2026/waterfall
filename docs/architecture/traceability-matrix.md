@@ -21,6 +21,9 @@
 | FR-011 | Пагінація каталогу вакансій | UI Components<br>HTTP Gateway Service<br>Storage Service<br>Cache Service<br>Data Repositories<br>Relational Database | Сторінкова видача через Storage<br>Cache-Aside (§3.3.2, §3.3.3) | Модульний тест<br>Інтеграційний тест |
 | FR-012 | Імпорт та експорт даних про вакансії | UI Components<br>HTTP Gateway Service<br>Storage Service<br>Job Ingestion & Normalization Service<br>Data Repositories<br>Relational Database | Файловий обмін через Storage<br>імпорт через Ingestion-конвеєр (§3.4.2) | Модульний тест<br>Інтеграційний тест |
 | FR-013 | Імпорт та експорт прогресу/статистики | UI Components<br>HTTP Gateway Service<br>Storage Service<br>Data Repositories<br>Relational Database | Файловий обмін профілю через Storage Service (§3.3.3) | Модульний тест<br>Інтеграційний тест |
+| FR-014 | Автентифікація та авторизація (JWT) | UI Components<br>HTTP Gateway Service<br>Authentication Service<br>Security Service<br>Data Repositories<br>Relational Database | Реєстрація/вхід в Auth, хеш пароля в Security<br>access-JWT (HS256, 15 хв) і рольові політики (§3.3, §3.4) | Модульний тест<br>Інтеграційний тест |
+| FR-015 | Збереження адреси користувача в профілі | UI Components<br>HTTP Gateway Service<br>User Profile Service<br>Data Repositories<br>Relational Database | `user_id` лише з JWT, upsert у `UserPersonalData`<br>читання/запис через ProfileController (§3.3, §3.5) | Модульний тест<br>Інтеграційний тест |
+| FR-016 | Геокодування та розрахунок відстані | UI Components<br>HTTP Gateway Service<br>Geo Location Service<br>Data Repositories<br>Relational Database | Photon → Wikipedia fallback із кешем `GeoLocationCache`<br>OSRM → гаверсини на клієнті (§3.1, §3.4, §3.5) | Модульний тест<br>Інтеграційний тест |
 | PERF-001 | Каталог 20 вакансій <1с, 95%, 10k записів | UI Components<br>HTTP Gateway Service<br>Storage Service<br>Cache Service<br>Data Repositories<br>Relational Database | Cache-Aside + TTL<br>In-Memory (§3.3.2) | Навантажувальний тест |
 | PERF-002 | ШІ: індикатор ≤1с, відповідь ≤30с, 90% | UI Components<br>HTTP Gateway Service<br>AI Consultant Service<br>Storage Service | Негайний ack (UI/Gateway)<br>контекст і історія через Storage (§3.3.5) | Вимірювання часу відгуку |
 | PERF-003 | Парсинг ≥500 вакансій/10 хв, ≤2 req/s | Job Parser Service<br>Job Ingestion & Normalization Service | Rate-limited фоновий парсинг (§3.4.1) | Вимірювання пропускної здатності |
@@ -58,3 +61,4 @@
 | Об'єкт | Внесок | ШІ | Як перевірено |
 |--------|--------|----|---------------|
 | Матриця та сценарії | Дмитро | структурування, мапінг, посилання на рішення | самоперевірка автором, перевірка відносно `high-level-design.md` |
+| Рядки FR-014…FR-016 (auth, адреса профілю, геокеш) | Дмитро | мапінг вимог на компоненти й проєктні рішення | самоперевірка автора; звірка з контролерами `AuthController`, `ProfileController`, `GeoController` і відповідними сервісами |

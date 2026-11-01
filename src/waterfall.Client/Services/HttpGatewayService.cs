@@ -1,11 +1,15 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: обробка невідомого кодування відповіді (InvalidOperationException) замість недосяжного NotSupportedException (Lab 06); перевірено: регресійні тести HttpGatewayServiceTests, що падали до виправлення.
+// AI: SSE-потік ШІ-консультанта (SseParser, типізовані події, коди помилок до початку потоку); перевірено: AiConsultantGatewayTests, dotnet test.
 
 using System.Net;
 using System.Net.Http.Json;
+using System.Net.ServerSentEvents;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Waterfall.Client.Interfaces;
+using Waterfall.Client.Models.Ai;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Geo;
@@ -121,6 +125,206 @@ public sealed class HttpGatewayService : IHttpGatewayService
             return null;
         }
     }
+
+    public async Task<UserStatsDto?> GetPersonalStatsAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await SendAsync(new HttpRequestMessage(HttpMethod.Get, "api/v1/profile/stats"), Json.UserStatsDto, ct);
+        }
+        catch (ApiException)
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> RecordSearchAsync(string query, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return false;
+        }
+
+        try
+        {
+            using HttpResponseMessage response = await SendCoreAsync(
+                Post("api/v1/profile/searches", new RecordSearchRequest { Query = query.Trim() }, Json.RecordSearchRequest),
+                ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (ApiException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> ClearSearchHistoryAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            using HttpResponseMessage response = await SendCoreAsync(new HttpRequestMessage(HttpMethod.Delete, "api/v1/profile/searches"), ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (ApiException)
+        {
+            return false;
+        }
+    }
+
+    public async Task<bool> RecordVacancyViewAsync(Guid vacancyId, CancellationToken ct = default)
+    {
+        if (vacancyId == Guid.Empty)
+        {
+            return false;
+        }
+
+        try
+        {
+            using HttpResponseMessage response = await SendCoreAsync(
+                Post("api/v1/profile/views", new RecordVacancyViewRequest { VacancyId = vacancyId }, Json.RecordVacancyViewRequest),
+                ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (ApiException)
+        {
+            return false;
+        }
+    }
+
+    public async IAsyncEnumerable<AiStreamEvent> SendAiMessageAsync(Guid? sessionId, string text, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        HttpRequestMessage request = Post(
+            "api/v1/ai-consultant/messages",
+            new AiMessageRequest { SessionId = sessionId, Text = text },
+            Json.AiMessageRequest);
+
+        await foreach (AiStreamEvent streamEvent in ReadEventsAsync(request, ct))
+        {
+            yield return streamEvent;
+        }
+    }
+
+    public async Task DeleteAiSessionAsync(Guid sessionId, CancellationToken ct = default)
+    {
+        using HttpResponseMessage response = await SendCoreAsync(new HttpRequestMessage(HttpMethod.Delete, $"api/v1/ai-consultant/sessions/{sessionId}"), ct);
+    }
+
+    public async IAsyncEnumerable<AiStreamEvent> AnalyzeVacanciesAsync(IReadOnlyList<Guid> vacancyIds, [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        HttpRequestMessage request = Post(
+            "api/v1/ai-consultant/analyze",
+            new AiAnalyzeRequest { VacancyIds = vacancyIds },
+            Json.AiAnalyzeRequest);
+
+        await foreach (AiStreamEvent streamEvent in ReadEventsAsync(request, ct))
+        {
+            yield return streamEvent;
+        }
+    }
+
+    /// <summary>
+    /// Читає SSE-потік (text/event-stream) і перетворює кожну подію на типізовану модель.
+    /// </summary>
+    private async IAsyncEnumerable<AiStreamEvent> ReadEventsAsync(HttpRequestMessage request, [EnumeratorCancellation] CancellationToken ct)
+    {
+        using HttpResponseMessage response = await SendStreamingCoreAsync(request, ct);
+        using Stream stream = await response.Content.ReadAsStreamAsync(ct);
+
+        // SseParser (System.Net.ServerSentEvents) сам дотримується фреймінгу: багаторядкові data:,
+        // коментарі (": keep-alive") ігноруються, подія віддається на порожньому рядку.
+        SseParser<string> parser = SseParser.Create(stream);
+        await foreach (SseItem<string> item in parser.EnumerateAsync(ct))
+        {
+            AiStreamEvent? streamEvent = ParseEvent(item, response.StatusCode);
+            if (streamEvent is not null)
+            {
+                yield return streamEvent;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Розбирає подію за назвою; невідомі типи пропускаються (новий сервер — старий клієнт).
+    /// </summary>
+    private static AiStreamEvent? ParseEvent(SseItem<string> item, HttpStatusCode status)
+    {
+        try
+        {
+            return item.EventType switch
+            {
+                "meta" => JsonSerializer.Deserialize(item.Data, Json.AiMetaEvent),
+                "vacancies" => JsonSerializer.Deserialize(item.Data, Json.AiVacanciesEvent),
+                "delta" => JsonSerializer.Deserialize(item.Data, Json.AiDeltaEvent),
+                "done" => JsonSerializer.Deserialize(item.Data, Json.AiDoneEvent),
+                "error" => JsonSerializer.Deserialize(item.Data, Json.AiErrorEvent),
+                "relevance" => JsonSerializer.Deserialize(item.Data, Json.AiRelevanceEvent),
+                _ => null
+            };
+        }
+        catch (JsonException ex)
+        {
+            throw new ApiException(status, null, "Сервер повернув некоректну відповідь.", ex);
+        }
+    }
+
+    /// <summary>
+    /// Як <see cref="SendCoreAsync"/>, але з <see cref="HttpCompletionOption.ResponseHeadersRead"/>,
+    /// щоб тіло SSE читалося в міру надходження, а не після завершення відповіді.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendStreamingCoreAsync(HttpRequestMessage request, CancellationToken ct)
+    {
+        HttpResponseMessage response;
+        try
+        {
+            using (request)
+            {
+                response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new ApiException(null, null, "Не вдалося з'єднатися з сервером. Перевірте, чи запущено API.", ex);
+        }
+        catch (TaskCanceledException ex) when (!ct.IsCancellationRequested)
+        {
+            throw new ApiException(null, null, "Сервер не відповів вчасно.", ex);
+        }
+
+        if (response.IsSuccessStatusCode)
+        {
+            return response;
+        }
+
+        using (response)
+        {
+            ApiError? error = await TryReadErrorAsync(response, ct);
+            throw new AiConsultantException(
+                response.StatusCode,
+                error,
+                !string.IsNullOrWhiteSpace(error?.Message) ? error.Message : DefaultAiMessage(response.StatusCode),
+                string.IsNullOrWhiteSpace(error?.Code) ? DefaultAiCode(response.StatusCode) : error.Code);
+        }
+    }
+
+    private static string? DefaultAiCode(HttpStatusCode status) => status switch
+    {
+        HttpStatusCode.Unauthorized => "UNAUTHORIZED",
+        HttpStatusCode.Forbidden => "FORBIDDEN",
+        HttpStatusCode.NotFound => "NOT_FOUND",
+        HttpStatusCode.TooManyRequests => AiConsultantException.RateLimitedCode,
+        HttpStatusCode.ServiceUnavailable => AiConsultantException.LlmUnavailableCode,
+        _ => null
+    };
+
+    private static string DefaultAiMessage(HttpStatusCode status) => status switch
+    {
+        HttpStatusCode.Unauthorized => "Потрібно увійти в обліковий запис.",
+        HttpStatusCode.Forbidden => "ШІ-консультант доступний лише користувачам із роллю «Шукач роботи».",
+        HttpStatusCode.NotFound => "Сесію діалогу не знайдено.",
+        HttpStatusCode.TooManyRequests => "Перевищено ліміт запитів до ШІ-консультанта. Спробуйте пізніше.",
+        HttpStatusCode.ServiceUnavailable => "ШІ-консультант тимчасово недоступний. Скористайтеся звичайним пошуком у каталозі.",
+        _ => $"Сервер повернув помилку {(int)status}."
+    };
 
     private async Task<AuthResponse> AuthenticateAsync(HttpRequestMessage request, CancellationToken ct)
     {

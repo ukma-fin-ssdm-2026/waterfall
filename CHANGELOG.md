@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Нормалізація вакансій (#3)**: `VacancyDB` отримує `WorkFormat` (прапорці `Remote`/`Hybrid`/`Office`), `ExperienceMonths` (мінімальний досвід у місяцях), `CategoryGroup` (закритий довідник широких IT і не-IT категорій) і `SearchText` (нижній регістр назви, компанії, опису й тегів). Похідні поля обчислюються на кожному записі вакансії — парсерами, `POST`/`PUT` каталогу та сідуванням. Djinni зберігає `monthsOfExperience`, DOU позначає досвід за фасетними стрічками, решту джерел розбирає текст досвіду й опису.
+- **Фільтри каталогу (#3)**: `workFormat` (будь-який із вибраних форматів), `maxExperienceMonths` (включна межа; невідомий досвід не відсіюється), `categoryGroup` (точна канонічна група), `location` (підрядок без урахування регістру) і `skills` (усі терміни через AND, кожен — у тегах або тексті). `VacancyDto` віддає `workFormat`, `experienceMonths`, `categoryGroup`.
+
+### Fixed
+- Пошук каталогу знаходить кирилицю незалежно від регістру («бухгалтер» → «Бухгалтер») на SQLite і MSSQL завдяки `SearchText`.
+- Ключ кешу каталогу враховує всі фільтри, `sortBy` і `sortOrder`; фільтр локації більше не підміняється `null`, а Stale-Cache зберігає лише «чисту» першу сторінку без фільтрів.
+
 ### Refactoring
 - **HTML parsing helpers deduplication** (*Extract Class*): Moved `Load`, `Text` and `Clean`, copied across `WorkUaParser`, `DouParser` and `DjinniParser`, into one shared `Html` class (removes the duplicated block `WorkUaParser.cs:101-118` ↔ `DouParser.cs:128-144` reported by SonarQube Cloud).
 - **Crawl loop decomposition** (*Extract Method, Introduce Parameter Object*): Split `SiteCrawler.CrawlAsync` into `ReadListPageAsync`, `WithJobPageAsync`, `ReadJobPageAsync` and `RememberJobPages`, keeping the state of one crawl in `CrawlState`; cognitive complexity of `CrawlAsync` 35 → 9.
