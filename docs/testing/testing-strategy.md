@@ -44,7 +44,7 @@
 - **Клієнт:** лише властивості, що передають поле DTO (`Title`, `Description`, `Notes`), і неможливі комбінації умов у `FavoritesViewModel.IsEmpty`. Аналіз непокритого `catch` знайшов справжню ваду: відповідь у невідомому кодуванні (сторінка проксі в `windows-1251`) вилітала повз `ApiException`; виправлено з регресійними тестами. Проєкт `waterfall.UI` (XAML, code-behind, `SecureStorage`) у звіт не входить: це прив'язки без логіки, вони потребують MAUI-воркладів і перевіряються системними тестами. [HTML-звіт](../../tests/waterfall.Client.Tests/coverage-report/index.html)
 - **`src/mcp` (TypeScript):** MCP-сервер перевіряється статичними аналізаторами (ESLint з `eslint-plugin-security`, `tsc`, `npm audit`).
 
-[Єдиний зведений HTML-дашборд покриття](../../coverage-report/index.html) (доступний також через кореневий [`index.html`](../../index.html)).
+[Єдиний зведений HTML-дашборд покриття](../../coverage-report/index.html).
 
 ## 3. Плани рівнів тестування (Testing Pyramid & Scope)
 

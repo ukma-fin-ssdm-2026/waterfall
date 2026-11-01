@@ -79,7 +79,7 @@
 ### Тестування та налагодження (Лаб 6)
 * [**testing-strategy.md**](./docs/testing/testing-strategy.md) — стратегія тестування
 * [**debugging-log.md**](./docs/testing/debugging-log.md) — журнал налагодження
-* [**Звіт покриття**](./coverage-report/) — звіт про покриття проекту тестами
+* [**Звіт покриття**](./coverage-report/index.html) — звіт про покриття проекту тестами
 * [**tests**](./tests/) — директорія тестів
 
 ### Планування тестування та огляди (Лаб 7)
