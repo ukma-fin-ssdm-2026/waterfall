@@ -446,8 +446,37 @@ $ dotnet build src/api/Waterfall.Api.csproj -c Release --no-incremental -p:Targe
 * CI запускає тести й перевірки MCP-сервера (п. 5.6), але не збирає звіт покриття: MAINT-001 поки перевірено лише локально (п. 5.7).
 * `src/mcp/jest.config.js` посилається на `ts-jest`, якого немає в залежностях: тестів MCP-сервера поки немає.
 
----
+### 5.9 Pre-commit із пошуком секретів (Бонус 1)
+У `.pre-commit-config.yaml` налаштований хук gitleaks. Встановлений через `uv tool install pre-commit`, `pre-commit install`.
 
+Для перевірки був створений файл конфігу з ключем для генерації JWT токенів. Gitleaks виявив hardcoded secrets та заблокував коміт.
+
+Вивід gitleaks:
+```text
+Detect hardcoded secrets.................................................Failed
+- hook id: gitleaks
+- exit code: 1
+
+○
+    │╲
+    │ ○
+    ○ ░
+    ░    gitleaks
+
+Finding:     "Jwt__Key": "REDACTED"
+Secret:      REDACTED
+RuleID:      generic-api-key
+Entropy:     4.877203
+File:        config.json
+Line:        2
+Fingerprint: config.json:generic-api-key:2
+
+12:10PM INF 0 commits scanned.
+12:10PM INF scanned ~65 bytes (65 bytes) in 55.8ms
+12:10PM WRN leaks found: 1
+```
+
+---
 
 ## Використання ШІ та внесок
 
