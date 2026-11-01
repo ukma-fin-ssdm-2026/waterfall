@@ -1,5 +1,6 @@
 // AI: посилено обробку помилок валідації (issue #49); перевірено: прогін негативних тест-кейсів (docs/api/quality-attributes.md, розділ 6)
 // AI: реєстрація фонового парсера вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API
+// AI: реєстрація LLM-шлюзу (FR-002, REL-003); перевірено: юніт-тести tests/waterfall.Services.Tests, запуск API без ключів
 
 using System.Reflection;
 using System.Text.Json.Serialization;
@@ -104,6 +105,8 @@ builder.Services.AddControllers(options =>
 // 2. Реєстрація інфраструктури (EF Core SQLite/MSSQL), репозиторіїв та сервісів бізнес-логіки
 builder.Services.AddWaterfallRepositories(builder.Configuration);
 builder.Services.AddWaterfallServices();
+// LLM-шлюз (FR-002, REL-003): без ключів API стартує, а ШІ-функції повідомляють про недоступність
+builder.Services.AddWaterfallLlm(builder.Configuration);
 // Надто частий збір не дасть запустити API (fail-fast, THR-11)
 builder.Services.AddOptions<IngestionOptions>().Bind(builder.Configuration.GetSection("Ingestion")).ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<IngestionOptions>, IngestionOptionsValidator>();
