@@ -239,7 +239,7 @@ public partial class LoginViewModel : ObservableObject
         OnPropertyChanged(nameof(HasSuggestions));
         _isSelectingSuggestion = false;
 
-        _ = UpdateMapForAddressAsync(suggestion);
+        _ = UpdateMapForAddressAsync(suggestion, CancellationToken.None);
     }
 
     [RelayCommand]
@@ -329,7 +329,7 @@ public partial class LoginViewModel : ObservableObject
 
         _messenger?.Send(new UserAddressChangedMessage(UserAddress));
         StatusMessage = "Адресу збережено! Відстань до вакансій оновлено.";
-        await UpdateMapForAddressAsync(UserAddress);
+        await UpdateMapForAddressAsync(UserAddress, CancellationToken.None);
     }
 
     public async Task LoadProfileAddressAsync()
@@ -345,7 +345,7 @@ public partial class LoginViewModel : ObservableObject
                     _distanceService.UserAddress = address;
                 }
                 _messenger?.Send(new UserAddressChangedMessage(address));
-                await UpdateMapForAddressAsync(address);
+                await UpdateMapForAddressAsync(address, CancellationToken.None);
             }
             else
             {
