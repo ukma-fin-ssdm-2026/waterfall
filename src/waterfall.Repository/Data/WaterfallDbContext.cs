@@ -1,8 +1,11 @@
+// AI: DbSet-и та мапінг діалогів з ШІ (FR-009); перевірено: тести EfChatSessionRepositoryTests на in-memory SQLite
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Waterfall.Repository.Entities;
+using Waterfall.Repository.Normalization;
 
 namespace Waterfall.Repository.Data;
 
@@ -23,6 +26,22 @@ public class WaterfallDbContext : DbContext
     public DbSet<GeoLocationCacheDB> GeoLocationCache => Set<GeoLocationCacheDB>();
     public DbSet<SearchQueryDB> SearchQueries => Set<SearchQueryDB>();
     public DbSet<VacancyViewDB> VacancyViews => Set<VacancyViewDB>();
+    public DbSet<ChatSessionDB> ChatSessions => Set<ChatSessionDB>();
+    public DbSet<ChatMessageDB> ChatMessages => Set<ChatMessageDB>();
+    public DbSet<ChatMessageVacancyDB> ChatMessageVacancies => Set<ChatMessageVacancyDB>();
+
+    // AI: похідні поля вакансії (SearchText, WorkFormat, CategoryGroup) обчислюються на кожному записі; перевірено: тести репозиторію та нормалізатора
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        NormalizeVacancies();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        NormalizeVacancies();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -30,9 +49,42 @@ public class WaterfallDbContext : DbContext
         optionsBuilder.AddInterceptors(SqliteUnicodeLowerInterceptor.Instance);
     }
 
+    /// <summary>
+    /// Перераховує похідні атрибути вакансій перед записом: пошук, формат роботи й широку категорію.
+    /// Так парсери, POST/PUT каталогу та сідування дають однакові дані без окремих викликів у кожному місці.
+    /// </summary>
+    private void NormalizeVacancies()
+    {
+        foreach (EntityEntry<VacancyDB> entry in ChangeTracker.Entries<VacancyDB>())
+        {
+            if (entry.State is EntityState.Added or EntityState.Modified)
+            {
+                VacancyNormalizer.Apply(entry.Entity);
+            }
+        }
+    }
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
+
+        // Складений ключ (message_id, vacancy_id) не дає зберегти ту саму вакансію в одній відповіді двічі
+        modelBuilder.Entity<ChatMessageVacancyDB>()
+            .HasKey(link => new { link.MessageId, link.VacancyId });
+
+        // Два каскадні шляхи до ChatMessageVacancy (Vacancy → link і ChatSession → ChatMessage → link)
+        // SQL Server відхиляє, тож з боку вакансії видалення заборонене, а не каскадне
+        modelBuilder.Entity<ChatMessageVacancyDB>()
+            .HasOne(link => link.Vacancy)
+            .WithMany()
+            .HasForeignKey(link => link.VacancyId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Автор репліки зберігається рядком ("User"/"Assistant"), щоб вміст таблиці читався без декодування
+        modelBuilder.Entity<ChatMessageDB>()
+            .Property(message => message.Author)
+            .HasConversion<string>()
+            .HasMaxLength(20);
 
         if (Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
         {

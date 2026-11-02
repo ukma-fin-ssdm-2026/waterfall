@@ -9,7 +9,11 @@ namespace Waterfall.Client;
 /// Єдиний тип помилки HttpGatewayService: відповідь не 2xx, недоступний сервер або некоректна відповідь.
 /// Message завжди придатне для показу користувачу.
 /// </summary>
-public sealed class ApiException : Exception
+/// <remarks>
+/// Ендпоінти ШІ-консультанта кидають нащадка <see cref="AiConsultantException"/> з машинним кодом сервера;
+/// для решти коду клієнта це та сама помилка, тож її достатньо ловити як <see cref="ApiException"/>.
+/// </remarks>
+public class ApiException : Exception
 {
     public ApiException(HttpStatusCode? statusCode, ApiError? error, string message, Exception? innerException = null)
         : base(message, innerException)

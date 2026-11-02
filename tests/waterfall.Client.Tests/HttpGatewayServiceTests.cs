@@ -343,6 +343,82 @@ public class HttpGatewayServiceTests
         Assert.Equal("Bearer jwt-abc", await LastAuthHeaderAfterCatalogCall());
     }
 
+    [Fact]
+    public async Task GetPersonalStats_ReturnsParsedDto()
+    {
+        _server.Respond(HttpStatusCode.OK, """
+        {
+            "savedVacanciesCount": 3,
+            "totalSearches": 7,
+            "topTechnologies": [
+                { "name": "Python", "count": 10 },
+                { "name": "Docker", "count": 4 }
+            ],
+            "topCategories": [
+                { "name": "Backend", "count": 14 }
+            ],
+            "recentSearches": ["Python", ".NET"]
+        }
+        """);
+
+        Waterfall.Client.Models.Profile.UserStatsDto? stats = await _gateway.GetPersonalStatsAsync();
+
+        Assert.NotNull(stats);
+        Assert.Equal(3, stats.SavedVacanciesCount);
+        Assert.Equal(7, stats.TotalSearches);
+        Assert.Equal(2, stats.TopTechnologies.Count);
+        Assert.Equal("Python", stats.TopTechnologies[0].Name);
+        Assert.Equal(10, stats.TopTechnologies[0].Count);
+        Assert.Equal(2, stats.RecentSearches.Count);
+        Assert.Equal("api/v1/profile/stats", _server.Requests[^1].Uri.Split('/', 4)[^1]);
+    }
+
+    [Fact]
+    public async Task RecordSearch_ValidQuery_SendsPostRequest()
+    {
+        _server.Respond(HttpStatusCode.Accepted, "");
+
+        bool result = await _gateway.RecordSearchAsync("Python junior");
+
+        Assert.True(result);
+        Assert.Equal(HttpMethod.Post, _server.Requests[^1].Method);
+        Assert.Contains("Python junior", _server.Requests[^1].Body);
+    }
+
+    [Fact]
+    public async Task RecordSearch_EmptyQuery_ReturnsFalseWithoutRequest()
+    {
+        bool result = await _gateway.RecordSearchAsync("   ");
+
+        Assert.False(result);
+        Assert.Empty(_server.Requests);
+    }
+
+    [Fact]
+    public async Task ClearSearchHistory_SendsDeleteRequest()
+    {
+        _server.Respond(HttpStatusCode.NoContent, "");
+
+        bool result = await _gateway.ClearSearchHistoryAsync();
+
+        Assert.True(result);
+        Assert.Equal(HttpMethod.Delete, _server.Requests[^1].Method);
+        Assert.Equal("api/v1/profile/searches", _server.Requests[^1].Uri.Split('/', 4)[^1]);
+    }
+
+    [Fact]
+    public async Task RecordVacancyView_ValidId_SendsPostRequest()
+    {
+        _server.Respond(HttpStatusCode.Accepted, "");
+        Guid vacancyId = Guid.NewGuid();
+
+        bool result = await _gateway.RecordVacancyViewAsync(vacancyId);
+
+        Assert.True(result);
+        Assert.Equal(HttpMethod.Post, _server.Requests[^1].Method);
+        Assert.Contains(vacancyId.ToString(), _server.Requests[^1].Body);
+    }
+
     /// <summary>
     /// Мережевий обробник-заглушка: записує запити й повертає заздалегідь задану відповідь.
     /// </summary>

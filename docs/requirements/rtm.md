@@ -10,6 +10,9 @@
 | US-006 | FR | Перегляд аналітики ринку праці (FR-003, FR-008) | — | Test-22: аналітик обрав професію + період → середня ЗП, кількість, динаміка;<br>Test-23: мало даних → повідомлення про недостатність;<br>Test-24: шукач не бачить Аналітику, прямий URL → відмова в доступі<br>**Тест-план:** TP-15 |
 | US-007 | FR | Перегляд графіків аналітики (FR-003) | PERF-001 | Test-25: 120 вакансій/3 міс, ЗП у 100 → лінійний графік + топ-5 стеків + середня по 100;<br>Test-26: зміна фільтра Python → перебудова <1с без reload, підписи осей відповідають фільтру;<br>Test-27: <5 вакансій або без ЗП → повідомлення про недостатність даних<br>**Тест-план:** TP-16 |
 | US-008 | FR | Перегляд особистої статистики (FR-007) | REL-002 | Test-28: 3 збережені, 5 пошуків, Python ×10 → збережених 3, топ Python (10), останні 5 запитів;<br>Test-29: новий save Python → лічильники +1 без reload;<br>Test-30: 0 активності → повідомлення "Поки немає активності..."<br>**Тест-план:** — (кейсу в плані немає) |
+| US-009 | FR | Реєстрація та вхід (FR-014) | SEC-001 | Test-36: реєстрація нового акаунта → JWT-токен у відповіді;<br>Test-37: вхід з правильними даними → JWT;<br>Test-38: хибні дані → уніфікована помилка без розкриття параметра<br>**Тест-план:** TP-22 |
+| US-010 | FR | Збереження адреси користувача та розрахунок відстані (FR-015, FR-016) | SEC-001 | Test-39: авторизований користувач зберігає адресу → запис у UserPersonalData;<br>Test-40: оновлення адреси → старе значення замінюється на нове;<br>Test-41: користувач має збережену адресу та відкриває вакансію → вакансія містить розраховану відстань<br>**Тест-план:** TP-21 |
+
 | PERF-001 | NFR | Каталог 20 вакансій <1с, 95%, 10k записів | — | Test-03: 10k записів, каталог/фільтр/графіки p95 < 1с<br>**Тест-план:** TP-12 |
 | PERF-002 | NFR | ШІ: індикатор ≤1с, відповідь ≤30с, 90% | — | Test-19: індикатор ≤1с, повна відповідь ≤30с для 90% запитів<br>**Тест-план:** — (кейсу в плані немає) |
 | PERF-003 | NFR | Парсинг ≥500 вакансій/10 хв, ≤2 req/s | — | Test-04: 500 вакансій/10 хв, ≤2 req/s на джерело<br>**Тест-план:** TP-10, TP-11, TP-19 |
@@ -40,18 +43,20 @@
 | Test-11 | `SEC_001_ZeroPlainTextPasswordsInDatabaseStorage`, `PasswordHasherTests.Hash_DoesNotContainPlaintext` | виконано |
 | Test-12 | `LoginViewModelTests.Restore_*`, `AuthSessionTests.FromToken_*` | частково: відновлення після краху застосунку вручну |
 | Test-13…15 | `RecommendationsViewModelTests` (`LoadRecommendations_*`, `Refresh_*`) | частково: сценарії 13–15 не відтворені окремими тестами |
-| Test-16…21 | — | план: `AIConsultantViewModel` без тестів (US-005) |
+| Test-16 | `AIConsultantServiceTests.PrepareAsync_NewSession_CreatesOwnedSessionAndStoresUserMessage`, `PrepareAsync_ExactMatches_DoNotRelaxAnyCriterion`, `AIConsultantControllerTests.SendMessage_OwnSession_StreamsMetaVacanciesDeltasDoneInOrder` | виконано (бекенд: події `meta`→`vacancies`→`delta`→`done`); `AIConsultantViewModel` у клієнті поки без тестів |
+| Test-17 | `AIConsultantServiceTests.PrepareAsync_Refinement_KeepsPreviousFilterAndChangesOnlyTheNewCriterion`, `PrepareAsync_ClearKeys_RemoveCriterionFromPreviousFilter`, `PrepareAsync_HistoryWindow_LimitsContextSentToLlm` | виконано (бекенд) |
+| Test-18 | `AIConsultantServiceTests.PrepareAsync_Relaxation_DropsTheCriterionThatUnblocksTheMostResults`, `PrepareAsync_Relaxation_DropsConditionsBeforeTheSubjectOfTheQuery`, `PrepareAsync_Relaxation_KeepsTheProfessionEvenWhenDroppingItUnblocksMore`, `PrepareAsync_EmptyCatalogWithCriteria_ReportsNoResultsWithoutInventingVacancies`, `AIConsultantControllerTests.SendMessage_RelaxedResults_DescribeRelaxedCriteriaAndDisclaimer` | виконано (бекенд: `exact=false`, `relaxed` ≤ 3, disclaimer) |
+| Test-19 | — (ручний прогін) | частково: живий прогін через OpenRouter (01.11.2026, 5 запитів): чат — картки за 2,6–6,2 с, повна відповідь за 7–11 с; `/analyze` — `relevance` за 0,2–0,4 с, повна відповідь за 6,4–7,7 с. Усі в межах 30 с, але вибірка мала для p95. Потік віддає `meta`/`vacancies` до першого `delta`, тож індикатор клієнта з'являється одразу |
+| Test-20 | `AIConsultantControllerTests.SendMessage_LlmUnavailable_Returns503BeforeStreaming`, `SendMessage_SummaryFailsAfterVacancies_SendsTerminalErrorEvent`, `SendMessage_AfterLimit_Returns429RateLimited`, `SendMessage_RateLimit_IsPerUser`, `AIConsultantServiceTests.PrepareAsync_ExtractionFailure_PropagatesLlmUnavailableAndCreatesNoSession`, `AIConsultantControllerTests.Analyze_LlmUnavailableAfterRelevance_SendsTerminalErrorEvent`, `Analyze_SharesRateLimitWithMessages` | виконано (заглушка LLM у тестах; ручний прогін без ключів дає `503 LLM_UNAVAILABLE`) |
+| Test-21 | `AIConsultantServiceTests.PrepareAsync_SummaryPrompt_ContainsExactlyTheReturnedVacancies`, `StreamAnswerAsync_PersistsFullTextAndExactlyTheSentVacancyLinks`, `EfChatSessionRepositoryTests.AddAssistantMessageAsync_UnknownVacancy_ViolatesForeignKeyAndPersistsNothing`, `VacancyAnalysisServiceTests.PrepareAsync_PromptContainsExactlyTheRequestedVacancies`, `PrepareAsync_UnknownVacancy_ThrowsNotFound` | виконано (промпт містить рівно вакансії з БД; FK на `Vacancies` відхиляє вигадану; аналіз FR-010 бачить лише вибрані вакансії) |
 | Test-22…27 | — | план: `AnalyticsViewModel` без тестів (US-006, US-007) |
-| Test-28…30 | — | план: US-008 без тестів |
+| Test-28…30 | `UserStatsServiceTests`, `LoginViewModelTests` (`RestoreSession_LoadsPersonalStats_WhenJobSeeker_Test28`, `VacancySaveChanged_UpdatesSavedCountAndReloadsStats_Test29`, `LoadPersonalStats_EmptyActivity_ShowsEmptyState_Test30`), `HttpGatewayServiceTests` | виконано |
 | Test-31 | `ci.yml` (6 наборів, 526 тестів) + зведений звіт ReportGenerator | виконано (line 77.7%, branch 74.3%, 26.10.2026) |
 | Test-32 | `VacancyItemViewModelTests.SalaryText_CoversAllRangeShapes` | виконано |
-| Test-33 | — | план: скидання фільтрів не покрито |
+| Test-33 | `CatalogViewModelTests.ResetFilters_ResetsFieldsToDefaultAndReloadsCatalog_Test33` | виконано |
 | Test-34, Test-35 | `VacancyItemSkillsTests` (`VisibleSkills_*`) | виконано |
-
-Прогалини, які лишилися поза таблицею:
-
-- 40 тестів `waterfall.Auth.Tests` і тести auth у `waterfall.Api.Tests` не мають жодної вимоги в цій матриці: реєстрація/вхід/JWT у Лаб 2 не зафіксовані окремим FR.
-- 11 тестів геоданих (`GeoDistanceServiceTests`, `PhotonAddressAutocompleteServiceTests`, `SqliteLocalGeoCacheServiceTests`, `GeoControllerTests`) теж без вимоги — функціональність з'явилася в PR #114 після Лаб 2.
+| Test-36…38 | `AuthControllerTests`, `AuthenticationServiceTests` (`Register_`, `Login_`) | виконано |
+| Test-39…41 | `ProfileControllerTests` (`SaveAddress_*`, `GetAddress_*`), `GeoDistanceServiceTests` (`CalculateDistanceKmAsync_*`) | виконано |
 
 ## Використання ШІ та внесок
 
@@ -60,3 +65,6 @@
 | RTM | Дмитро | структурування та тести | самоперевірка автора (§8) |
 | Розділ «Зв'язок із тест-планом (Лаб 7)»: колонка ID → автотести, прогалини простежуваності | Константін | Звірка назв тестів зі списком методів у `tests/**` | Кожну назву тесту знайдено пошуком у коді; стан «виконано/частково/план» — за наявністю методу й прогоном `dotnet test` (526 тестів, 0 падінь) |
 | ID кейсів плану (TP-xx) у стовпці «Тестові випадки», оновлені рядки Test-03…Test-05 | Данило | Звірка ID і назв тестів | Кожен TP-xx звірено з колонкою «Вимога» в `test-plan.md`; назви тестів знайдено пошуком у `tests/**` |
+| Test-16…Test-21: заміна «план» на назви автотестів ШІ-консультанта | Садиков Константін | Звірка назв методів у `tests/waterfall.Api.Tests` і `tests/waterfall.Services.Tests` | Кожну назву тесту знайдено пошуком у коді; `dotnet test` відповідних проєктів (див. звіт PR) |
+| Рядки для US-009/010 та відповідні тести | Дмитро | пошук реалізованих тестів | Звірка з кодом тестів |
+| Рядки Test-16…21 (US-005, PERF-002, REL-003, FUNC-001): назви клієнтських тестів | Садиков Константін | Зіставлення вимог із `AIConsultantViewModelTests` | Назви методів звірено з `tests/waterfall.Client.Tests/AIConsultantViewModelTests.cs`; прогін `dotnet test tests/waterfall.Client.Tests` (197 тестів, 0 падінь) |

@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: метод BulkUpsertAsync для фонового збору вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests на SQLite, самоперевірка автора (§8)
+// AI: фільтри нормалізованих атрибутів вакансії (формат роботи, досвід у місяцях, широка категорія, навички); перевірено: тести EfVacancyRepositoryTests
 
 using Waterfall.Repository.Entities;
 
@@ -11,12 +12,21 @@ namespace Waterfall.Repository.Interfaces;
 /// </summary>
 public interface IVacancyRepository
 {
+    /// <summary>
+    /// Сторінка вакансій за фільтрами каталогу. Пошук і навички працюють по <see cref="VacancyDB.SearchText"/>
+    /// (нижній регістр), <paramref name="workFormat"/> — за принципом «будь-який із вибраних форматів»,
+    /// а <paramref name="maxExperienceMonths"/> не відсіює вакансії з невідомим досвідом.
+    /// </summary>
     Task<(IReadOnlyList<VacancyDB> Items, int TotalCount)> GetAllAsync(
         string? search = null,
         string? category = null,
         string? experience = null,
         string? location = null,
         string? schedule = null,
+        WorkFormat? workFormat = null,
+        int? maxExperienceMonths = null,
+        string? categoryGroup = null,
+        IReadOnlyList<string>? skills = null,
         decimal? minSalary = null,
         decimal? maxSalary = null,
         string? source = null,

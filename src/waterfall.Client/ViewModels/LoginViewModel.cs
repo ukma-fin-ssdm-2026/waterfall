@@ -57,6 +57,14 @@ public partial class LoginViewModel : ObservableObject
         {
             _distanceService.UserAddress = null;
         }
+
+        _messenger?.Register<VacancySaveChangedMessage>(this, (r, m) =>
+        {
+            if (r is LoginViewModel vm && vm.IsLoggedIn && vm.Session?.Role == UserRole.JobSeeker)
+            {
+                _ = vm.OnVacancySaveChangedAsync(m);
+            }
+        });
     }
 
     /// <summary>
@@ -114,26 +122,24 @@ public partial class LoginViewModel : ObservableObject
 
     // ===== Особиста статистика користувача (FR-007, US-008) =====
     [ObservableProperty]
-    public partial int SavedVacanciesCount { get; set; } = 3;
+    [NotifyPropertyChangedFor(nameof(HasActivity), nameof(HasNoActivity))]
+    public partial int SavedVacanciesCount { get; set; }
 
-    public ObservableCollection<string> RecentSearches { get; } =
-    [
-        "Python remote junior",
-        ".NET backend Kyiv",
-        "React developer",
-        "DevOps AWS",
-        "QA manual"
-    ];
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActivity), nameof(HasNoActivity))]
+    public partial int TotalSearches { get; set; }
 
-    public ObservableCollection<string> TopTechnologies { get; } =
-    [
-        "Python (12)",
-        "C# / .NET (9)",
-        "Docker (5)",
-        "SQL (4)"
-    ];
+    [ObservableProperty]
+    public partial bool IsLoadingStats { get; set; }
 
-    public bool HasActivity => SavedVacanciesCount > 0 || RecentSearches.Count > 0;
+    public ObservableCollection<string> RecentSearches { get; } = [];
+
+    public ObservableCollection<string> TopTechnologies { get; } = [];
+
+    public ObservableCollection<string> TopCategories { get; } = [];
+
+    public bool HasActivity => SavedVacanciesCount > 0 || TotalSearches > 0 || RecentSearches.Count > 0 || TopTechnologies.Count > 0;
+    public bool HasNoActivity => !HasActivity;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasStatusMessage))]
@@ -358,6 +364,79 @@ public partial class LoginViewModel : ObservableObject
         }
     }
 
+    // ===== Особиста статистика активності (FR-007, US-008) =====
+
+    public async Task OnVacancySaveChangedAsync(VacancySaveChangedMessage message)
+    {
+        SavedVacanciesCount = Math.Max(0, SavedVacanciesCount + (message.IsSaved ? 1 : -1));
+        OnPropertyChanged(nameof(HasActivity));
+        OnPropertyChanged(nameof(HasNoActivity));
+        await LoadPersonalStatsAsync();
+    }
+
+    [RelayCommand]
+    public async Task LoadPersonalStatsAsync()
+    {
+        if (!IsLoggedIn || Session?.Role != UserRole.JobSeeker)
+        {
+            return;
+        }
+
+        IsLoadingStats = true;
+        try
+        {
+            Waterfall.Client.Models.Profile.UserStatsDto? stats = await _gateway.GetPersonalStatsAsync();
+            if (stats is not null)
+            {
+                SavedVacanciesCount = stats.SavedVacanciesCount;
+                TotalSearches = stats.TotalSearches;
+
+                RecentSearches.Clear();
+                foreach (string query in stats.RecentSearches)
+                {
+                    RecentSearches.Add(query);
+                }
+
+                TopTechnologies.Clear();
+                foreach (var tech in stats.TopTechnologies)
+                {
+                    TopTechnologies.Add($"{tech.Name} ({tech.Count})");
+                }
+
+                TopCategories.Clear();
+                foreach (var cat in stats.TopCategories)
+                {
+                    TopCategories.Add($"{cat.Name} ({cat.Count})");
+                }
+
+                OnPropertyChanged(nameof(HasActivity));
+                OnPropertyChanged(nameof(HasNoActivity));
+            }
+        }
+        catch
+        {
+            // Офлайн
+        }
+        finally
+        {
+            IsLoadingStats = false;
+        }
+    }
+
+    [RelayCommand]
+    private async Task ClearRecentSearchesAsync()
+    {
+        bool ok = await _gateway.ClearSearchHistoryAsync();
+        if (ok)
+        {
+            RecentSearches.Clear();
+            TotalSearches = 0;
+            OnPropertyChanged(nameof(HasActivity));
+            OnPropertyChanged(nameof(HasNoActivity));
+            StatusMessage = "Історію пошукових запитів очищено.";
+        }
+    }
+
     // ===== Імпорт та експорт прогресу/статистики (FR-013) =====
     // # Mock
     [RelayCommand]
@@ -370,14 +449,6 @@ public partial class LoginViewModel : ObservableObject
         SavedVacanciesCount++;
         RecentSearches.Insert(0, "Imported search query");
         StatusMessage = "Дані профілю успішно відновлено з резервного файлу. Статистику оновлено.";
-    }
-
-    // # Mock
-    [RelayCommand]
-    private void ClearRecentSearches()
-    {
-        RecentSearches.Clear();
-        OnPropertyChanged(nameof(HasActivity));
     }
 
     /// <summary>
@@ -399,6 +470,13 @@ public partial class LoginViewModel : ObservableObject
             Session = null;
             UserAddress = string.Empty;
             ClearSelectedCoordinates();
+            SavedVacanciesCount = 0;
+            TotalSearches = 0;
+            RecentSearches.Clear();
+            TopTechnologies.Clear();
+            TopCategories.Clear();
+            OnPropertyChanged(nameof(HasActivity));
+            OnPropertyChanged(nameof(HasNoActivity));
             if (_distanceService is not null)
             {
                 _distanceService.UserAddress = null;
@@ -409,6 +487,7 @@ public partial class LoginViewModel : ObservableObject
 
         Session = session;
         await LoadProfileAddressAsync();
+        await LoadPersonalStatsAsync();
     }
 
     [RelayCommand]
@@ -438,6 +517,7 @@ public partial class LoginViewModel : ObservableObject
             Session = AuthSession.FromResponse(response);
             Password = string.Empty;
             await LoadProfileAddressAsync();
+            await LoadPersonalStatsAsync();
         }
         catch (ApiException ex)
         {
@@ -463,6 +543,13 @@ public partial class LoginViewModel : ObservableObject
         ErrorMessage = null;
         UserAddress = string.Empty;
         ClearSelectedCoordinates();
+        SavedVacanciesCount = 0;
+        TotalSearches = 0;
+        RecentSearches.Clear();
+        TopTechnologies.Clear();
+        TopCategories.Clear();
+        OnPropertyChanged(nameof(HasActivity));
+        OnPropertyChanged(nameof(HasNoActivity));
         if (_distanceService is not null)
         {
             _distanceService.UserAddress = null;

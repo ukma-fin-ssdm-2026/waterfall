@@ -436,4 +436,153 @@ public sealed class EfVacancyRepositoryTests : IDisposable
         Assert.NotNull(newStored);
         Assert.Equal("Brand New Vacancy", newStored.Title);
     }
+
+    // AI: кириличний пошук без урахування регістру через SearchText; перевірено: падає без нормалізатора
+    [Fact]
+    public async Task GetAllAsync_Search_FindsCyrillicIgnoringCase()
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        VacancyDB accountant = CreateVacancy(title: "Головний Бухгалтер", company: "Фінансова група");
+        VacancyDB developer = CreateVacancy(title: "Backend Developer", company: "TechCorp");
+        db.Vacancies.AddRange(accountant, developer);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act + Assert: запит у будь-якому регістрі знаходить «Бухгалтер»
+        foreach (string term in new[] { "бухгалтер", "БУХГАЛТЕР", "Бухгалтер" })
+        {
+            (IReadOnlyList<VacancyDB> items, int totalCount) = await repo.GetAllAsync(search: term);
+
+            Assert.Equal(1, totalCount);
+            Assert.Equal(accountant.Id, items.Single().Id);
+        }
+    }
+
+    [Fact]
+    public async Task GetAllAsync_WorkFormatFilter_MatchesAnyOfSelectedFlags()
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        VacancyDB remote = CreateVacancy(location: "Віддалено", schedule: "Повна зайнятість");
+        VacancyDB hybrid = CreateVacancy(location: "Київ (Гібрид)", schedule: "Повна зайнятість · Гібридний формат");
+        VacancyDB office = CreateVacancy(location: "Київ (Офіс)", schedule: "Повна зайнятість · Офіс: 5/2");
+        db.Vacancies.AddRange(remote, hybrid, office);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act: «віддалено або офіс» — це будь-який із форматів
+        (IReadOnlyList<VacancyDB> items, int totalCount) = await repo.GetAllAsync(workFormat: WorkFormat.Remote | WorkFormat.Office);
+
+        // Assert
+        Assert.Equal(2, totalCount);
+        Assert.Contains(items, v => v.Id == remote.Id);
+        Assert.Contains(items, v => v.Id == office.Id);
+        Assert.DoesNotContain(items, v => v.Id == hybrid.Id);
+
+        // Формат не вибрано — фільтр нічого не відсіює
+        (_, int allCount) = await repo.GetAllAsync(workFormat: WorkFormat.None);
+        Assert.Equal(3, allCount);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_MaxExperienceMonths_IsInclusiveAndKeepsUnknownExperience()
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        VacancyDB noExperience = CreateVacancy(title: "Junior");
+        noExperience.ExperienceMonths = 0;
+        VacancyDB middle = CreateVacancy(title: "Middle");
+        middle.ExperienceMonths = 24;
+        VacancyDB boundary = CreateVacancy(title: "Boundary");
+        boundary.ExperienceMonths = 36;
+        VacancyDB senior = CreateVacancy(title: "Senior");
+        senior.ExperienceMonths = 60;
+        VacancyDB unknown = CreateVacancy(title: "Unknown");
+        unknown.ExperienceMonths = null;
+        db.Vacancies.AddRange(noExperience, middle, boundary, senior, unknown);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act: межа включна, а невідомий досвід не відсіюється
+        (IReadOnlyList<VacancyDB> items, int totalCount) = await repo.GetAllAsync(maxExperienceMonths: 36);
+
+        // Assert
+        Assert.Equal(4, totalCount);
+        Assert.Contains(items, v => v.Id == boundary.Id);
+        Assert.Contains(items, v => v.Id == unknown.Id);
+        Assert.DoesNotContain(items, v => v.Id == senior.Id);
+
+        (IReadOnlyList<VacancyDB> juniors, int juniorCount) = await repo.GetAllAsync(maxExperienceMonths: 0);
+        Assert.Equal(2, juniorCount);
+        Assert.Contains(juniors, v => v.Id == noExperience.Id);
+        Assert.Contains(juniors, v => v.Id == unknown.Id);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_CategoryGroupFilter_MatchesCanonicalGroupExactly()
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        VacancyDB qa = CreateVacancy(title: "QA Automation", category: "QA Automation");
+        VacancyDB legal = CreateVacancy(title: "Юрист", category: "Legal");
+        VacancyDB dotnet = CreateVacancy(title: ".NET Developer", category: ".NET");
+        db.Vacancies.AddRange(qa, legal, dotnet);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act
+        (IReadOnlyList<VacancyDB> items, int totalCount) = await repo.GetAllAsync(categoryGroup: "QA");
+
+        // Assert: «QA Automation» і «QA» — одна канонічна група
+        Assert.Equal(1, totalCount);
+        Assert.Equal(qa.Id, items.Single().Id);
+        Assert.DoesNotContain(items, v => v.Id == dotnet.Id);
+
+        (_, int unknownCount) = await repo.GetAllAsync(categoryGroup: "Немає такої групи");
+        Assert.Equal(0, unknownCount);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_Skills_RequireEveryTermInTagsOrText()
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        VacancyDB bothInTags = CreateVacancy(title: "Backend Developer");
+        bothInTags.SkillsJson = "[\"C#\",\"SQL\"]";
+        VacancyDB csharpOnly = CreateVacancy(title: "C# Developer");
+        csharpOnly.SkillsJson = "[\"C#\"]";
+        VacancyDB sqlInDescription = CreateVacancy(title: "Аналітик");
+        sqlInDescription.Description = "Працювали з SQL та звітами";
+        sqlInDescription.SkillsJson = "[]";
+        db.Vacancies.AddRange(bothInTags, csharpOnly, sqlInDescription);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act: терміни поєднуються через AND, кожен може знайтися в тегах або в тексті
+        (IReadOnlyList<VacancyDB> items, int totalCount) = await repo.GetAllAsync(skills: ["C#", "SQL"]);
+
+        // Assert
+        Assert.Equal(1, totalCount);
+        Assert.Equal(bothInTags.Id, items.Single().Id);
+
+        (IReadOnlyList<VacancyDB> sqlOnly, int sqlCount) = await repo.GetAllAsync(skills: ["SQL"]);
+        Assert.Equal(2, sqlCount);
+        Assert.Contains(sqlOnly, v => v.Id == bothInTags.Id);
+        Assert.Contains(sqlOnly, v => v.Id == sqlInDescription.Id);
+
+        // Порожні терміни не фільтрують нічого
+        (_, int withBlank) = await repo.GetAllAsync(skills: ["C#", " "]);
+        Assert.Equal(2, withBlank);
+    }
 }

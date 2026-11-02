@@ -1,4 +1,5 @@
 // AI: нормалізація сирих вакансій і збереження в БД (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API, самоперевірка автора (§8)
+// AI: досвід у місяцях із джерела з запасним розбором тексту; перевірено: тести VacancyIngestionServiceTests
 
 using System.Globalization;
 using System.Net;
@@ -8,6 +9,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
+using Waterfall.Repository.Normalization;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Vacancies;
 
@@ -116,6 +118,7 @@ public class VacancyIngestionService : IVacancyIngestionService
         }
 
         (decimal? salaryMin, decimal? salaryMax, string currency) = ParseSalary(raw.Salary, source.Currency);
+        string? experience = NullIfEmpty(Cut(CleanText(raw.Experience), 100));
 
         string? fullAddress = !string.IsNullOrWhiteSpace(raw.FullAddress)
             ? Cut(CleanText(raw.FullAddress), 300)
@@ -134,7 +137,9 @@ public class VacancyIngestionService : IVacancyIngestionService
             Location = Cut(OrDefault(CleanText(raw.Location), "Не вказано"), 200),
             FullAddress = fullAddress,
             Schedule = NullIfEmpty(Cut(CleanText(raw.Employment), 100)),
-            Experience = NullIfEmpty(Cut(CleanText(raw.Experience), 100)),
+            Experience = experience,
+            // Точне число місяців від джерела (Djinni, фасети DOU) не перезаписуємо вгадуванням із тексту
+            ExperienceMonths = raw.ExperienceMonths ?? VacancyExperienceParser.ParseMonths(experience, description),
             SalaryMin = salaryMin,
             SalaryMax = salaryMax,
             Currency = currency,
@@ -158,11 +163,7 @@ public class VacancyIngestionService : IVacancyIngestionService
     public static (decimal? Min, decimal? Max, string Currency) ParseSalary(string? salary, string defaultCurrency = "USD")
     {
         string text = (salary ?? string.Empty).ToLowerInvariant();
-        string currency =
-            text.Contains('$') || text.Contains("usd") ? "USD" :
-            text.Contains('€') || text.Contains("eur") ? "EUR" :
-            text.Contains('₴') || text.Contains("грн") || text.Contains("uah") ? "UAH" :
-            defaultCurrency;
+        string currency = DetectCurrency(text, defaultCurrency);
 
         // Погодинну ставку не можна порівнювати з місячними зарплатами в каталозі
         if (text.Contains("/год") || text.Contains("/hour"))
@@ -198,6 +199,28 @@ public class VacancyIngestionService : IVacancyIngestionService
         }
 
         return (amount, amount, currency);
+    }
+
+    /// <summary>Валюта за позначкою в рядку зарплати (уже в нижньому регістрі); якщо позначки немає — типова для сайту.</summary>
+    private static string DetectCurrency(string text, string defaultCurrency)
+    {
+        // Порядок перевірок важливий: якщо в рядку кілька валют, береться перша з них у цьому порядку
+        if (text.Contains('$') || text.Contains("usd"))
+        {
+            return "USD";
+        }
+
+        if (text.Contains('€') || text.Contains("eur"))
+        {
+            return "EUR";
+        }
+
+        if (text.Contains('₴') || text.Contains("грн") || text.Contains("uah"))
+        {
+            return "UAH";
+        }
+
+        return defaultCurrency;
     }
 
     /// <summary>

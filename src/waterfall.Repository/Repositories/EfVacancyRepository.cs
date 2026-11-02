@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: метод BulkUpsertAsync для фонового збору вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests на SQLite, самоперевірка автора (§8)
+// AI: пошук по SearchText і фільтри формату роботи, досвіду в місяцях, широкої категорії та навичок; перевірено: тести EfVacancyRepositoryTests на SQLite
 
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Data;
@@ -27,6 +28,10 @@ public class EfVacancyRepository : IVacancyRepository
         string? experience = null,
         string? location = null,
         string? schedule = null,
+        WorkFormat? workFormat = null,
+        int? maxExperienceMonths = null,
+        string? categoryGroup = null,
+        IReadOnlyList<string>? skills = null,
         decimal? minSalary = null,
         decimal? maxSalary = null,
         string? source = null,
@@ -41,13 +46,10 @@ public class EfVacancyRepository : IVacancyRepository
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            // Той самий регістр, що й у lower() на боці БД (SqliteUnicodeLowerInterceptor)
+            // SearchText уже в нижньому регістрі (VacancyNormalizer), тож пошук не залежить від регістру
+            // навіть для кирилиці: SQLite LIKE/lower() знають лише латиницю
             string term = search.Trim().ToLowerInvariant();
-            query = query.Where(v =>
-                v.Title.ToLower().Contains(term) ||
-                v.Company.ToLower().Contains(term) ||
-                v.Description.ToLower().Contains(term) ||
-                v.SkillsJson.ToLower().Contains(term));
+            query = query.Where(v => v.SearchText.Contains(term));
         }
 
         if (!string.IsNullOrWhiteSpace(category))
@@ -72,6 +74,35 @@ public class EfVacancyRepository : IVacancyRepository
         {
             string sch = schedule.Trim().ToLowerInvariant();
             query = query.Where(v => v.Schedule != null && v.Schedule.ToLower().Contains(sch));
+        }
+
+        if (workFormat is { } formats && formats != WorkFormat.None)
+        {
+            // Прапорці: вакансія підходить, якщо дозволяє будь-який із вибраних форматів
+            int mask = (int)formats;
+            query = query.Where(v => ((int)v.WorkFormat & mask) != 0);
+        }
+
+        if (maxExperienceMonths is { } maxMonths)
+        {
+            // Верхня межа включна, а невідомий досвід не відсіюємо: «досвід не вказано» — не привід ховати вакансію
+            query = query.Where(v => v.ExperienceMonths == null || v.ExperienceMonths <= maxMonths);
+        }
+
+        if (!string.IsNullOrWhiteSpace(categoryGroup))
+        {
+            string group = categoryGroup.Trim();
+            query = query.Where(v => v.CategoryGroup == group);
+        }
+
+        if (skills is { Count: > 0 })
+        {
+            // Кожен термін має знайтися або в тегах (SkillsJson), або в решті тексту (SearchText); терміни — через AND
+            foreach (string skill in skills.Where(skill => !string.IsNullOrWhiteSpace(skill)))
+            {
+                string term = skill.Trim().ToLowerInvariant();
+                query = query.Where(v => v.SkillsJson.ToLower().Contains(term) || v.SearchText.Contains(term));
+            }
         }
 
         if (minSalary.HasValue)

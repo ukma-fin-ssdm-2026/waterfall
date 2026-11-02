@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Text;
+using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.Extensions.Time.Testing;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
@@ -415,6 +416,121 @@ public class LoginViewModelTests
         Assert.Contains("custom-pulse", html);
         Assert.Contains("openstreetmap.org", html);
         Assert.Contains("Хрещатик", html);
+    }
+
+    [Fact]
+    public async Task RestoreSession_LoadsPersonalStats_WhenJobSeeker_Test28()
+    {
+        _gateway.PersonalStats = new Waterfall.Client.Models.Profile.UserStatsDto
+        {
+            SavedVacanciesCount = 3,
+            TotalSearches = 5,
+            TopTechnologies = [new() { Name = "Python", Count = 10 }, new() { Name = "Java", Count = 2 }],
+            TopCategories = [new() { Name = "Backend", Count = 12 }],
+            RecentSearches = ["Python junior", ".NET remote", "React", "Docker", "QA"]
+        };
+
+        _tokens.Token = Jwt($$"""{"sub":"66666666-6666-6666-6666-66666666666a","email":"seeker@example.com","role":"JobSeeker","exp":{{Unix(Now.AddHours(1))}}}""");
+
+        LoginViewModel vm = new(_gateway, _tokens, _time);
+        await vm.RestoreSessionCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsLoggedIn);
+        Assert.Equal(3, vm.SavedVacanciesCount);
+        Assert.Equal(5, vm.TotalSearches);
+        Assert.Equal(2, vm.TopTechnologies.Count);
+        Assert.Equal("Python (10)", vm.TopTechnologies[0]);
+        Assert.Equal(5, vm.RecentSearches.Count);
+        Assert.Equal("Python junior", vm.RecentSearches[0]);
+        Assert.True(vm.HasActivity);
+        Assert.False(vm.HasNoActivity);
+    }
+
+    [Fact]
+    public async Task VacancySaveChanged_UpdatesSavedCountAndReloadsStats_Test29()
+    {
+        CommunityToolkit.Mvvm.Messaging.IMessenger messenger = new CommunityToolkit.Mvvm.Messaging.StrongReferenceMessenger();
+        _tokens.Token = Jwt($$"""{"sub":"66666666-6666-6666-6666-66666666666a","email":"seeker@example.com","role":"JobSeeker","exp":{{Unix(Now.AddHours(1))}}}""");
+
+        _gateway.PersonalStats = new Waterfall.Client.Models.Profile.UserStatsDto
+        {
+            SavedVacanciesCount = 3,
+            TotalSearches = 5,
+            TopTechnologies = [new() { Name = "Python", Count = 10 }]
+        };
+
+        LoginViewModel vm = new(_gateway, _tokens, _time, messenger: messenger);
+        await vm.RestoreSessionCommand.ExecuteAsync(null);
+
+        Assert.Equal(3, vm.SavedVacanciesCount);
+
+        // Коли користувач зберігає нову вакансію
+        _gateway.PersonalStats = new Waterfall.Client.Models.Profile.UserStatsDto
+        {
+            SavedVacanciesCount = 4,
+            TotalSearches = 5,
+            TopTechnologies = [new() { Name = "Python", Count = 11 }]
+        };
+
+        messenger.Send(new VacancySaveChangedMessage(Guid.NewGuid(), true));
+
+        // Даємо завершитися асинхронному обробнику повідомлення
+        await Task.Delay(50);
+
+        Assert.Equal(4, vm.SavedVacanciesCount);
+        Assert.Equal("Python (11)", vm.TopTechnologies[0]);
+    }
+
+    [Fact]
+    public async Task LoadPersonalStats_EmptyActivity_ShowsEmptyState_Test30()
+    {
+        _tokens.Token = Jwt($$"""{"sub":"66666666-6666-6666-6666-66666666666a","email":"seeker@example.com","role":"JobSeeker","exp":{{Unix(Now.AddHours(1))}}}""");
+
+        _gateway.PersonalStats = new Waterfall.Client.Models.Profile.UserStatsDto
+        {
+            SavedVacanciesCount = 0,
+            TotalSearches = 0,
+            TopTechnologies = [],
+            TopCategories = [],
+            RecentSearches = []
+        };
+
+        LoginViewModel vm = new(_gateway, _tokens, _time);
+        await vm.RestoreSessionCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsLoggedIn);
+        Assert.Equal(0, vm.SavedVacanciesCount);
+        Assert.Equal(0, vm.TotalSearches);
+        Assert.Empty(vm.TopTechnologies);
+        Assert.Empty(vm.RecentSearches);
+        Assert.False(vm.HasActivity);
+        Assert.True(vm.HasNoActivity);
+    }
+
+    [Fact]
+    public async Task ClearRecentSearches_CallsGatewayAndClearsList()
+    {
+        _tokens.Token = Jwt($$"""{"sub":"66666666-6666-6666-6666-66666666666a","email":"seeker@example.com","role":"JobSeeker","exp":{{Unix(Now.AddHours(1))}}}""");
+
+        _gateway.PersonalStats = new Waterfall.Client.Models.Profile.UserStatsDto
+        {
+            SavedVacanciesCount = 0,
+            TotalSearches = 2,
+            RecentSearches = ["Python", ".NET"]
+        };
+
+        LoginViewModel vm = new(_gateway, _tokens, _time);
+        await vm.RestoreSessionCommand.ExecuteAsync(null);
+
+        Assert.NotEmpty(vm.RecentSearches);
+
+        await vm.ClearRecentSearchesCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, _gateway.ClearSearchHistoryCalls);
+        Assert.Empty(vm.RecentSearches);
+        Assert.Equal(0, vm.TotalSearches);
+        Assert.True(vm.HasNoActivity);
+        Assert.Equal("Історію пошукових запитів очищено.", vm.StatusMessage);
     }
 }
 

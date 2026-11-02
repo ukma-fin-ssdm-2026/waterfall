@@ -130,6 +130,40 @@ public class VacancyIngestionServiceTests
         Assert.Equal("[]", vacancy?.SkillsJson);
     }
 
+    // AI: досвід у місяцях із джерела та запасний розбір тексту; перевірено: тести падають, якщо число губиться
+    [Fact]
+    public void Normalize_PrefersSourceExperienceMonthsOverTextGuess()
+    {
+        // Точне число з JSON-LD (місяці) не перезаписуємо вгадуванням із рядка «5+ років»
+        (VacancyDB? vacancy, _) = VacancyIngestionService.Normalize(
+            Raw() with { Experience = "5+ років", ExperienceMonths = 36 }, Now);
+
+        Assert.Equal(36, vacancy?.ExperienceMonths);
+    }
+
+    [Theory]
+    [InlineData("1 рік досвіду", 12)]
+    [InlineData("2+ роки", 24)]
+    [InlineData("без досвіду", 0)]
+    [InlineData("не вказано", null)]
+    [InlineData(null, null)]
+    public void Normalize_DerivesExperienceMonthsFromTextWhenSourceHasNoNumber(string? experience, int? expected)
+    {
+        (VacancyDB? vacancy, _) = VacancyIngestionService.Normalize(Raw() with { Experience = experience }, Now);
+
+        Assert.Equal(expected, vacancy?.ExperienceMonths);
+    }
+
+    [Fact]
+    public void Normalize_FallsBackToDescriptionForExperience()
+    {
+        RawVacancy raw = Raw() with { Experience = null, DescriptionHtml = "<p>Потрібен досвід від 3 років.</p>" };
+
+        (VacancyDB? vacancy, _) = VacancyIngestionService.Normalize(raw, Now);
+
+        Assert.Equal(36, vacancy?.ExperienceMonths);
+    }
+
     [Fact]
     public void Normalize_WorkUa_ChecksWorkUaDomainAndDefaultsToHryvnias()
     {
@@ -163,6 +197,20 @@ public class VacancyIngestionServiceTests
     public void ParseSalary_UsesSiteCurrencyWhenNoneIsWritten(string salary, string currency)
     {
         Assert.Equal(currency, VacancyIngestionService.ParseSalary(salary, "UAH").Currency);
+    }
+
+    // Типова валюта тут XXX («без валюти» за ISO 4217): так видно, що валюту дала саме позначка в рядку
+    [Theory]
+    [InlineData("2500-5000 USD", "USD")] // так зарплату записує DjinniParser
+    [InlineData("від 2000 EUR", "EUR")]
+    [InlineData("₴30 000", "UAH")]
+    [InlineData("30 000 UAH", "UAH")]
+    [InlineData("$1000 або 41 000 грн", "USD")] // кілька позначок: долар перевіряється першим
+    [InlineData("€900 або 38 000 грн", "EUR")] // євро — раніше за гривню
+    [InlineData("30 000", "XXX")]
+    public void ParseSalary_CurrencyMarkInText_WinsInFixedOrder(string salary, string currency)
+    {
+        Assert.Equal(currency, VacancyIngestionService.ParseSalary(salary, "XXX").Currency);
     }
 
     [Theory]

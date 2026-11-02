@@ -13,7 +13,7 @@ namespace Waterfall.Api.Services;
 /// Розміщення: api, а не waterfall.Services (див. remarks в AuthenticationService).
 /// Криптографія паролів — серверна відповідальність (Security Service, HLD §3.4).
 /// </remarks>
-public sealed class AspNetPasswordHasher : IPasswordHasher
+public sealed class SecurityService : ISecurityService
 {
     private readonly PasswordHasher<object> _inner = new();
 
@@ -24,13 +24,13 @@ public sealed class AspNetPasswordHasher : IPasswordHasher
     /// </summary>
     private static readonly string DummyHash = new PasswordHasher<object>().HashPassword(null!, "dummy-unused-value");
 
-    public string Hash(string password)
+    public string HashPassword(string password)
     {
         // Стандартна реалізація об'єкт користувача не використовує (лише для можливих перевизначень).
         return _inner.HashPassword(null!, password);
     }
 
-    public PasswordVerifyResult Verify(string? hashedPassword, string providedPassword)
+    public PasswordVerifyResult VerifyPassword(string? hashedPassword, string providedPassword)
     {
         PasswordVerificationResult raw = _inner.VerifyHashedPassword(null!, hashedPassword ?? DummyHash, providedPassword);
         if (hashedPassword is null)
