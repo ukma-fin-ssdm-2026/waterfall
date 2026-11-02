@@ -203,6 +203,43 @@
                             </VerticalStackLayout>
                         </Border>
 
+                        <!-- Візуальна інтерактивна карта вибраної адреси -->
+                        <Border IsVisible="{Binding HasSelectedCoordinates}"
+                                StrokeShape="RoundRectangle 12"
+                                Stroke="{StaticResource Primary}"
+                                StrokeThickness="1"
+                                BackgroundColor="{StaticResource DarkBg1}"
+                                Margin="0,4,0,4"
+                                Padding="0">
+                            <VerticalStackLayout Spacing="0">
+                                <!-- Верхня плашка з адресою та координатами -->
+                                <Border BackgroundColor="#E610101E"
+                                        StrokeThickness="0"
+                                        Padding="10,6">
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Label Text="📍" FontSize="13" VerticalOptions="Center" Margin="0,0,6,0" />
+                                        <Label Grid.Column="1"
+                                               Text="{Binding SelectedAddressDisplay}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource White}"
+                                               FontFamily="OpenSansSemibold"
+                                               LineBreakMode="TailTruncation"
+                                               VerticalOptions="Center" />
+                                        <Label Grid.Column="2"
+                                               Text="{Binding CoordinatesDisplay}"
+                                               FontSize="11"
+                                               TextColor="{StaticResource TextSecondary}"
+                                               VerticalOptions="Center" />
+                                    </Grid>
+                                </Border>
+
+                                <!-- Контейнер карти -->
+                                <WebView x:Name="MapWebView"
+                                         HeightRequest="220"
+                                         HorizontalOptions="Fill" />
+                            </VerticalStackLayout>
+                        </Border>
+
                         <Button Text="Зберегти адресу 📍"
                                 Command="{Binding SaveAddressCommand}"
                                 Style="{StaticResource CardActionPrimary}"
