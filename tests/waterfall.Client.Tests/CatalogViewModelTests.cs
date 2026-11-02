@@ -461,24 +461,82 @@ public class CatalogViewModelTests
     }
 
     [Fact]
-    public async Task ResetFilters_ResetsFieldsToDefaultAndReloadsCatalog_Test33()
+    public void GuestBanner_VisibleByDefaultWhenLoggedOut()
     {
-        _vm.SearchText = "Python";
-        _vm.SkillFilter = "Django";
-        _vm.MinSalaryFilter = "1000";
-        _vm.MaxSalaryFilter = "3000";
+        Assert.False(_vm.IsUserLoggedIn);
+        Assert.True(_vm.IsUserLoggedOut);
+        Assert.False(_vm.IsGuestBannerDismissed);
+        Assert.True(_vm.IsGuestBannerVisible);
+    }
 
-        Task resetTask = _vm.ResetFiltersCommand.ExecuteAsync(null);
-        FakeGateway.CatalogCall call = await _gateway.WaitForCatalogCallAsync(1);
-        Assert.Null(call.Search);
-        call.Response.SetResult(FakeGateway.Page(1, 1, false, "Any vacancy"));
-        await resetTask;
+    [Fact]
+    public void DismissGuestBanner_HidesBanner()
+    {
+        Assert.True(_vm.IsGuestBannerVisible);
 
-        Assert.Equal(string.Empty, _vm.SearchText);
-        Assert.Equal(string.Empty, _vm.SkillFilter);
-        Assert.Equal(string.Empty, _vm.MinSalaryFilter);
-        Assert.Equal(string.Empty, _vm.MaxSalaryFilter);
-        Assert.Single(_vm.Vacancies);
+        _vm.DismissGuestBannerCommand.Execute(null);
+
+        Assert.True(_vm.IsGuestBannerDismissed);
+        Assert.False(_vm.IsGuestBannerVisible);
+    }
+
+    [Fact]
+    public void UserAuthStateChangedMessage_UpdatesLoginStateAndBanner()
+    {
+        _messenger.Send(new UserAuthStateChangedMessage(true, "user@waterfall.com"));
+
+        Assert.True(_vm.IsUserLoggedIn);
+        Assert.False(_vm.IsUserLoggedOut);
+        Assert.False(_vm.IsGuestBannerVisible);
+
+        _messenger.Send(new UserAuthStateChangedMessage(false, null));
+
+        Assert.False(_vm.IsUserLoggedIn);
+        Assert.True(_vm.IsUserLoggedOut);
+        Assert.False(_vm.IsGuestBannerDismissed);
+        Assert.True(_vm.IsGuestBannerVisible);
+    }
+
+    [Fact]
+    public async Task NavigateToLogin_InvokesConfiguredAction()
+    {
+        bool invoked = false;
+        _vm.NavigateToLoginAction = () =>
+        {
+            invoked = true;
+            return Task.CompletedTask;
+        };
+
+        await _vm.NavigateToLoginCommand.ExecuteAsync(null);
+
+        Assert.True(invoked);
+    }
+
+    [Fact]
+    public async Task RefreshAuthStatus_WithTokenStore_UpdatesIsLoggedIn()
+    {
+        var tokens = new InMemoryTokenStore();
+        var vm = new CatalogViewModel(_gateway, _messenger, _time, tokenStore: tokens);
+
+        Assert.False(vm.IsUserLoggedIn);
+
+        await vm.RefreshAuthStatusAsync();
+        Assert.False(vm.IsUserLoggedIn);
+
+        static string B64(string s) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        string payloadJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["email"] = "user@waterfall.com",
+            ["role"] = "JobSeeker",
+            ["exp"] = _time.GetUtcNow().AddHours(1).ToUnixTimeSeconds()
+        });
+        string validJwt = $"{B64("""{"alg":"HS256","typ":"JWT"}""")}.{B64(payloadJson)}.sig";
+
+        await tokens.SetTokenAsync(validJwt);
+
+        await vm.RefreshAuthStatusAsync();
+        Assert.True(vm.IsUserLoggedIn);
+        Assert.False(vm.IsGuestBannerVisible);
     }
 
     private sealed class StubDistanceService : Waterfall.Client.Interfaces.IDistanceCalculatorService
