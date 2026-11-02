@@ -37,19 +37,22 @@ public partial class CatalogViewModel : ObservableObject
     private bool _isSyncingSort;
     private readonly IUrlLauncher? _urlLauncher;
     private readonly IDistanceCalculatorService? _distanceService;
+    private readonly IAuthTokenStore? _tokenStore;
 
     public CatalogViewModel(
         IHttpGatewayService gateway,
         IMessenger messenger,
         TimeProvider time,
         IUrlLauncher? urlLauncher = null,
-        IDistanceCalculatorService? distanceService = null)
+        IDistanceCalculatorService? distanceService = null,
+        IAuthTokenStore? tokenStore = null)
     {
         _gateway = gateway;
         _messenger = messenger;
         _time = time;
         _urlLauncher = urlLauncher;
         _distanceService = distanceService;
+        _tokenStore = tokenStore;
 
         // Зміна «Обраного» з іншої вкладки: оновлюємо картку на місці, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
@@ -57,6 +60,16 @@ public partial class CatalogViewModel : ObservableObject
             foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
             {
                 item.IsSaved = message.IsSaved;
+            }
+        });
+
+        // Зміна стану авторизації користувача
+        messenger.Register<CatalogViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
+        {
+            vm.IsUserLoggedIn = message.IsLoggedIn;
+            if (!message.IsLoggedIn)
+            {
+                vm.IsGuestBannerDismissed = false;
             }
         });
     }
@@ -94,6 +107,74 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TotalText))]
     public partial int TotalCount { get; set; }
+
+    /// <summary>
+    /// Дія для переходу на екран входу/профілю з плашки неавторизованого користувача.
+    /// </summary>
+    public Func<Task>? NavigateToLoginAction { get; set; }
+
+    /// <summary>
+    /// Чи авторизований користувач у системі.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsUserLoggedOut))]
+    [NotifyPropertyChangedFor(nameof(IsGuestBannerVisible))]
+    public partial bool IsUserLoggedIn { get; set; }
+
+    public bool IsUserLoggedOut => !IsUserLoggedIn;
+
+    /// <summary>
+    /// Чи приховав користувач плашку гостя вручну (кнопка ✕).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsGuestBannerVisible))]
+    public partial bool IsGuestBannerDismissed { get; set; }
+
+    /// <summary>
+    /// Відображати плашку неавторизованого користувача (якщо не залогінений і не закрив плашку).
+    /// </summary>
+    public bool IsGuestBannerVisible => IsUserLoggedOut && !IsGuestBannerDismissed;
+
+    /// <summary>
+    /// Приховати плашку неавторизованого користувача на поточну сесію.
+    /// </summary>
+    [RelayCommand]
+    private void DismissGuestBanner()
+    {
+        IsGuestBannerDismissed = true;
+    }
+
+    /// <summary>
+    /// Перехід до екрану входу/реєстрації з плашки гостя.
+    /// </summary>
+    [RelayCommand]
+    private async Task NavigateToLoginAsync()
+    {
+        if (NavigateToLoginAction is not null)
+        {
+            await NavigateToLoginAction();
+        }
+    }
+
+    /// <summary>
+    /// Оновлює статус авторизації на основі збереженого токена.
+    /// </summary>
+    public async Task RefreshAuthStatusAsync(CancellationToken ct = default)
+    {
+        if (_tokenStore is not null)
+        {
+            try
+            {
+                string? token = await _tokenStore.GetTokenAsync(ct);
+                Waterfall.Client.Models.Auth.AuthSession? session = token is null ? null : Waterfall.Client.Models.Auth.AuthSession.FromToken(token);
+                IsUserLoggedIn = session is not null && !session.IsExpired(_time.GetUtcNow());
+            }
+            catch
+            {
+                IsUserLoggedIn = false;
+            }
+        }
+    }
 
     /// <summary>
     /// Показувати розширену панель фільтрів (US-002, FR-004).
@@ -1374,10 +1455,17 @@ public partial class CatalogViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Перше відкриття вкладки: завантажити, якщо ще не завантажували.
+    /// Перше відкриття вкладки: перевірити авторизацію та завантажити, якщо ще не завантажували.
     /// </summary>
     [RelayCommand]
-    private Task EnsureLoadedAsync() => HasLoaded || IsLoading ? Task.CompletedTask : LoadFirstPageAsync();
+    private async Task EnsureLoadedAsync()
+    {
+        await RefreshAuthStatusAsync();
+        if (!HasLoaded && !IsLoading)
+        {
+            await LoadFirstPageAsync();
+        }
+    }
 
     /// <summary>
     /// Повтор після помилки.
@@ -1402,6 +1490,7 @@ public partial class CatalogViewModel : ObservableObject
     {
         try
         {
+            await RefreshAuthStatusAsync();
             await LoadFirstPageAsync(showSpinner: false);
         }
         finally

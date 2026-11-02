@@ -318,10 +318,12 @@ public partial class LoginViewModel : ObservableObject
                 _distanceService.UserAddress = null;
             }
             _messenger?.Send(new UserAddressChangedMessage(null));
+            _messenger?.Send(new UserAuthStateChangedMessage(false, null));
             return;
         }
 
         Session = session;
+        _messenger?.Send(new UserAuthStateChangedMessage(true, session.Email));
         await LoadProfileAddressAsync();
     }
 
@@ -351,6 +353,7 @@ public partial class LoginViewModel : ObservableObject
 
             Session = AuthSession.FromResponse(response);
             Password = string.Empty;
+            _messenger?.Send(new UserAuthStateChangedMessage(true, response.Email));
             await LoadProfileAddressAsync();
         }
         catch (ApiException ex)
@@ -381,6 +384,7 @@ public partial class LoginViewModel : ObservableObject
             _distanceService.UserAddress = null;
         }
         _messenger?.Send(new UserAddressChangedMessage(null));
+        _messenger?.Send(new UserAuthStateChangedMessage(false, null));
     }
 
     /// <returns>Повідомлення про першу порушену вимогу або null, якщо все гаразд.</returns>
