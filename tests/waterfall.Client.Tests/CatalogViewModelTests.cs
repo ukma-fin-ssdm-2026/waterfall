@@ -362,6 +362,87 @@ public class CatalogViewModelTests
     }
 
     [Fact]
+    public async Task SelectedSortOption_SortsLoadedVacanciesByDistance()
+    {
+        var stubDistance = new StubDistanceService("Київ, Хрещатик 1", new()
+        {
+            ["Київ, вул. Велика Васильківська 10"] = 1.2,
+            ["Київ, пр. Перемоги 50"] = 8.5,
+            ["Львів"] = 540.0
+        });
+
+        var vm = new CatalogViewModel(_gateway, _messenger, _time, distanceService: stubDistance);
+        Task load = vm.EnsureLoadedCommand.ExecuteAsync(null);
+
+        var page = FakeGateway.Page(1, 4, hasNext: false, "Near Vacancy", "Far Vacancy", "Remote Vacancy", "Medium Vacancy");
+        page = page with
+        {
+            Items =
+            [
+                page.Items[0] with { Location = "Київ, вул. Велика Васильківська 10" },
+                page.Items[1] with { Location = "Львів" },
+                page.Items[2] with { Location = "Remote", Schedule = "Віддалено" },
+                page.Items[3] with { Location = "Київ, пр. Перемоги 50" }
+            ]
+        };
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(page);
+        await load;
+
+        vm.SelectedSortOption = "За відстанню (спочатку ближчі)";
+        Assert.Equal(["Near Vacancy", "Medium Vacancy", "Far Vacancy", "Remote Vacancy"], vm.Vacancies.Select(v => v.Title));
+
+        vm.SelectedSortOption = "За відстанню (спочатку дальші)";
+        Assert.Equal(["Far Vacancy", "Medium Vacancy", "Near Vacancy", "Remote Vacancy"], vm.Vacancies.Select(v => v.Title));
+    }
+
+    [Fact]
+    public async Task SelectedSortOption_DistanceSort_ShowsWarningBanner_WhenNoUserAddress()
+    {
+        var stubDistance = new StubDistanceService(userAddress: null, new());
+        var vm = new CatalogViewModel(_gateway, _messenger, _time, distanceService: stubDistance);
+        Task load = vm.EnsureLoadedCommand.ExecuteAsync(null);
+        var page = FakeGateway.Page(1, 2, hasNext: false, "Job 1", "Job 2");
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(page);
+        await load;
+
+        vm.SelectedSortOption = "За відстанню (спочатку ближчі)";
+        Assert.Contains("Вкажіть адресу в профілі", vm.StaleCacheText);
+    }
+
+    [Fact]
+    public async Task UserAddressChangedMessage_RefreshesDistanceSort()
+    {
+        var stubDistance = new StubDistanceService(userAddress: null, new()
+        {
+            ["Київ, вул. А"] = 5.0,
+            ["Київ, вул. Б"] = 2.0
+        });
+        var vm = new CatalogViewModel(_gateway, _messenger, _time, distanceService: stubDistance);
+        Task load = vm.EnsureLoadedCommand.ExecuteAsync(null);
+        var page = FakeGateway.Page(1, 2, hasNext: false, "Job A", "Job B");
+        page = page with
+        {
+            Items =
+            [
+                page.Items[0] with { Location = "Київ, вул. А" },
+                page.Items[1] with { Location = "Київ, вул. Б" }
+            ]
+        };
+        (await _gateway.WaitForCatalogCallAsync(1)).Response.SetResult(page);
+        await load;
+
+        vm.SelectedSortOption = "За відстанню (спочатку ближчі)";
+        Assert.Contains("Вкажіть адресу в профілі", vm.StaleCacheText);
+
+        // Користувач встановлює адресу в профілі
+        stubDistance.UserAddress = "Київ, Майдан Незалежності";
+        _messenger.Send(new UserAddressChangedMessage("Київ, Майдан Незалежності"));
+
+        Assert.Equal(["Job B", "Job A"], vm.Vacancies.Select(v => v.Title));
+        Assert.DoesNotContain("Вкажіть адресу в профілі", vm.StaleCacheText);
+    }
+
+    [Fact]
     public async Task SearchText_WhenProvided_RecordsSearchInGateway()
     {
         Task load = _vm.EnsureLoadedCommand.ExecuteAsync(null);
@@ -398,5 +479,27 @@ public class CatalogViewModelTests
         Assert.Equal(string.Empty, _vm.MinSalaryFilter);
         Assert.Equal(string.Empty, _vm.MaxSalaryFilter);
         Assert.Single(_vm.Vacancies);
+    }
+
+    private sealed class StubDistanceService : Waterfall.Client.Interfaces.IDistanceCalculatorService
+    {
+        private readonly Dictionary<string, double?> _distances;
+
+        public StubDistanceService(string? userAddress, Dictionary<string, double?> distances)
+        {
+            UserAddress = userAddress;
+            _distances = distances;
+        }
+
+        public string? UserAddress { get; set; }
+
+        public Task<double?> CalculateDistanceKmAsync(string destinationAddress, CancellationToken ct = default)
+        {
+            if (_distances.TryGetValue(destinationAddress, out double? km))
+            {
+                return Task.FromResult(km);
+            }
+            return Task.FromResult<double?>(null);
+        }
     }
 }

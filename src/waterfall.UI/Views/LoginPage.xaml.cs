@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Waterfall.Client.ViewModels;
 
 namespace waterfall.UI.Views;
@@ -10,6 +11,24 @@ public partial class LoginPage : ContentPage
     {
         InitializeComponent();
         BindingContext = _viewModel = viewModel;
+        _viewModel.PropertyChanged += ViewModel_PropertyChanged;
+        UpdateMapSource();
+    }
+
+    private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(LoginViewModel.MapHtml))
+        {
+            UpdateMapSource();
+        }
+    }
+
+    private void UpdateMapSource()
+    {
+        if (!string.IsNullOrEmpty(_viewModel.MapHtml))
+        {
+            MapWebView.Source = new HtmlWebViewSource { Html = _viewModel.MapHtml };
+        }
     }
 
     /// <summary>
@@ -18,5 +37,6 @@ public partial class LoginPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
+        UpdateMapSource();
     }
 }

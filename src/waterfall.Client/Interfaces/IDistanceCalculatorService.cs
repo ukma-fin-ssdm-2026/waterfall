@@ -17,4 +17,10 @@ public interface IDistanceCalculatorService
     /// <param name="ct">Токен скасування.</param>
     /// <returns>Відстань у км або null, якщо адресу не задано чи формат віддалений.</returns>
     Task<double?> CalculateDistanceKmAsync(string destinationAddress, CancellationToken ct = default);
+
+    /// <summary>
+    /// Отримує координати (широта, довгота) для вказаної адреси або null, якщо не знайдено.
+    /// </summary>
+    Task<(double Lat, double Lon)?> ResolveCoordinatesAsync(string address, CancellationToken ct = default) =>
+        Task.FromResult<(double Lat, double Lon)?>(null);
 }

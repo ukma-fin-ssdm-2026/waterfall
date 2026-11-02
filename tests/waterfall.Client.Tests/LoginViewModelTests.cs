@@ -369,6 +369,56 @@ public class LoginViewModelTests
     }
 
     [Fact]
+    public async Task UpdateMapForAddressAsync_ResolvesCoordinates_AndSetsMapHtml()
+    {
+        _gateway.CoordinatesHandler = addr => new Waterfall.Client.Models.Geo.CoordinatesDto
+        {
+            Latitude = 50.4378,
+            Longitude = 30.5220
+        };
+
+        LoginViewModel vm = new(_gateway, _tokens, _time);
+        await vm.UpdateMapForAddressAsync("Київ, Спортивна площа, 1а");
+
+        Assert.True(vm.HasSelectedCoordinates);
+        Assert.Equal(50.4378, vm.SelectedLatitude);
+        Assert.Equal(30.5220, vm.SelectedLongitude);
+        Assert.Equal("50.4378, 30.5220", vm.CoordinatesDisplay);
+        Assert.Contains("50.437800", vm.MapHtml);
+        Assert.Contains("30.522000", vm.MapHtml);
+        Assert.Contains("leaflet", vm.MapHtml, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task UpdateMapForAddressAsync_ClearsMap_WhenAddressIsEmpty()
+    {
+        LoginViewModel vm = new(_gateway, _tokens, _time);
+        vm.SetSelectedCoordinates(50.4501, 30.5234, "Київ, Хрещатик");
+        Assert.True(vm.HasSelectedCoordinates);
+
+        await vm.UpdateMapForAddressAsync("");
+
+        Assert.False(vm.HasSelectedCoordinates);
+        Assert.Null(vm.SelectedLatitude);
+        Assert.Null(vm.SelectedLongitude);
+        Assert.Empty(vm.MapHtml);
+        Assert.Empty(vm.CoordinatesDisplay);
+    }
+
+    [Fact]
+    public void MapHtmlHelper_GeneratesExpectedLeafletAndFallbackTags()
+    {
+        string html = Waterfall.Client.Helpers.MapHtmlHelper.GenerateMapHtml(50.4501, 30.5234, "Київ, вул. Хрещатик, 22");
+
+        Assert.Contains("50.450100", html);
+        Assert.Contains("30.523400", html);
+        Assert.Contains("custom-pin", html);
+        Assert.Contains("custom-pulse", html);
+        Assert.Contains("openstreetmap.org", html);
+        Assert.Contains("Хрещатик", html);
+    }
+
+    [Fact]
     public async Task RestoreSession_LoadsPersonalStats_WhenJobSeeker_Test28()
     {
         _gateway.PersonalStats = new Waterfall.Client.Models.Profile.UserStatsDto
@@ -483,3 +533,4 @@ public class LoginViewModelTests
         Assert.Equal("Історію пошукових запитів очищено.", vm.StatusMessage);
     }
 }
+
