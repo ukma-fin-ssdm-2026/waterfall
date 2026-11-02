@@ -1,4 +1,5 @@
 // AI: ввічливий обхід сайтів-джерел вакансій; перевірено: юніт-тести JobParserServiceTests з підробленими сайтами, ручний запуск API проти djinni.co і work.ua, самоперевірка автора (§8)
+// AI: читання фасетних стрічок досвіду тим самим ввічливим механізмом; перевірено: тести JobParserServiceTests
 
 using System.Net;
 using System.Net.Http.Headers;
@@ -26,6 +27,19 @@ public interface IJobSiteParser
 
     /// <summary>Те, чого немає в списку, зі сторінки однієї вакансії; поля, яких на сторінці немає, лишаються null.</summary>
     RawVacancy ParseJobPage(string html);
+}
+
+/// <summary>Стрічка, у якій сайт згрупував вакансії за мінімальним досвідом; <see cref="Months"/> — нижня межа групи.</summary>
+public sealed record ExperienceFacet(string Url, int Months);
+
+/// <summary>
+/// Сайт, який віддає додаткові стрічки за рівнем досвіду (у DOU це фасети RSS: exp=0-1, 1-3, 3-5, 5plus).
+/// Обхід читає їх тим самим ввічливим механізмом, що й сторінки списку, і ставить вакансіям мінімальний досвід у місяцях.
+/// </summary>
+public interface IExperienceFacetSource
+{
+    /// <summary>Стрічки досвіду від найнижчої вимоги до найвищої.</summary>
+    IReadOnlyList<ExperienceFacet> ExperienceFacets { get; }
 }
 
 /// <summary>
@@ -102,111 +116,144 @@ public sealed class SiteCrawler
             return [];
         }
 
-        List<RawVacancy> rawItems = [];
-        HashSet<string> seenIds = [];
-        Dictionary<string, RawVacancy> jobPages = [];
-        bool readJobPages = true;
-        bool interrupted = false;
-        SiteRefusedException? refusal = null;
+        CrawlState crawl = new();
         for (int page = 1; page <= _pages; page++)
         {
-            string? url = _site.ListPageUrl(page);
-            if (url is null)
-            {
-                break;
-            }
-
-            if (!robots.IsAllowed(new Uri(url).PathAndQuery))
-            {
-                _logger.LogWarning("robots.txt {Site} не дозволяє ботам читати {Url}, тож далі не йдемо.", _site.Name, url);
-                break;
-            }
-
-            List<RawVacancy> jobs;
-            try
-            {
-                jobs = _site.ParseListPage(await GetPageAsync(http, url, ct));
-            }
-            catch (Exception ex) when (IsSiteFailure(ex, ct))
-            {
-                _logger.LogWarning("Сторінка {Url} недоступна ({Error}); обробляємо {Count} вакансій, зібраних раніше.", url, ex.Message, rawItems.Count);
-                refusal = ex as SiteRefusedException;
-                interrupted = true;
-                break;
-            }
-
-            // За межами списку сайт показує першу сторінку (Djinni) чи порожню (Work.ua): нових вакансій немає — зупиняємося.
-            // Так само відкидаємо вакансію, що з'їхала на наступну сторінку, поки ми читали попередню (артефакт пагінації).
-            List<RawVacancy> fresh = jobs.Where(job => job.Id is null || seenIds.Add(job.Id)).ToList();
+            List<RawVacancy> fresh = await ReadListPageAsync(http, robots, page, crawl, ct);
             if (fresh.Count == 0)
             {
-                if (page == 1)
-                {
-                    _logger.LogWarning("На {Url} не знайдено вакансій: можливо, {Site} змінив розмітку сторінки.", url, _site.Name);
-                }
-
                 break;
             }
 
             foreach (RawVacancy job in fresh)
             {
-                RawVacancy? details = null;
-                if (job.Id is not null && !_jobPages.TryGetValue(job.Id, out details) && readJobPages && IsAllowedJobPage(job.Url, robots))
-                {
-                    try
-                    {
-                        details = _site.ParseJobPage(await GetPageAsync(http, job.Url!, ct));
-                    }
-                    catch (Exception ex) when (IsSiteFailure(ex, ct))
-                    {
-                        // Вакансія корисна й без сторінки: збережемо те, що є в списку.
-                        // Решту сторінок вакансій у цьому обході не чіпаємо, щоб не тиснути на сайт, який уже збоїть.
-                        _logger.LogWarning("Сторінка вакансії {Url} недоступна ({Error}); решту вакансій беремо лише зі списку.", job.Url, ex.Message);
-                        refusal = ex as SiteRefusedException;
-                        readJobPages = false;
-                    }
-                }
-
-                if (details is not null)
-                {
-                    jobPages[job.Id!] = details;
-                }
-
-                rawItems.Add(details is null ? job : WithJobPage(job, details));
+                crawl.Items.Add(await WithJobPageAsync(http, robots, job, crawl, ct));
             }
         }
 
-        // Пам'ятаємо лише вакансії з цього обходу: решта зникла зі списку й більше не знадобиться.
-        // Якщо ж обхід обірвався, старі записи ще можуть знадобитися наступного разу.
-        if (interrupted)
+        // Мінімальний досвід із фасетних стрічок — лише для вакансій, у яких джерело не дало числа
+        if (crawl.Items.Count > 0)
         {
-            foreach ((string id, RawVacancy details) in jobPages)
+            crawl.Items = await ApplyExperienceFacetsAsync(http, robots, crawl.Items, ct);
+        }
+
+        RememberJobPages(crawl);
+        if (crawl.Refusal is null)
+        {
+            _pause = TimeSpan.Zero;
+        }
+        else
+        {
+            PauseAfterRefusal(crawl.Refusal.RetryAfter);
+        }
+
+        _logger.LogInformation("З {Site} завантажено вакансій: {Count}.", _site.Name, crawl.Items.Count);
+        return crawl.Items;
+    }
+
+    /// <summary>
+    /// Нові вакансії з N-ї сторінки списку. Порожній список — далі не йдемо: такої сторінки немає, robots.txt її не дозволяє,
+    /// сайт не відповів або нових вакансій на сторінці вже немає.
+    /// </summary>
+    private async Task<List<RawVacancy>> ReadListPageAsync(HttpClient http, RobotsTxt robots, int page, CrawlState crawl, CancellationToken ct)
+    {
+        string? url = _site.ListPageUrl(page);
+        if (url is null)
+        {
+            return [];
+        }
+
+        if (!robots.IsAllowed(new Uri(url).PathAndQuery))
+        {
+            _logger.LogWarning("robots.txt {Site} не дозволяє ботам читати {Url}, тож далі не йдемо.", _site.Name, url);
+            return [];
+        }
+
+        List<RawVacancy> jobs;
+        try
+        {
+            jobs = _site.ParseListPage(await GetPageAsync(http, url, ct));
+        }
+        catch (Exception ex) when (IsSiteFailure(ex, ct))
+        {
+            _logger.LogWarning("Сторінка {Url} недоступна ({Error}); обробляємо {Count} вакансій, зібраних раніше.", url, ex.Message, crawl.Items.Count);
+            crawl.Refusal = ex as SiteRefusedException;
+            crawl.Interrupted = true;
+            return [];
+        }
+
+        // За межами списку сайт показує першу сторінку (Djinni) чи порожню (Work.ua): нових вакансій немає — зупиняємося.
+        // Так само відкидаємо вакансію, що з'їхала на наступну сторінку, поки ми читали попередню (артефакт пагінації).
+        List<RawVacancy> fresh = jobs.Where(job => job.Id is null || crawl.SeenIds.Add(job.Id)).ToList();
+        if (fresh.Count == 0 && page == 1)
+        {
+            _logger.LogWarning("На {Url} не знайдено вакансій: можливо, {Site} змінив розмітку сторінки.", url, _site.Name);
+        }
+
+        return fresh;
+    }
+
+    /// <summary>
+    /// Вакансія зі списку разом із даними з її сторінки: з пам'яті, якщо сторінку вже читали, інакше щойно прочитаними.
+    /// Якщо даних сторінки немає, вакансія лишається такою, як у списку.
+    /// </summary>
+    private async Task<RawVacancy> WithJobPageAsync(HttpClient http, RobotsTxt robots, RawVacancy job, CrawlState crawl, CancellationToken ct)
+    {
+        RawVacancy? details = null;
+        if (job.Id is not null && !_jobPages.TryGetValue(job.Id, out details) && crawl.ReadJobPages && IsAllowedJobPage(job.Url, robots))
+        {
+            details = await ReadJobPageAsync(http, job.Url!, crawl, ct);
+        }
+
+        if (details is null)
+        {
+            return job;
+        }
+
+        crawl.JobPages[job.Id!] = details;
+        return WithJobPage(job, details);
+    }
+
+    /// <summary>Дані зі сторінки вакансії; null — сторінка не відкрилася.</summary>
+    private async Task<RawVacancy?> ReadJobPageAsync(HttpClient http, string url, CrawlState crawl, CancellationToken ct)
+    {
+        try
+        {
+            return _site.ParseJobPage(await GetPageAsync(http, url, ct));
+        }
+        catch (Exception ex) when (IsSiteFailure(ex, ct))
+        {
+            // Вакансія корисна й без сторінки: збережемо те, що є в списку.
+            // Решту сторінок вакансій у цьому обході не чіпаємо, щоб не тиснути на сайт, який уже збоїть.
+            _logger.LogWarning("Сторінка вакансії {Url} недоступна ({Error}); решту вакансій беремо лише зі списку.", url, ex.Message);
+            crawl.Refusal = ex as SiteRefusedException;
+            crawl.ReadJobPages = false;
+            return null;
+        }
+    }
+
+    // Пам'ятаємо лише вакансії з цього обходу: решта зникла зі списку й більше не знадобиться.
+    // Якщо ж обхід обірвався, старі записи ще можуть знадобитися наступного разу.
+    private void RememberJobPages(CrawlState crawl)
+    {
+        if (crawl.Interrupted)
+        {
+            foreach ((string id, RawVacancy details) in crawl.JobPages)
             {
                 _jobPages[id] = details;
             }
         }
         else
         {
-            _jobPages = jobPages;
+            _jobPages = crawl.JobPages;
         }
-
-        if (refusal is null)
-        {
-            _pause = TimeSpan.Zero;
-        }
-        else
-        {
-            PauseAfterRefusal(refusal.RetryAfter);
-        }
-
-        _logger.LogInformation("З {Site} завантажено вакансій: {Count}.", _site.Name, rawItems.Count);
-        return rawItems;
     }
 
     /// <summary>Дані зі сторінки вакансії доповнюють і уточнюють дані зі списку (наприклад, повний опис замість скороченого).</summary>
     public static RawVacancy WithJobPage(RawVacancy fromList, RawVacancy fromPage) => fromList with
     {
         Title = fromPage.Title ?? fromList.Title,
+        ExperienceMonths = fromPage.ExperienceMonths ?? fromList.ExperienceMonths,
         Company = fromPage.Company ?? fromList.Company,
         Salary = fromPage.Salary ?? fromList.Salary,
         Location = fromPage.Location ?? fromList.Location,
@@ -217,6 +264,79 @@ public sealed class SiteCrawler
         DescriptionHtml = fromPage.DescriptionHtml ?? fromList.DescriptionHtml,
         Tags = fromPage.Tags ?? fromList.Tags
     };
+
+    /// <summary>
+    /// Дочитує фасетні стрічки досвіду (наприклад, DOU exp=0-1 … 5plus) і проставляє вакансіям нижню межу досвіду.
+    /// Запитів рівно стільки, скільки потрібно: читаємо, поки всі вакансії без числа не отримали мітку.
+    /// Вакансія, що потрапила в кілька фасетів (рік досвіду є і в 0-1, і в 1-3), бере вищу нижню межу.
+    /// </summary>
+    private async Task<List<RawVacancy>> ApplyExperienceFacetsAsync(
+        HttpClient http, RobotsTxt robots, List<RawVacancy> rawItems, CancellationToken ct)
+    {
+        if (_site is not IExperienceFacetSource source)
+        {
+            return rawItems;
+        }
+
+        int unlabelled = rawItems.Count(item => item.ExperienceMonths is null);
+        if (unlabelled == 0)
+        {
+            return rawItems;
+        }
+
+        Dictionary<string, int> labels = new(StringComparer.Ordinal);
+        foreach (ExperienceFacet facet in source.ExperienceFacets)
+        {
+            if (!robots.IsAllowed(new Uri(facet.Url).PathAndQuery))
+            {
+                _logger.LogWarning("robots.txt {Site} не дозволяє читати фасет досвіду {Url}, тож мітки беремо лише з попередніх.", _site.Name, facet.Url);
+                break;
+            }
+
+            List<RawVacancy> facetItems;
+            try
+            {
+                facetItems = _site.ParseListPage(await GetPageAsync(http, facet.Url, ct));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                // Фасет — лише уточнення досвіду: будь-який збій (мережа, розмітка) не має ламати збір
+                _logger.LogWarning("Фасет досвіду {Url} недоступний ({Error}); досвід цих вакансій виведемо з тексту.", facet.Url, ex.Message);
+                if (ex is SiteRefusedException refusal)
+                {
+                    PauseAfterRefusal(refusal.RetryAfter);
+                }
+
+                break;
+            }
+
+            foreach (RawVacancy item in facetItems)
+            {
+                if (item.Id is not null)
+                {
+                    labels[item.Id] = Math.Max(labels.GetValueOrDefault(item.Id), facet.Months);
+                }
+            }
+
+            unlabelled = rawItems.Count(item => item.ExperienceMonths is null && (item.Id is null || !labels.ContainsKey(item.Id)));
+            if (unlabelled == 0)
+            {
+                break;
+            }
+        }
+
+        for (int i = 0; i < rawItems.Count; i++)
+        {
+            if (rawItems[i].ExperienceMonths is null
+                && rawItems[i].Id is { } id
+                && labels.TryGetValue(id, out int months))
+            {
+                rawItems[i] = rawItems[i] with { ExperienceMonths = months };
+            }
+        }
+
+        return rawItems;
+    }
 
     /// <summary>
     /// Відсутній robots.txt (4xx) дозволяє все, а збій сервера (5xx) — ні: тоді сайт пропускаємо (null)
@@ -284,5 +404,26 @@ public sealed class SiteCrawler
         : HttpRequestException($"сайт відмовив: {(int)response.StatusCode} {response.ReasonPhrase}", null, response.StatusCode)
     {
         public RetryConditionHeaderValue? RetryAfter { get; } = response.Headers.RetryAfter;
+    }
+
+    /// <summary>Те, що накопичується за один обхід сайту.</summary>
+    private sealed class CrawlState
+    {
+        public List<RawVacancy> Items { get; set; } = [];
+
+        // Id вакансій, уже бачених у цьому обході
+        public HashSet<string> SeenIds { get; } = [];
+
+        // Дані зі сторінок вакансій цього обходу; після обходу вони замінять _jobPages
+        public Dictionary<string, RawVacancy> JobPages { get; } = [];
+
+        // false — сторінка вакансії вже не відкрилася, тож решту вакансій беремо лише зі списку
+        public bool ReadJobPages { get; set; } = true;
+
+        // Сторінка списку не відкрилася, і обхід обірвався
+        public bool Interrupted { get; set; }
+
+        // Останній збій, якщо це була пряма відмова сайту (403, 429, 503): привід для паузи
+        public SiteRefusedException? Refusal { get; set; }
     }
 }

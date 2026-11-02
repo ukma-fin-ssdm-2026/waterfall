@@ -65,6 +65,7 @@ public class DjinniPageTests
         Assert.Equal("Віддалено", job.Location);
         Assert.Equal("2026-10-24T20:43:05.9432900+03:00", job.Posted); // київський час із явним зсувом
         Assert.Equal("1 рік досвіду", job.Experience);
+        Assert.Equal(12, job.ExperienceMonths); // число з monthsOfExperience не губиться
         Assert.Equal("Повна зайнятість", job.Employment);
         Assert.Equal(".NET", job.Category);
         Assert.Equal(JobSource.Djinni, job.Source);
@@ -78,6 +79,7 @@ public class DjinniPageTests
 
         Assert.Null(job.Salary);
         Assert.Equal("Україна (Київ, Львів)", job.Location);
+        Assert.Equal(6, job.ExperienceMonths);
         Assert.Equal("6 міс. досвіду", job.Experience);
         Assert.Equal("Часткова зайнятість", job.Employment);
     }

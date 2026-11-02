@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: сід-вакансії отримують числовий досвід, решта похідних полів рахується нормалізатором; перевірено: тести WaterfallDbSeederTests
 
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,7 @@ public static class WaterfallDbSeeder
                     FullAddress = "Київ, вул. Мечникова, 2, БЦ Парус",
                     Schedule = "Повна зайнятість · Гнучкий графік",
                     Experience = "5+ років",
+                    ExperienceMonths = 60,
                     SalaryMin = 4000,
                     SalaryMax = 5500,
                     Currency = "USD",
@@ -59,6 +61,7 @@ public static class WaterfallDbSeeder
                     FullAddress = "Львів, вул. Садова, 2а",
                     Schedule = "Повна зайнятість · Стандартний графік: 5/2",
                     Experience = "2+ роки",
+                    ExperienceMonths = 24,
                     SalaryMin = 2200,
                     SalaryMax = 3200,
                     Currency = "USD",
@@ -81,6 +84,7 @@ public static class WaterfallDbSeeder
                     FullAddress = "Київ, проспект Академіка Глушкова, 1",
                     Schedule = "Повна зайнятість · Гібридний формат",
                     Experience = "3+ роки",
+                    ExperienceMonths = 36,
                     SalaryMin = 3000,
                     SalaryMax = 4500,
                     Currency = "USD",
@@ -103,6 +107,7 @@ public static class WaterfallDbSeeder
                     FullAddress = "Київ, Спортивна площа, 1а, БЦ Гулівер",
                     Schedule = "Повна зайнятість · Віддалена робота",
                     Experience = "2+ роки",
+                    ExperienceMonths = 24,
                     SalaryMin = 2800,
                     SalaryMax = 3800,
                     Currency = "USD",
@@ -125,6 +130,7 @@ public static class WaterfallDbSeeder
                     FullAddress = "Київ, вул. Семена Скляренка, 5",
                     Schedule = "Повна зайнятість · Офіс: 5/2",
                     Experience = "5+ років",
+                    ExperienceMonths = 60,
                     SalaryMin = 5000,
                     SalaryMax = 7000,
                     Currency = "USD",

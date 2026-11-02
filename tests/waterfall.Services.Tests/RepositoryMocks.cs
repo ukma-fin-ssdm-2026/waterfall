@@ -1,4 +1,5 @@
 // AI: моки та тестові дублери репозиторіїв (RepositoryMocks, FakeVacancyRepository, FakeSavedVacancyRepository, Lab 06); перевірено: запуск dotnet test, самоперевірка автора (Денис Сидоренко, §8)
+// AI: фіксація переданих нормалізованих фільтрів; перевірено: тести VacancyServiceTests
 
 using Microsoft.Extensions.Logging;
 using Waterfall.Repository.Entities;
@@ -38,6 +39,11 @@ public sealed class FakeVacancyRepository : IVacancyRepository
     public bool ShouldThrowOnGetAll { get; set; }
     public List<string?> GetAllSearchCalls { get; } = [];
     public List<string?> GetAllSourceCalls { get; } = [];
+    public List<string?> GetAllLocationCalls { get; } = [];
+    public List<WorkFormat?> GetAllWorkFormatCalls { get; } = [];
+    public List<int?> GetAllMaxExperienceCalls { get; } = [];
+    public List<string?> GetAllCategoryGroupCalls { get; } = [];
+    public List<IReadOnlyList<string>?> GetAllSkillsCalls { get; } = [];
     public List<VacancyDB> CreatedVacancies { get; } = [];
     public List<VacancyDB> UpdatedVacancies { get; } = [];
     public List<Guid> DeletedIds { get; } = [];
@@ -48,6 +54,10 @@ public sealed class FakeVacancyRepository : IVacancyRepository
         string? experience = null,
         string? location = null,
         string? schedule = null,
+        WorkFormat? workFormat = null,
+        int? maxExperienceMonths = null,
+        string? categoryGroup = null,
+        IReadOnlyList<string>? skills = null,
         decimal? minSalary = null,
         decimal? maxSalary = null,
         string? source = null,
@@ -65,6 +75,11 @@ public sealed class FakeVacancyRepository : IVacancyRepository
 
         GetAllSearchCalls.Add(search);
         GetAllSourceCalls.Add(source);
+        GetAllLocationCalls.Add(location);
+        GetAllWorkFormatCalls.Add(workFormat);
+        GetAllMaxExperienceCalls.Add(maxExperienceMonths);
+        GetAllCategoryGroupCalls.Add(categoryGroup);
+        GetAllSkillsCalls.Add(skills);
         IReadOnlyList<VacancyDB> items = Vacancies
             .Skip((page - 1) * pageSize)
             .Take(pageSize)

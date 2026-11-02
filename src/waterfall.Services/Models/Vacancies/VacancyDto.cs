@@ -1,4 +1,7 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: нормалізовані атрибути вакансії для каталогу й ШІ-консультанта (формат роботи, досвід у місяцях, широка категорія); перевірено: тести VacancyServiceTests
+
+using Waterfall.Repository.Entities;
 
 namespace Waterfall.Services.Models.Vacancies;
 
@@ -38,6 +41,12 @@ public record VacancyDto
     public string Category { get; init; } = string.Empty;
 
     /// <summary>
+    /// Широка канонічна категорія з довідника <see cref="CategoryGroups.All"/> (IT і не-IT напрями).
+    /// </summary>
+    /// <example>Software Development</example>
+    public string? CategoryGroup { get; init; }
+
+    /// <summary>
     /// Місто та формат роботи (наприклад, Віддалено, Київ).
     /// </summary>
     /// <example>Київ (Віддалено)</example>
@@ -60,6 +69,18 @@ public record VacancyDto
     /// </summary>
     /// <example>5+ років</example>
     public string? Experience { get; init; }
+
+    /// <summary>
+    /// Мінімальний необхідний досвід у місяцях (0 — без досвіду); null — джерело досвід не вказало.
+    /// </summary>
+    /// <example>60</example>
+    public int? ExperienceMonths { get; init; }
+
+    /// <summary>
+    /// Формат роботи прапорцями: Remote, Hybrid, Office. Можливі кілька одночасно.
+    /// </summary>
+    /// <example>Remote</example>
+    public WorkFormat WorkFormat { get; init; }
 
     /// <summary>
     /// Мінімальна заробітна плата у валюті currency.

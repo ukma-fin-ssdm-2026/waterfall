@@ -99,6 +99,16 @@ public class DouPageTests
     }
 
     [Fact]
+    public void ExperienceFacets_LabelMinimumExperienceGroups()
+    {
+        Assert.Equal([0, 12, 36, 60], Dou.ExperienceFacets.Select(facet => facet.Months));
+        Assert.All(Dou.ExperienceFacets, facet =>
+            Assert.StartsWith("https://jobs.dou.ua/vacancies/feeds/?exp=", facet.Url, StringComparison.Ordinal));
+        // Звичайна стрічка досвіду не містить: мітку дає лише потрапляння у фасет
+        Assert.Null(Dou.ParseListPage(Feed(SalaryItem))[0].ExperienceMonths);
+    }
+
+    [Fact]
     public void ListPageUrl_FeedHasSinglePage()
     {
         Assert.Equal("https://jobs.dou.ua/vacancies/feeds/", Dou.ListPageUrl(1));

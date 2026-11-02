@@ -1,4 +1,5 @@
 // AI: розбір сторінок djinni.co (issue #62); перевірено: юніт-тести DjinniPageTests на розмітці справжніх сторінок (жовтень 2026), ручний запуск API проти djinni.co, самоперевірка автора (§8)
+// AI: збереження числового досвіду з monthsOfExperience; перевірено: тести DjinniPageTests
 
 using System.Globalization;
 using System.Net;
@@ -27,7 +28,7 @@ public sealed class DjinniParser : IJobSiteParser
     /// <summary>Значення переводимо у формат, який уже розуміє нормалізація: «2500-5000 USD», «1 рік досвіду» тощо.</summary>
     public List<RawVacancy> ParseListPage(string html)
     {
-        HtmlNodeCollection? scripts = Load(html).DocumentNode.SelectNodes("//script[@type='application/ld+json']");
+        HtmlNodeCollection? scripts = Html.Load(html).DocumentNode.SelectNodes("//script[@type='application/ld+json']");
         List<RawVacancy> jobs = [];
         foreach (HtmlNode script in scripts ?? Enumerable.Empty<HtmlNode>())
         {
@@ -47,22 +48,13 @@ public sealed class DjinniParser : IJobSiteParser
     /// </summary>
     public RawVacancy ParseJobPage(string html)
     {
-        List<string> parts = Load(html).DocumentNode
+        List<string> parts = Html.Load(html).DocumentNode
             .SelectNodes("//h2[normalize-space()='Необхідні навички']/following-sibling::div[1]//span")?
-            .Select(part => Clean(part.InnerText))
+            .Select(part => Html.Clean(part.InnerText))
             .Where(part => part.Length > 0)
             .ToList() ?? [];
         return new RawVacancy { Tags = parts.Count > 0 ? string.Join(", ", parts) : null };
     }
-
-    private static HtmlDocument Load(string html)
-    {
-        HtmlDocument document = new();
-        document.LoadHtml(html);
-        return document;
-    }
-
-    private static string Clean(string html) => string.Join(' ', WebUtility.HtmlDecode(html).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
 
     private static RawVacancy ToRawVacancy(JsonElement job) => new()
     {
@@ -75,6 +67,7 @@ public sealed class DjinniParser : IJobSiteParser
         Location = FormatLocation(job),
         Posted = FormatPosted(Text(job, "datePosted")),
         Experience = FormatExperience(job),
+        ExperienceMonths = FormatExperienceMonths(job),
         Employment = FormatEmployment(job),
         Category = Text(job, "category"),
         // Опис у JSON-LD — звичайний текст; кодуємо його в HTML, щоб нормалізація не прийняла «List<T>» за тег
@@ -176,6 +169,17 @@ public sealed class DjinniParser : IJobSiteParser
             _ => "років"
         };
         return $"{years} {word} досвіду";
+    }
+
+    /// <summary>
+    /// monthsOfExperience → мінімальний досвід у місяцях. Рядок для показу лишає <see cref="FormatExperience"/>,
+    /// а фільтр каталогу працює з числом, тож число зберігаємо окремо, а не відновлюємо з тексту.
+    /// </summary>
+    private static int? FormatExperienceMonths(JsonElement job)
+    {
+        JsonElement requirements = Items(job, "experienceRequirements").FirstOrDefault();
+        decimal? months = Number(requirements, "monthsOfExperience");
+        return months is null ? null : (int)Math.Max(0, Math.Round(months.Value, MidpointRounding.AwayFromZero));
     }
 
     /// <summary>FULL_TIME → «Повна зайнятість» тощо; невідомий тип показуємо як є.</summary>
