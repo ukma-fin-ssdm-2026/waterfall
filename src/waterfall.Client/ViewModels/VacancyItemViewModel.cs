@@ -27,6 +27,7 @@ public partial class VacancyItemViewModel : ObservableObject
     private readonly Action<string> _reportError;
     private readonly IUrlLauncher _urlLauncher;
     private readonly IDistanceCalculatorService? _distanceService;
+    private readonly Action<Guid, double?>? _onDistanceCalculated;
 
     /// <param name="vacancy">Дані вакансії з API.</param>
     /// <param name="gateway">Шлюз для збереження / видалення з «Обраного».</param>
@@ -34,13 +35,17 @@ public partial class VacancyItemViewModel : ObservableObject
     /// <param name="reportError">Куди показати помилку перемикача (банер сторінки).</param>
     /// <param name="urlLauncher">Сервіс запуску посилань у браузері.</param>
     /// <param name="distanceService">Сервіс розрахунку реальної відстані до офісу вакансії.</param>
+    /// <param name="onDistanceCalculated">Зворотний виклик при завершенні розрахунку відстані (id, km).</param>
+    /// <param name="initialDistanceKm">Попередньо розрахована відстань у км (якщо доступна з кешу).</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
         IMessenger messenger,
         Action<string> reportError,
         IUrlLauncher? urlLauncher = null,
-        IDistanceCalculatorService? distanceService = null)
+        IDistanceCalculatorService? distanceService = null,
+        Action<Guid, double?>? onDistanceCalculated = null,
+        double? initialDistanceKm = null)
     {
         Vacancy = vacancy;
         _gateway = gateway;
@@ -48,7 +53,16 @@ public partial class VacancyItemViewModel : ObservableObject
         _reportError = reportError;
         _urlLauncher = urlLauncher ?? new Waterfall.Client.Services.DefaultUrlLauncher();
         _distanceService = distanceService;
+        _onDistanceCalculated = onDistanceCalculated;
         IsSaved = vacancy.IsSaved;
+
+        if (initialDistanceKm.HasValue)
+        {
+            DistanceKm = initialDistanceKm;
+            DistanceText = initialDistanceKm.Value < 1.0
+                ? $"{Math.Round(initialDistanceKm.Value * 1000)} м від вас"
+                : $"{initialDistanceKm.Value.ToString("0.0", CultureInfo.InvariantCulture)} км від вас";
+        }
 
         List<string> skills = CleanSkills(vacancy.Skills);
         VisibleSkills = skills.Take(MaxVisibleSkills).ToList();
@@ -60,7 +74,10 @@ public partial class VacancyItemViewModel : ObservableObject
             _ = vm.RefreshDistanceAsync();
         });
 
-        _ = RefreshDistanceAsync();
+        if (!initialDistanceKm.HasValue)
+        {
+            _ = RefreshDistanceAsync();
+        }
     }
 
     public VacancyDto Vacancy { get; }
@@ -127,6 +144,12 @@ public partial class VacancyItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasDistanceText))]
     public partial string? DistanceText { get; set; }
 
+    /// <summary>
+    /// Розрахована числова відстань у км від поточної адреси користувача до офісу.
+    /// </summary>
+    [ObservableProperty]
+    public partial double? DistanceKm { get; set; }
+
     public bool HasDistanceText => !string.IsNullOrWhiteSpace(DistanceText);
 
     public async Task RefreshDistanceAsync(CancellationToken ct = default)
@@ -138,7 +161,9 @@ public partial class VacancyItemViewModel : ObservableObject
                 string.IsNullOrWhiteSpace(_distanceService.UserAddress) ||
                 FullAddress?.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase) == true)
             {
+                DistanceKm = null;
                 DistanceText = null;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 return;
             }
 
@@ -147,13 +172,17 @@ public partial class VacancyItemViewModel : ObservableObject
                 target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase) ||
                 target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
             {
+                DistanceKm = null;
                 DistanceText = null;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 return;
             }
 
             try
             {
                 double? km = await _distanceService.CalculateDistanceKmAsync(target, ct);
+                DistanceKm = km;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, km);
                 if (km.HasValue)
                 {
                     DistanceText = km.Value < 1.0
@@ -167,15 +196,21 @@ public partial class VacancyItemViewModel : ObservableObject
             }
             catch (Exception ex) when (IsNetworkError(ex))
             {
+                DistanceKm = null;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 DistanceText = "Немає інтернету";
             }
             catch
             {
+                DistanceKm = null;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 DistanceText = "Не вдалося розрахувати";
             }
         }
         catch
         {
+            DistanceKm = null;
+            _onDistanceCalculated?.Invoke(Vacancy.Id, null);
             DistanceText = null;
         }
     }

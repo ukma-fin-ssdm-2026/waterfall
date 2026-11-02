@@ -175,7 +175,7 @@
                            VerticalOptions="Center" />
                     <Border Style="{StaticResource CompactFieldBorder}"
                             BackgroundColor="{StaticResource DarkBg2}"
-                            MinimumWidthRequest="205"
+                            MinimumWidthRequest="225"
                             VerticalOptions="Center">
                         <Picker Style="{StaticResource CompactPicker}"
                                 ItemsSource="{Binding SortOptions}"
