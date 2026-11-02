@@ -292,6 +292,7 @@ public class VacancyItemViewModelTests
 
         await item.RefreshDistanceAsync();
         Assert.Equal("2.0 км від вас", item.DistanceText);
+        Assert.Equal(2.0, item.DistanceKm);
 
         service.DistanceToReturn = 4.2;
         _messenger.Send(new UserAddressChangedMessage("вул. Саксаганського, 40"));
@@ -299,13 +300,52 @@ public class VacancyItemViewModelTests
         // Messenger triggers RefreshDistanceAsync asynchronously; give brief time
         await Task.Delay(50);
         Assert.Equal("4.2 км від вас", item.DistanceText);
+        Assert.Equal(4.2, item.DistanceKm);
 
         // Коли користувач виходить з системи — адреса очищується, відстань зникає з картки
         service.UserAddress = null;
         _messenger.Send(new UserAddressChangedMessage(null));
         await Task.Delay(50);
         Assert.Null(item.DistanceText);
+        Assert.Null(item.DistanceKm);
         Assert.False(item.HasDistanceText);
+    }
+
+    [Fact]
+    public async Task InitialDistanceKm_And_OnDistanceCalculated_AreHandledCorrectly()
+    {
+        Guid vacancyId = Guid.NewGuid();
+        Guid? reportedId = null;
+        double? reportedKm = null;
+
+        FakeDistanceService service = new()
+        {
+            DistanceToReturn = 7.3
+        };
+
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = vacancyId,
+            Title = "Backend Dev",
+            Location = "Київ, вул. Велика Васильківська 10",
+            Company = "Tech"
+        }, _gateway, _messenger, _errors.Add,
+        distanceService: service,
+        onDistanceCalculated: (id, km) =>
+        {
+            reportedId = id;
+            reportedKm = km;
+        },
+        initialDistanceKm: 3.5);
+
+        Assert.Equal(3.5, item.DistanceKm);
+        Assert.Equal("3.5 км від вас", item.DistanceText);
+
+        await item.RefreshDistanceAsync();
+        Assert.Equal(7.3, item.DistanceKm);
+        Assert.Equal("7.3 км від вас", item.DistanceText);
+        Assert.Equal(vacancyId, reportedId);
+        Assert.Equal(7.3, reportedKm);
     }
 
     [Fact]
