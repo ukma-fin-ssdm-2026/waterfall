@@ -360,4 +360,83 @@ public class CatalogViewModelTests
         _vm.SelectedSortOption = "За зарплатою (від найвищої ↓)";
         Assert.Equal(["C Engineer", "B Developer", "A Architect"], _vm.Vacancies.Select(v => v.Title));
     }
+
+    [Fact]
+    public void GuestBanner_VisibleByDefaultWhenLoggedOut()
+    {
+        Assert.False(_vm.IsUserLoggedIn);
+        Assert.True(_vm.IsUserLoggedOut);
+        Assert.False(_vm.IsGuestBannerDismissed);
+        Assert.True(_vm.IsGuestBannerVisible);
+    }
+
+    [Fact]
+    public void DismissGuestBanner_HidesBanner()
+    {
+        Assert.True(_vm.IsGuestBannerVisible);
+
+        _vm.DismissGuestBannerCommand.Execute(null);
+
+        Assert.True(_vm.IsGuestBannerDismissed);
+        Assert.False(_vm.IsGuestBannerVisible);
+    }
+
+    [Fact]
+    public void UserAuthStateChangedMessage_UpdatesLoginStateAndBanner()
+    {
+        _messenger.Send(new UserAuthStateChangedMessage(true, "user@waterfall.com"));
+
+        Assert.True(_vm.IsUserLoggedIn);
+        Assert.False(_vm.IsUserLoggedOut);
+        Assert.False(_vm.IsGuestBannerVisible);
+
+        _messenger.Send(new UserAuthStateChangedMessage(false, null));
+
+        Assert.False(_vm.IsUserLoggedIn);
+        Assert.True(_vm.IsUserLoggedOut);
+        Assert.False(_vm.IsGuestBannerDismissed);
+        Assert.True(_vm.IsGuestBannerVisible);
+    }
+
+    [Fact]
+    public async Task NavigateToLogin_InvokesConfiguredAction()
+    {
+        bool invoked = false;
+        _vm.NavigateToLoginAction = () =>
+        {
+            invoked = true;
+            return Task.CompletedTask;
+        };
+
+        await _vm.NavigateToLoginCommand.ExecuteAsync(null);
+
+        Assert.True(invoked);
+    }
+
+    [Fact]
+    public async Task RefreshAuthStatus_WithTokenStore_UpdatesIsLoggedIn()
+    {
+        var tokens = new InMemoryTokenStore();
+        var vm = new CatalogViewModel(_gateway, _messenger, _time, tokenStore: tokens);
+
+        Assert.False(vm.IsUserLoggedIn);
+
+        await vm.RefreshAuthStatusAsync();
+        Assert.False(vm.IsUserLoggedIn);
+
+        static string B64(string s) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        string payloadJson = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["email"] = "user@waterfall.com",
+            ["role"] = "JobSeeker",
+            ["exp"] = _time.GetUtcNow().AddHours(1).ToUnixTimeSeconds()
+        });
+        string validJwt = $"{B64("""{"alg":"HS256","typ":"JWT"}""")}.{B64(payloadJson)}.sig";
+
+        await tokens.SetTokenAsync(validJwt);
+
+        await vm.RefreshAuthStatusAsync();
+        Assert.True(vm.IsUserLoggedIn);
+        Assert.False(vm.IsGuestBannerVisible);
+    }
 }
