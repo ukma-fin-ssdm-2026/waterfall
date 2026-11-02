@@ -5,8 +5,10 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Waterfall.Client.Helpers;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Auth;
+using Waterfall.Client.Services;
 
 namespace Waterfall.Client.ViewModels;
 
@@ -154,6 +156,26 @@ public partial class LoginViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasSuggestions))]
     public partial bool IsLoadingSuggestions { get; set; }
 
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedCoordinates), nameof(CoordinatesDisplay))]
+    public partial double? SelectedLatitude { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasSelectedCoordinates), nameof(CoordinatesDisplay))]
+    public partial double? SelectedLongitude { get; set; }
+
+    [ObservableProperty]
+    public partial string SelectedAddressDisplay { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial string MapHtml { get; set; } = string.Empty;
+
+    public bool HasSelectedCoordinates => SelectedLatitude.HasValue && SelectedLongitude.HasValue;
+
+    public string CoordinatesDisplay => HasSelectedCoordinates
+        ? string.Format(CultureInfo.InvariantCulture, "{0:F4}, {1:F4}", SelectedLatitude, SelectedLongitude)
+        : string.Empty;
+
     public bool HasSuggestions => AddressSuggestions.Count > 0;
 
     partial void OnUserAddressChanged(string value)
@@ -216,6 +238,8 @@ public partial class LoginViewModel : ObservableObject
         AddressSuggestions.Clear();
         OnPropertyChanged(nameof(HasSuggestions));
         _isSelectingSuggestion = false;
+
+        _ = UpdateMapForAddressAsync(suggestion, CancellationToken.None);
     }
 
     [RelayCommand]
@@ -223,6 +247,64 @@ public partial class LoginViewModel : ObservableObject
     {
         AddressSuggestions.Clear();
         OnPropertyChanged(nameof(HasSuggestions));
+    }
+
+    public void SetSelectedCoordinates(double lat, double lon, string address)
+    {
+        SelectedLatitude = lat;
+        SelectedLongitude = lon;
+        SelectedAddressDisplay = address;
+        MapHtml = MapHtmlHelper.GenerateMapHtml(lat, lon, address);
+    }
+
+    public void ClearSelectedCoordinates()
+    {
+        SelectedLatitude = null;
+        SelectedLongitude = null;
+        SelectedAddressDisplay = string.Empty;
+        MapHtml = string.Empty;
+    }
+
+    public async Task UpdateMapForAddressAsync(string? address, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(address) || address.Trim().Length < 3)
+        {
+            ClearSelectedCoordinates();
+            return;
+        }
+
+        (double Lat, double Lon)? coords = null;
+        if (_distanceService != null)
+        {
+            coords = await _distanceService.ResolveCoordinatesAsync(address, ct);
+        }
+
+        if (coords == null && _gateway != null)
+        {
+            try
+            {
+                var serverCoords = await _gateway.GetCoordinatesAsync(address, ct);
+                if (serverCoords != null)
+                {
+                    coords = (serverCoords.Latitude, serverCoords.Longitude);
+                }
+            }
+            catch
+            {
+                // Fallback нижче
+            }
+        }
+
+        coords ??= GeoDistanceService.LookupKnownLocation(GeoDistanceService.NormalizeAddressKey(address));
+
+        if (coords.HasValue)
+        {
+            SetSelectedCoordinates(coords.Value.Lat, coords.Value.Lon, address);
+        }
+        else
+        {
+            ClearSelectedCoordinates();
+        }
     }
 
     [RelayCommand]
@@ -247,6 +329,7 @@ public partial class LoginViewModel : ObservableObject
 
         _messenger?.Send(new UserAddressChangedMessage(UserAddress));
         StatusMessage = "Адресу збережено! Відстань до вакансій оновлено.";
+        await UpdateMapForAddressAsync(UserAddress, CancellationToken.None);
     }
 
     public async Task LoadProfileAddressAsync()
@@ -262,10 +345,12 @@ public partial class LoginViewModel : ObservableObject
                     _distanceService.UserAddress = address;
                 }
                 _messenger?.Send(new UserAddressChangedMessage(address));
+                await UpdateMapForAddressAsync(address, CancellationToken.None);
             }
             else
             {
                 UserAddress = string.Empty;
+                ClearSelectedCoordinates();
                 if (_distanceService is not null)
                 {
                     _distanceService.UserAddress = null;
@@ -384,6 +469,7 @@ public partial class LoginViewModel : ObservableObject
 
             Session = null;
             UserAddress = string.Empty;
+            ClearSelectedCoordinates();
             SavedVacanciesCount = 0;
             TotalSearches = 0;
             RecentSearches.Clear();
@@ -459,6 +545,7 @@ public partial class LoginViewModel : ObservableObject
         Password = string.Empty;
         ErrorMessage = null;
         UserAddress = string.Empty;
+        ClearSelectedCoordinates();
         SavedVacanciesCount = 0;
         TotalSearches = 0;
         RecentSearches.Clear();

@@ -3,6 +3,7 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.Maui.Devices.Sensors;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Geo;
 using Waterfall.Repository.Helpers;
@@ -15,7 +16,7 @@ namespace Waterfall.Client.Services;
 ///    та збереженням усіх результатів Photon у кеш бази даних.
 /// 2. Запасний варіант (fallback) пошуку координат — через Wikipedia API (результати Вікіпедії не кешуються).
 /// 3. Побудова маршруту та розрахунок відстані між точками — через OSRM (Open Source Routing Machine),
-///    а в офлайн-режимі — стандартним алгоритмом C# (формула гаверсинусів із дорожнім коефіцієнтом).
+///    а в офлайн-режимі — через Location.CalculateDistance із дорожнім коефіцієнтом.
 /// </summary>
 public class GeoDistanceService : IDistanceCalculatorService
 {
@@ -99,18 +100,18 @@ public class GeoDistanceService : IDistanceCalculatorService
                 return routeKm.Value;
             }
 
-            // 3. Якщо офлайн або роутер недоступний — розрахунок стандартним алгоритмом C# (формула гаверсинусів)
-            double haversine = CalculateHaversineRoadDistance(originCoord.Value, destCoord.Value);
-            if (haversine > 0.0)
+            // 3. Якщо офлайн або роутер недоступний — розрахунок геовідстані з дорожнім коефіцієнтом
+            double roadDistance = CalculateRoadDistance(originCoord.Value, destCoord.Value);
+            if (roadDistance > 0.0)
             {
-                return haversine;
+                return roadDistance;
             }
         }
 
         return null;
     }
 
-    private async Task<(double Lat, double Lon)?> ResolveCoordinatesAsync(string address, CancellationToken ct)
+    public async Task<(double Lat, double Lon)?> ResolveCoordinatesAsync(string address, CancellationToken ct = default)
     {
         string norm = NormalizeAddressKey(address);
         if (GeoCache.TryGetValue(norm, out (double Lat, double Lon) cached))
@@ -466,18 +467,9 @@ public class GeoDistanceService : IDistanceCalculatorService
 
 
 
-    private static double CalculateHaversineRoadDistance((double Lat, double Lon) c1, (double Lat, double Lon) c2)
+    private static double CalculateRoadDistance((double Lat, double Lon) c1, (double Lat, double Lon) c2)
     {
-        const double EarthRadiusKm = 6371.0;
-        double dLat = ToRadians(c2.Lat - c1.Lat);
-        double dLon = ToRadians(c2.Lon - c1.Lon);
-
-        double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                   Math.Cos(ToRadians(c1.Lat)) * Math.Cos(ToRadians(c2.Lat)) *
-                   Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-
-        double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-        double straightKm = EarthRadiusKm * c;
+        double straightKm = Location.CalculateDistance(c1.Lat, c1.Lon, c2.Lat, c2.Lon, DistanceUnits.Kilometers);
 
         // Коефіцієнт реальної дорожньої мережі (перетин річок / мостів у містах дає коефіцієнт ~1.38x)
         bool crossesDnipro = (c1.Lon < 30.56 && c2.Lon > 30.56) || (c1.Lon > 30.56 && c2.Lon < 30.56);
@@ -486,9 +478,7 @@ public class GeoDistanceService : IDistanceCalculatorService
         return Math.Round(straightKm * roadFactor, 1);
     }
 
-    private static double ToRadians(double degrees) => degrees * Math.PI / 180.0;
-
-    private static string NormalizeAddressKey(string address) =>
+    internal static string NormalizeAddressKey(string address) =>
         address.Trim().ToLowerInvariant().Replace("вул.", "").Replace("проспект", "").Replace("пл.", "");
 
 
@@ -497,7 +487,7 @@ public class GeoDistanceService : IDistanceCalculatorService
     /// Локальний довідник точних координат для топових офісних адрес вакансій та популярних адрес користувачів.
     /// Забезпечує миттєвий результат без мережевих затримок та 100% надійність.
     /// </summary>
-    private static (double Lat, double Lon)? LookupKnownLocation(string norm)
+    internal static (double Lat, double Lon)? LookupKnownLocation(string norm)
     {
         // --- КИЇВ: Бізнес-центри, IT-кластери та ключові магістралі ---
 
