@@ -6,6 +6,7 @@ using System.Net;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Waterfall.Client.Helpers;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
 
@@ -188,6 +189,114 @@ public partial class VacancyItemViewModel : ObservableObject
         ex.Message.Contains("інтернет", StringComparison.OrdinalIgnoreCase) ||
         ex.Message.Contains("internet", StringComparison.OrdinalIgnoreCase) ||
         ex.Message.Contains("network", StringComparison.OrdinalIgnoreCase);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MapToggleText))]
+    public partial bool IsMapExpanded { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsLoadingMap { get; set; }
+
+    [ObservableProperty]
+    public partial string? MapHtml { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMapCoordinates))]
+    [NotifyPropertyChangedFor(nameof(MapCoordinatesDisplay))]
+    public partial double? MapLatitude { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMapCoordinates))]
+    [NotifyPropertyChangedFor(nameof(MapCoordinatesDisplay))]
+    public partial double? MapLongitude { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMapError))]
+    public partial string? MapErrorMessage { get; set; }
+
+    public bool HasMapCoordinates => MapLatitude.HasValue && MapLongitude.HasValue;
+
+    public string MapCoordinatesDisplay => HasMapCoordinates
+        ? $"{MapLatitude!.Value.ToString("F4", CultureInfo.InvariantCulture)}, {MapLongitude!.Value.ToString("F4", CultureInfo.InvariantCulture)}"
+        : string.Empty;
+
+    public string MapToggleText => IsMapExpanded ? "Приховати мапу ▲" : "Показати на мапі 🗺️";
+
+    public bool HasMapError => !string.IsNullOrWhiteSpace(MapErrorMessage);
+
+    [RelayCommand]
+    public async Task ToggleMapAsync()
+    {
+        if (IsMapExpanded)
+        {
+            IsMapExpanded = false;
+            return;
+        }
+
+        IsMapExpanded = true;
+
+        if (!string.IsNullOrWhiteSpace(MapHtml))
+        {
+            return;
+        }
+
+        string target = !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : (Vacancy.Location ?? string.Empty);
+
+        if (string.IsNullOrWhiteSpace(target) ||
+            target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
+        {
+            MapErrorMessage = "Точну адресу офісу не вказано.";
+            return;
+        }
+
+        if (target.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
+            target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase))
+        {
+            MapErrorMessage = "Вакансія віддалена (Remote), фізичний офіс відсутній.";
+            return;
+        }
+
+        IsLoadingMap = true;
+        MapErrorMessage = null;
+
+        try
+        {
+            (double Lat, double Lon)? coords = null;
+            if (_distanceService != null)
+            {
+                coords = await _distanceService.ResolveCoordinatesAsync(target);
+            }
+            else
+            {
+                coords = Waterfall.Client.Services.GeoDistanceService.LookupKnownLocation(target);
+            }
+
+            if (coords.HasValue)
+            {
+                MapLatitude = coords.Value.Lat;
+                MapLongitude = coords.Value.Lon;
+                string label = !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : $"{Vacancy.Company} ({Vacancy.Location})";
+                MapHtml = MapHtmlHelper.GenerateMapHtml(coords.Value.Lat, coords.Value.Lon, label);
+                MapErrorMessage = null;
+            }
+            else
+            {
+                MapErrorMessage = "Не вдалося визначити координати адреси на карті.";
+            }
+        }
+        catch (Exception ex) when (IsNetworkError(ex))
+        {
+            MapErrorMessage = "Немає підключення до інтернету для завантаження карти.";
+        }
+        catch
+        {
+            MapErrorMessage = "Помилка при спробі визначити координати адреси.";
+        }
+        finally
+        {
+            IsLoadingMap = false;
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DetailsToggleText))]
