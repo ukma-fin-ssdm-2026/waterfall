@@ -229,6 +229,38 @@ public class GeoLocationServiceTests
         Assert.Contains(response.ServerItems, x => x.Address == "Львів, Ринок");
     }
 
+    [Fact]
+    public async Task SyncCacheAsync_ThrowsArgumentNullException_WhenRequestIsNull()
+    {
+        FakeGeoCacheRepository cache = new();
+        GeoLocationService service = new(cache);
+
+        await Assert.ThrowsAsync<ArgumentNullException>(() => service.SyncCacheAsync(null!));
+    }
+
+    [Fact]
+    public async Task SyncCacheAsync_IgnoresInvalidOrOutOfBoundsCoordinates()
+    {
+        FakeGeoCacheRepository cache = new();
+        GeoLocationService service = new(cache);
+        GeoSyncRequestDto request = new()
+        {
+            ClientItems = new List<GeoSyncItemDto>
+            {
+                new() { Address = "Invalid Lat", Latitude = 105.0, Longitude = 30.0 },
+                new() { Address = "Invalid Lon", Latitude = 50.0, Longitude = 200.0 },
+                new() { Address = "NaN Coords", Latitude = double.NaN, Longitude = 30.0 },
+                new() { Address = "Inf Coords", Latitude = 50.0, Longitude = double.PositiveInfinity },
+                new() { Address = "Valid Coords", Latitude = 50.45, Longitude = 30.52 }
+            }
+        };
+
+        GeoSyncResponseDto response = await service.SyncCacheAsync(request);
+
+        Assert.Single(response.ServerItems);
+        Assert.Equal("Valid Coords", response.ServerItems[0].Address);
+    }
+
     private sealed class FakeGeoCacheRepository : IGeoLocationCacheRepository
     {
         private readonly List<GeoLocationCacheDB> _items = new();
