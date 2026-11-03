@@ -43,6 +43,16 @@ public class SavedVacancyService : ISavedVacancyService
 
     public async Task<SavedVacancyDto> SaveAsync(SaveVacancyRequest request, Guid userId, CancellationToken ct = default)
     {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.VacancyId == Guid.Empty)
+        {
+            throw new ArgumentException("Ідентифікатор вакансії не може бути порожнім (Guid.Empty).", nameof(request));
+        }
+        if (userId == Guid.Empty)
+        {
+            throw new ArgumentException("Ідентифікатор користувача не може бути порожнім (Guid.Empty).", nameof(userId));
+        }
+
         SavedVacancyDB entity = new SavedVacancyDB
         {
             Id = Guid.NewGuid(),
@@ -62,6 +72,15 @@ public class SavedVacancyService : ISavedVacancyService
 
     public async Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
+        if (id == Guid.Empty)
+        {
+            throw new ArgumentException("Ідентифікатор закладки не може бути порожнім.", nameof(id));
+        }
+        if (userId == Guid.Empty)
+        {
+            throw new ArgumentException("Ідентифікатор користувача не може бути порожнім.", nameof(userId));
+        }
+
         SavedVacancyDB? existing = await _savedVacancyRepository.GetByIdAsync(id, userId, ct);
         bool deleted = await _savedVacancyRepository.DeleteAsync(id, userId, ct);
 
