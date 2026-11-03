@@ -345,20 +345,34 @@ public sealed class SiteCrawler
     private async Task<RobotsTxt?> LoadRobotsAsync(HttpClient http, CancellationToken ct)
     {
         Uri robotsUrl = new(_site.Home, "/robots.txt");
-        using HttpResponseMessage response = await http.GetAsync(robotsUrl, ct);
-        if (response.IsSuccessStatusCode)
+        HttpResponseMessage response;
+        try
         {
-            return RobotsTxt.Parse(await response.Content.ReadAsStringAsync(ct));
+            response = await http.GetAsync(robotsUrl, ct);
         }
-
-        if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.TooManyRequests)
+        catch (Exception ex) when (IsSiteFailure(ex, ct))
         {
-            _logger.LogWarning("{Url} недоступний (код {Status}), тож сайт пропускаємо.", robotsUrl, (int)response.StatusCode);
-            PauseAfterRefusal(response.Headers.RetryAfter);
+            _logger.LogWarning("Не вдалося завантажити robots.txt з {Url} ({Error}). Пропускаємо сайт для запобігання перевантаженню.", robotsUrl, ex.Message);
+            PauseAfterRefusal(null);
             return null;
         }
 
-        return RobotsTxt.AllowAll;
+        using (response)
+        {
+            if (response.IsSuccessStatusCode)
+            {
+                return RobotsTxt.Parse(await response.Content.ReadAsStringAsync(ct));
+            }
+
+            if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.TooManyRequests)
+            {
+                _logger.LogWarning("{Url} недоступний (код {Status}), тож сайт пропускаємо.", robotsUrl, (int)response.StatusCode);
+                PauseAfterRefusal(response.Headers.RetryAfter);
+                return null;
+            }
+
+            return RobotsTxt.AllowAll;
+        }
     }
 
     private async Task<string> GetPageAsync(HttpClient http, string url, CancellationToken ct)
