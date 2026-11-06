@@ -288,8 +288,13 @@ public static IReadOnlyList<string> ParseSkills(string? json, ILogger? logger = 
   }
   ```
 * **Доказ у тестах з ін'єкцією збою**:
-  * Клас `tests/reliability/HealthCheckTests.cs`:
+  * Клас `tests/reliability/HealthCheckTests.cs` (8 тестів):
     * `DatabaseHealthCheck_ReturnsHealthy_WhenDatabaseConnectionIsAvailable` підтверджує статус `Healthy` (HTTP 200) у нормальному стані.
     * `DatabaseHealthCheck_ReturnsUnhealthy_WhenDatabaseConnectionFails_FaultInjection` ін'єктує збій (пошкоджене/закрите підключення до БД) і доводить, що перевірка повертає статус `Unhealthy` (HTTP 503) із детальним описом збою.
-    * `PhotonGeocodingHealthCheck_ReturnsUnhealthy_WhenPhotonApiFails_FaultInjection` доводить перехід у стан `Unhealthy` при недоступності зовнішнього API.
+    * `DatabaseHealthCheck_ReturnsUnhealthy_WhenOperationIsCancelled_ThrowsException` перевіряє поведінку при таймауті/перериванні операції перевірки.
+    * `PhotonGeocodingHealthCheck_ReturnsHealthy_WhenPhotonApiIsReachable` підтверджує `Healthy` при доступності геосервісу.
+    * `PhotonGeocodingHealthCheck_ReturnsDegraded_WhenRateLimited_429` підтверджує перехід у стан `Degraded` при отриманні коду 429.
+    * `PhotonGeocodingHealthCheck_ReturnsUnhealthy_WhenApiReturnsServerError_500` перевіряє перехід у `Unhealthy` при коді 500.
+    * `PhotonGeocodingHealthCheck_ReturnsUnhealthy_WhenPhotonApiFails_FaultInjection` доводить перехід у стан `Unhealthy` при повному обриві мережі (мережевий виняток).
+    * `HealthCheckResponseWriter_WritesExpectedJsonStructure_WhenReportProvided` перевіряє коректну серіалізацію структури JSON і статусів у відповідь клієнту.
 

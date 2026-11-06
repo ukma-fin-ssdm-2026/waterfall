@@ -273,5 +273,3 @@ static string ToFieldName(string? key)
 
     return char.ToLowerInvariant(key[0]) + key[1..];
 }
-
-public partial class Program { }

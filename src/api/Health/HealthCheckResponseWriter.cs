@@ -11,7 +11,8 @@ public static class HealthCheckResponseWriter
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
-        WriteIndented = true
+        WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
     };
 
     public static Task WriteResponse(HttpContext context, HealthReport report)
@@ -33,7 +34,7 @@ public static class HealthCheckResponseWriter
                 })
         };
 
-        return context.Response.WriteAsync(JsonSerializer.Serialize(response, JsonOptions));
+        return context.Response.WriteAsync(JsonSerializer.Serialize(response, JsonOptions), context.RequestAborted);
     }
 }
 

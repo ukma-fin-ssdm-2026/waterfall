@@ -1,7 +1,9 @@
 // AI: Тести перевірки здоров'я сервісу (Health Checks) з ін'єкцією збоїв (Lab 9 Bonus 2, §3.4)
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.IO;
 using System.Net;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
@@ -103,6 +105,110 @@ public class HealthCheckTests
         // Assert - статус Unhealthy при відмові зовнішнього API
         Assert.Equal(HealthStatus.Unhealthy, result.Status);
         Assert.Contains("недоступний", result.Description);
+    }
+
+    [Fact]
+    public async Task DatabaseHealthCheck_ReturnsUnhealthy_WhenOperationIsCancelled_ThrowsException()
+    {
+        // Arrange
+        using SqliteConnection connection = new("DataSource=:memory:");
+        await connection.OpenAsync();
+
+        DbContextOptions<WaterfallDbContext> options = new DbContextOptionsBuilder<WaterfallDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        using WaterfallDbContext dbContext = new(options);
+        DatabaseHealthCheck healthCheck = new(dbContext, NullLogger<DatabaseHealthCheck>.Instance);
+        HealthCheckContext context = new();
+
+        using CancellationTokenSource cts = new();
+        cts.Cancel();
+
+        // Act - перевірка зі скасованим токеном призводить до винятку і спрацювання catch
+        HealthCheckResult result = await healthCheck.CheckHealthAsync(context, cts.Token);
+
+        // Assert
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.Contains("Збій підключення", result.Description);
+    }
+
+    [Fact]
+    public async Task PhotonGeocodingHealthCheck_ReturnsDegraded_WhenRateLimited_429()
+    {
+        // Arrange - імітація Rate Limiting 429
+        FakeHttpHandler handler = new(new HttpResponseMessage(HttpStatusCode.TooManyRequests));
+        using HttpClient httpClient = new(handler);
+
+        PhotonGeocodingHealthCheck healthCheck = new(httpClient, NullLogger<PhotonGeocodingHealthCheck>.Instance);
+        HealthCheckContext context = new();
+
+        // Act
+        HealthCheckResult result = await healthCheck.CheckHealthAsync(context);
+
+        // Assert
+        Assert.Equal(HealthStatus.Degraded, result.Status);
+        Assert.Contains("Rate-Limit", result.Description);
+    }
+
+    [Fact]
+    public async Task PhotonGeocodingHealthCheck_ReturnsUnhealthy_WhenApiReturnsServerError_500()
+    {
+        // Arrange - імітація 500 помилки
+        FakeHttpHandler handler = new(new HttpResponseMessage(HttpStatusCode.InternalServerError));
+        using HttpClient httpClient = new(handler);
+
+        PhotonGeocodingHealthCheck healthCheck = new(httpClient, NullLogger<PhotonGeocodingHealthCheck>.Instance);
+        HealthCheckContext context = new();
+
+        // Act
+        HealthCheckResult result = await healthCheck.CheckHealthAsync(context);
+
+        // Assert
+        Assert.Equal(HealthStatus.Unhealthy, result.Status);
+        Assert.Contains("500", result.Description);
+    }
+
+    [Fact]
+    public async Task HealthCheckResponseWriter_WritesExpectedJsonStructure_WhenReportProvided()
+    {
+        // Arrange
+        DefaultHttpContext context = new();
+        using MemoryStream stream = new();
+        context.Response.Body = stream;
+
+        Dictionary<string, HealthReportEntry> entries = new()
+        {
+            ["database"] = new HealthReportEntry(
+                HealthStatus.Healthy,
+                "Підключення до бази даних активне.",
+                TimeSpan.FromMilliseconds(12),
+                exception: null,
+                data: new Dictionary<string, object> { ["type"] = "sqlite" }),
+            ["geocoding_api"] = new HealthReportEntry(
+                HealthStatus.Degraded,
+                "Rate limit 429",
+                TimeSpan.FromMilliseconds(45),
+                exception: null,
+                data: null)
+        };
+        HealthReport report = new(entries, TimeSpan.FromMilliseconds(60));
+
+        // Act
+        await HealthCheckResponseWriter.WriteResponse(context, report);
+
+        // Assert
+        Assert.Equal("application/json; charset=utf-8", context.Response.ContentType);
+
+        context.Response.Body.Seek(0, SeekOrigin.Begin);
+        using StreamReader reader = new(context.Response.Body);
+        string json = await reader.ReadToEndAsync();
+
+        Assert.Contains("\"status\": \"Degraded\"", json);
+        Assert.Contains("\"totalDuration\"", json);
+        Assert.Contains("\"database\"", json);
+        Assert.Contains("\"geocoding_api\"", json);
+        Assert.Contains("Підключення до бази даних активне.", json);
     }
 
     private sealed class FakeHttpHandler : HttpMessageHandler

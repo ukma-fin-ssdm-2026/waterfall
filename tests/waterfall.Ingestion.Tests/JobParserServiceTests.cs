@@ -247,6 +247,21 @@ public sealed class JobParserServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Djinni_RobotsTxtNetworkFailure_SiteIsSkipped()
+    {
+        _web.TimeoutUrls.Add("https://djinni.co/robots.txt");
+        JobParserService parser = CreateParser(directory: null, djinniPages: 5);
+
+        await parser.StartAsync(CancellationToken.None);
+        await _logger.WaitForWarningAsync();
+        await parser.StopAsync(CancellationToken.None);
+
+        Assert.Empty(_ingestion.Received);
+        Assert.Equal(["https://djinni.co/robots.txt"], _web.Urls);
+        Assert.Contains(_logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("robots.txt"));
+    }
+
+    [Fact]
     public async Task Djinni_PageWithoutJobs_IsLogged()
     {
         _web.FirstPage = "<html><body>Перевірка браузера…</body></html>";
