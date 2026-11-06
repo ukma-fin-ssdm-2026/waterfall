@@ -462,4 +462,22 @@ public sealed class VacancyServiceTests
         // Assert
         Assert.Equal(expectedSource, dto.Source);
     }
+
+    [Fact]
+    public void ParseSkills_ReturnsEmpty_WhenJsonIsCorruptedOrInvalid()
+    {
+        // Act
+        IReadOnlyList<string> resultNull = VacancyService.ParseSkills(null);
+        IReadOnlyList<string> resultEmpty = VacancyService.ParseSkills("");
+        IReadOnlyList<string> resultCorrupt = VacancyService.ParseSkills("{ not a valid json list }");
+        IReadOnlyList<string> resultValid = VacancyService.ParseSkills("[\"C#\", \".NET\"]");
+
+        // Assert
+        Assert.Empty(resultNull);
+        Assert.Empty(resultEmpty);
+        Assert.Empty(resultCorrupt);
+        Assert.Equal(2, resultValid.Count);
+        Assert.Contains("C#", resultValid);
+        Assert.Contains(".NET", resultValid);
+    }
 }

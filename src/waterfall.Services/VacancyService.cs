@@ -270,15 +270,16 @@ public class VacancyService : IVacancyService
         return Enum.TryParse(source, true, out JobSource s) ? s : JobSource.Unknown;
     }
 
-    internal static IReadOnlyList<string> ParseSkills(string? json)
+    public static IReadOnlyList<string> ParseSkills(string? json, ILogger? logger = null)
     {
         if (string.IsNullOrWhiteSpace(json)) return Array.Empty<string>();
         try
         {
             return JsonSerializer.Deserialize<List<string>>(json) ?? (IReadOnlyList<string>)Array.Empty<string>();
         }
-        catch
+        catch (JsonException ex)
         {
+            logger?.LogWarning(ex, "Помилка десеріалізації JSON навичок вакансії: '{Json}'", json);
             return Array.Empty<string>();
         }
     }
