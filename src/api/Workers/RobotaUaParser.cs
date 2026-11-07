@@ -35,7 +35,11 @@ public sealed class RobotaUaParser : IJobSiteParser
         foreach (HtmlNode link in document.SelectNodes("//a[@href]") ?? Enumerable.Empty<HtmlNode>())
         {
             string href = WebUtility.HtmlDecode(link.GetAttributeValue("href", string.Empty));
-            if (Uri.TryCreate(href, UriKind.Absolute, out Uri? absolute)
+            // Відносне посилання (/company1/vacancy1) веде на сам robota.ua, тож перевіряємо лише повні адреси.
+            // На Linux Uri.TryCreate(…, UriKind.Absolute) приймає «/company1/vacancy1» за шлях до файлу (file:///…), і такі вакансії губились
+            bool sitePath = href.StartsWith('/') && !href.StartsWith("//", StringComparison.Ordinal);
+            if (!sitePath
+                && Uri.TryCreate(href, UriKind.Absolute, out Uri? absolute)
                 && (absolute.Scheme is not ("http" or "https")
                     || !(absolute.Host.Equals("robota.ua", StringComparison.OrdinalIgnoreCase)
                         || absolute.Host.EndsWith(".robota.ua", StringComparison.OrdinalIgnoreCase))))
