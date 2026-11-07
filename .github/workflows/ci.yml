@@ -49,8 +49,15 @@ jobs:
       # On Linux the libraries target net10.0 only, so test projects build without MAUI workloads
       # Note: Sensitive logging security regression tests (CWE-532) are integrated into Api tests
 
+      - name: Build ingestion tests
+        run: dotnet build tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -c Release --nologo
+
+      - name: Install Chromium
+        run: bash tests/waterfall.Ingestion.Tests/bin/Release/net10.0/playwright.sh install --with-deps chromium
+
       - name: Ingestion tests
-        run: dotnet test tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Ingestion
+        run: |
+          dotnet test tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -c Release --no-build --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Ingestion
 
       - name: Client tests
         run: dotnet test tests/waterfall.Client.Tests/waterfall.Client.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Client
