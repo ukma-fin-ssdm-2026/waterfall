@@ -10,6 +10,13 @@ public partial class CatalogPage : ContentPage
     {
         InitializeComponent();
         BindingContext = _viewModel = viewModel;
+        _viewModel.NavigateToLoginAction = async () =>
+        {
+            if (Shell.Current is not null)
+            {
+                await Shell.Current.GoToAsync("//login");
+            }
+        };
     }
 
     protected override void OnAppearing()

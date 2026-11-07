@@ -45,41 +45,124 @@
                    Style="{StaticResource MutedLabel}"
                    FontSize="12" />
 
-            <!-- Адреса офісу та відстань від поточного місцезнаходження (під Location) -->
-            <Grid Grid.Row="2"
-                  Grid.ColumnSpan="2"
-                  ColumnDefinitions="*,Auto"
-                  ColumnSpacing="8"
-                  IsVisible="{Binding HasAddress}">
-                <Grid ColumnDefinitions="Auto,*"
-                      ColumnSpacing="5"
-                      VerticalOptions="Center">
-                    <Label Grid.Column="0"
-                           Text="📍"
-                           FontSize="12"
-                           VerticalOptions="Center" />
-                    <Label Grid.Column="1"
-                           Text="{Binding AddressDisplay}"
-                           TextColor="{StaticResource TextSecondary}"
-                           FontFamily="OpenSansRegular"
-                           FontSize="12"
-                           LineBreakMode="TailTruncation"
-                           VerticalOptions="Center" />
+            <!-- Адреса офісу, відстань від локації користувача та кнопка показу карти -->
+            <VerticalStackLayout Grid.Row="2"
+                                 Grid.ColumnSpan="2"
+                                 Spacing="4"
+                                 IsVisible="{Binding HasAddress}">
+                <Grid ColumnDefinitions="*,Auto"
+                      ColumnSpacing="8">
+                    <Grid ColumnDefinitions="Auto,*"
+                          ColumnSpacing="5"
+                          VerticalOptions="Center">
+                        <Label Grid.Column="0"
+                               Text="📍"
+                               FontSize="12"
+                               VerticalOptions="Center" />
+                        <Label Grid.Column="1"
+                               Text="{Binding AddressDisplay}"
+                               TextColor="{StaticResource TextSecondary}"
+                               FontFamily="OpenSansRegular"
+                               FontSize="12"
+                               LineBreakMode="TailTruncation"
+                               VerticalOptions="Center" />
+                    </Grid>
+                    <Border Grid.Column="1"
+                            IsVisible="{Binding HasDistanceText}"
+                            Style="{StaticResource SkillChip}"
+                            Stroke="{StaticResource Accent}"
+                            BackgroundColor="{StaticResource DarkBg2}"
+                            Padding="8,3"
+                            Margin="0"
+                            VerticalOptions="Center">
+                        <Label Text="{Binding DistanceText}"
+                               TextColor="{StaticResource Accent}"
+                               FontFamily="OpenSansSemibold"
+                               FontSize="11" />
+                    </Border>
                 </Grid>
-                <Border Grid.Column="1"
-                        IsVisible="{Binding HasDistanceText}"
-                        Style="{StaticResource SkillChip}"
-                        Stroke="{StaticResource Accent}"
-                        BackgroundColor="{StaticResource DarkBg2}"
-                        Padding="8,3"
-                        Margin="0"
-                        VerticalOptions="Center">
-                    <Label Text="{Binding DistanceText}"
-                           TextColor="{StaticResource Accent}"
-                           FontFamily="OpenSansSemibold"
+
+                <!-- Кнопка «Показати на мапі» під адресою -->
+                <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                    <Button Text="{Binding MapToggleText}"
+                            Command="{Binding ToggleMapCommand}"
+                            Style="{StaticResource LinkButton}"
+                            FontSize="11"
+                            TextColor="{StaticResource Primary}"
+                            HeightRequest="24"
+                            Padding="0"
+                            SemanticProperties.Hint="Показати або приховати інтерактивну карту розташування офісу" />
+                    <ActivityIndicator IsRunning="{Binding IsLoadingMap}"
+                                       IsVisible="{Binding IsLoadingMap}"
+                                       HeightRequest="14"
+                                       WidthRequest="14"
+                                       Color="{StaticResource Primary}"
+                                       VerticalOptions="Center" />
+                </HorizontalStackLayout>
+
+                <!-- Повідомлення про помилку визначення координат -->
+                <Border IsVisible="{Binding HasMapError}"
+                        StrokeShape="RoundRectangle 8"
+                        StrokeThickness="1"
+                        Stroke="{StaticResource Danger}"
+                        BackgroundColor="{StaticResource DangerSurface}"
+                        Padding="8,4"
+                        Margin="0,2">
+                    <Label Text="{Binding MapErrorMessage}"
+                           TextColor="{StaticResource Danger}"
                            FontSize="11" />
                 </Border>
-            </Grid>
+
+                <!-- Розгорнуте віконечко з міні-картою (як у профілі) -->
+                <Border IsVisible="{Binding IsMapExpanded}"
+                        StrokeShape="RoundRectangle 12"
+                        Stroke="{StaticResource Primary}"
+                        StrokeThickness="1"
+                        BackgroundColor="{StaticResource DarkBg1}"
+                        Margin="0,2,0,4"
+                        Padding="0">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer />
+                    </Border.GestureRecognizers>
+                    <VerticalStackLayout Spacing="0">
+                        <!-- Верхня плашка з адресою, координатами та кнопкою закриття -->
+                        <Border BackgroundColor="#E610101E"
+                                StrokeThickness="0"
+                                Padding="10,6">
+                            <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                <Label Text="📍" FontSize="12" VerticalOptions="Center" Margin="0,0,6,0" />
+                                <Label Grid.Column="1"
+                                       Text="{Binding AddressDisplay}"
+                                       FontSize="11"
+                                       TextColor="{StaticResource White}"
+                                       FontFamily="OpenSansSemibold"
+                                       LineBreakMode="TailTruncation"
+                                       VerticalOptions="Center" />
+                                <Label Grid.Column="2"
+                                       Text="{Binding MapCoordinatesDisplay}"
+                                       FontSize="10"
+                                       TextColor="{StaticResource TextSecondary}"
+                                       Margin="6,0"
+                                       VerticalOptions="Center" />
+                                <Button Grid.Column="3"
+                                        Text="✕"
+                                        Command="{Binding ToggleMapCommand}"
+                                        Style="{StaticResource LinkButton}"
+                                        HeightRequest="20"
+                                        FontSize="11"
+                                        Padding="4,0"
+                                        TextColor="{StaticResource TextSecondary}"
+                                        VerticalOptions="Center" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Контейнер карти -->
+                        <WebView x:Name="CardMapWebView"
+                                 HeightRequest="190"
+                                 HorizontalOptions="Fill" />
+                    </VerticalStackLayout>
+                </Border>
+            </VerticalStackLayout>
 
             <!-- Зарплата: показує діапазон або «Зарплата не вказана» (US-001 AC-3, Test-32) -->
             <Label Grid.Row="3"

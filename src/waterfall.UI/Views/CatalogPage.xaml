@@ -59,7 +59,7 @@
         </ResourceDictionary>
     </ContentPage.Resources>
 
-    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,*">
+    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,*">
 
         <!-- Рядок 0: Компактний пошуковий рядок, кнопка «Фільтр ⚡» та експорт/імпорт -->
         <Grid Grid.Row="0"
@@ -175,7 +175,7 @@
                            VerticalOptions="Center" />
                     <Border Style="{StaticResource CompactFieldBorder}"
                             BackgroundColor="{StaticResource DarkBg2}"
-                            MinimumWidthRequest="205"
+                            MinimumWidthRequest="225"
                             VerticalOptions="Center">
                         <Picker Style="{StaticResource CompactPicker}"
                                 ItemsSource="{Binding SortOptions}"
@@ -203,8 +203,71 @@
             </Grid>
         </Border>
 
-        <!-- Рядок 2: Компактна панель (1. Запит на сайт за обраною платформою + 2. Єдиний уніфікований фільтр БД) -->
+        <!-- Рядок 2: Плашка неавторизованого користувача (гостьовий режим) -->
         <Border Grid.Row="2"
+                IsVisible="{Binding IsGuestBannerVisible}"
+                StrokeShape="RoundRectangle 10"
+                StrokeThickness="1.5"
+                Stroke="{StaticResource Accent}"
+                BackgroundColor="#2A221B"
+                Margin="10,2,10,4"
+                Padding="12,10">
+            <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10" VerticalOptions="Center">
+                <Border Grid.Column="0"
+                        WidthRequest="36"
+                        HeightRequest="36"
+                        StrokeShape="RoundRectangle 18"
+                        Stroke="{StaticResource Accent}"
+                        StrokeThickness="1"
+                        BackgroundColor="#3D2B1D"
+                        VerticalOptions="Center"
+                        HorizontalOptions="Center">
+                    <Label Text="⚠️"
+                           FontSize="18"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center" />
+                </Border>
+
+                <VerticalStackLayout Grid.Column="1" Spacing="2" VerticalOptions="Center">
+                    <Label Text="Ви не авторизовані (режим гостя)"
+                           FontFamily="OpenSansSemibold"
+                           FontSize="13"
+                           TextColor="{StaticResource Accent}" />
+                    <Label Text="Розрахунок відстані від дому, збереження вакансій в «Обране» та персональні рекомендації будуть недоступні, поки ви не увійдете в акаунт."
+                           FontFamily="OpenSansRegular"
+                           FontSize="11"
+                           TextColor="{StaticResource TextSecondary}"
+                           LineBreakMode="WordWrap" />
+                </VerticalStackLayout>
+
+                <Button Grid.Column="2"
+                        Text="Увійти ➔"
+                        Command="{Binding NavigateToLoginCommand}"
+                        Style="{StaticResource CardActionPrimary}"
+                        FontSize="11"
+                        HeightRequest="34"
+                        MinimumHeightRequest="34"
+                        Padding="14,4"
+                        VerticalOptions="Center" />
+
+                <Button Grid.Column="3"
+                        Text="✕"
+                        Command="{Binding DismissGuestBannerCommand}"
+                        Style="{StaticResource CardAction}"
+                        TextColor="{StaticResource TextSecondary}"
+                        BackgroundColor="Transparent"
+                        FontSize="13"
+                        WidthRequest="30"
+                        HeightRequest="30"
+                        MinimumWidthRequest="30"
+                        MinimumHeightRequest="30"
+                        Padding="0"
+                        VerticalOptions="Center" />
+            </Grid>
+        </Border>
+
+        <!-- Рядок 3: Компактна панель (1. Запит на сайт за обраною платформою + 2. Єдиний уніфікований фільтр БД) -->
+        <Border Grid.Row="3"
                 IsVisible="{Binding IsFilterPanelVisible}"
                 Style="{StaticResource VacancyCard}"
                 Stroke="{StaticResource Secondary}"
@@ -719,8 +782,8 @@
             </ScrollView>
         </Border>
 
-        <!-- Рядок 3: Інформаційний банер про активні фільтри / кеш або результат експорту/імпорту (REL-001) -->
-        <Border Grid.Row="3"
+        <!-- Рядок 4: Інформаційний банер про активні фільтри / кеш або результат експорту/імпорту (REL-001) -->
+        <Border Grid.Row="4"
                 IsVisible="{Binding HasStaleCache}"
                 StrokeShape="RoundRectangle 10"
                 StrokeThickness="1"
@@ -733,8 +796,8 @@
                    TextColor="{StaticResource Accent}" />
         </Border>
 
-        <!-- Рядок 4: Банер помилки сервера/мережі -->
-        <Border Grid.Row="4"
+        <!-- Рядок 5: Банер помилки сервера/мережі -->
+        <Border Grid.Row="5"
                 IsVisible="{Binding HasError}"
                 Style="{StaticResource ErrorBanner}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
@@ -748,8 +811,8 @@
             </Grid>
         </Border>
 
-        <!-- Рядок 5: Підсумок і спіннер -->
-        <Grid Grid.Row="5" Padding="16,6" ColumnDefinitions="*,Auto">
+        <!-- Рядок 6: Підсумок і спіннер -->
+        <Grid Grid.Row="6" Padding="16,6" ColumnDefinitions="*,Auto">
             <Label Text="{Binding TotalText}"
                    IsVisible="{Binding ShowTotal}"
                    Style="{StaticResource MutedLabel}"
@@ -761,8 +824,8 @@
                                WidthRequest="20" />
         </Grid>
 
-        <!-- Рядок 6: Список вакансій із бази даних (пагінація та pull-to-refresh) -->
-        <RefreshView Grid.Row="6"
+        <!-- Рядок 7: Список вакансій із бази даних (пагінація та pull-to-refresh) -->
+        <RefreshView Grid.Row="7"
                      IsRefreshing="{Binding IsRefreshing}"
                      Command="{Binding RefreshCommand}">
             <CollectionView ItemsSource="{Binding Vacancies}"

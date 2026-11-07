@@ -96,7 +96,7 @@
 
 #### Необхідно
 * **.NET SDK 10.**
-* **MAUI workload** (для UI): `dotnet workload restore`.
+* **MAUI workload** (для UI): `dotnet workload install maui` (або `dotnet workload restore` у корені репозиторію).
 * **Node.js та npm** (тільки для MCP-сервера, див. нижче).
 
 #### Крок 0a. Секрети - JWT ключ
@@ -156,7 +156,7 @@ UI звертається до `http://localhost:3000`, тому **API має б
 ```bash
 dotnet run --project src/waterfall.UI -f net10.0-windows10.0.19041.0
 ```
-Для збирання Windows UI потрібен встановлений MAUI workload: `dotnet workload restore`.
+Для збирання Windows UI потрібен встановлений MAUI workload: `dotnet workload install maui` (або `dotnet workload restore`).
 
 #### Тести та якість коду
 ```bash

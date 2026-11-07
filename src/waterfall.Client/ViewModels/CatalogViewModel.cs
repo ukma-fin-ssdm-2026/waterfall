@@ -37,19 +37,23 @@ public partial class CatalogViewModel : ObservableObject
     private bool _isSyncingSort;
     private readonly IUrlLauncher? _urlLauncher;
     private readonly IDistanceCalculatorService? _distanceService;
+    private readonly IAuthTokenStore? _tokenStore;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, double?> _distanceCache = new();
 
     public CatalogViewModel(
         IHttpGatewayService gateway,
         IMessenger messenger,
         TimeProvider time,
         IUrlLauncher? urlLauncher = null,
-        IDistanceCalculatorService? distanceService = null)
+        IDistanceCalculatorService? distanceService = null,
+        IAuthTokenStore? tokenStore = null)
     {
         _gateway = gateway;
         _messenger = messenger;
         _time = time;
         _urlLauncher = urlLauncher;
         _distanceService = distanceService;
+        _tokenStore = tokenStore;
 
         // Зміна «Обраного» з іншої вкладки: оновлюємо картку на місці, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
@@ -57,6 +61,26 @@ public partial class CatalogViewModel : ObservableObject
             foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
             {
                 item.IsSaved = message.IsSaved;
+            }
+        });
+
+        // Зміна стану авторизації користувача
+        messenger.Register<CatalogViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
+        {
+            vm.IsUserLoggedIn = message.IsLoggedIn;
+            if (!message.IsLoggedIn)
+            {
+                vm.IsGuestBannerDismissed = false;
+            }
+        });
+
+        // Оновлення поточної адреси користувача: очищуємо кеш відстаней та перераховуємо сортування за відстанню.
+        messenger.Register<CatalogViewModel, UserAddressChangedMessage>(this, static (vm, message) =>
+        {
+            vm._distanceCache.Clear();
+            if (IsDistanceSort(vm.SelectedSortOption) && vm.HasLoaded)
+            {
+                _ = vm.ExecuteLocalFilterAndSortAsync(updateBanner: true);
             }
         });
     }
@@ -94,6 +118,74 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TotalText))]
     public partial int TotalCount { get; set; }
+
+    /// <summary>
+    /// Дія для переходу на екран входу/профілю з плашки неавторизованого користувача.
+    /// </summary>
+    public Func<Task>? NavigateToLoginAction { get; set; }
+
+    /// <summary>
+    /// Чи авторизований користувач у системі.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsUserLoggedOut))]
+    [NotifyPropertyChangedFor(nameof(IsGuestBannerVisible))]
+    public partial bool IsUserLoggedIn { get; set; }
+
+    public bool IsUserLoggedOut => !IsUserLoggedIn;
+
+    /// <summary>
+    /// Чи приховав користувач плашку гостя вручну (кнопка ✕).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsGuestBannerVisible))]
+    public partial bool IsGuestBannerDismissed { get; set; }
+
+    /// <summary>
+    /// Відображати плашку неавторизованого користувача (якщо не залогінений і не закрив плашку).
+    /// </summary>
+    public bool IsGuestBannerVisible => IsUserLoggedOut && !IsGuestBannerDismissed;
+
+    /// <summary>
+    /// Приховати плашку неавторизованого користувача на поточну сесію.
+    /// </summary>
+    [RelayCommand]
+    private void DismissGuestBanner()
+    {
+        IsGuestBannerDismissed = true;
+    }
+
+    /// <summary>
+    /// Перехід до екрану входу/реєстрації з плашки гостя.
+    /// </summary>
+    [RelayCommand]
+    private async Task NavigateToLoginAsync()
+    {
+        if (NavigateToLoginAction is not null)
+        {
+            await NavigateToLoginAction();
+        }
+    }
+
+    /// <summary>
+    /// Оновлює статус авторизації на основі збереженого токена.
+    /// </summary>
+    public async Task RefreshAuthStatusAsync(CancellationToken ct = default)
+    {
+        if (_tokenStore is not null)
+        {
+            try
+            {
+                string? token = await _tokenStore.GetTokenAsync(ct);
+                Waterfall.Client.Models.Auth.AuthSession? session = token is null ? null : Waterfall.Client.Models.Auth.AuthSession.FromToken(token);
+                IsUserLoggedIn = session is not null && !session.IsExpired(_time.GetUtcNow());
+            }
+            catch
+            {
+                IsUserLoggedIn = false;
+            }
+        }
+    }
 
     /// <summary>
     /// Показувати розширену панель фільтрів (US-002, FR-004).
@@ -495,6 +587,8 @@ public partial class CatalogViewModel : ObservableObject
         "За датою (спочатку старі)",
         "За зарплатою (від найвищої ↓)",
         "За зарплатою (від найнижчої ↑)",
+        "За відстанню (спочатку ближчі)",
+        "За відстанню (спочатку дальші)",
         "За назвою посади (А → Я)",
         "За назвою посади (Я → А)",
         "За компанією (А → Я)"
@@ -831,6 +925,8 @@ public partial class CatalogViewModel : ObservableObject
         "За датою (спочатку старі)",
         "За зарплатою (від найвищої ↓)",
         "За зарплатою (від найнижчої ↑)",
+        "За відстанню (спочатку ближчі)",
+        "За відстанню (спочатку дальші)",
         "За назвою посади (А → Я)",
         "За назвою посади (Я → А)",
         "За компанією (А → Я)"
@@ -1374,10 +1470,17 @@ public partial class CatalogViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Перше відкриття вкладки: завантажити, якщо ще не завантажували.
+    /// Перше відкриття вкладки: перевірити авторизацію та завантажити, якщо ще не завантажували.
     /// </summary>
     [RelayCommand]
-    private Task EnsureLoadedAsync() => HasLoaded || IsLoading ? Task.CompletedTask : LoadFirstPageAsync();
+    private async Task EnsureLoadedAsync()
+    {
+        await RefreshAuthStatusAsync(CancellationToken.None);
+        if (!HasLoaded && !IsLoading)
+        {
+            await LoadFirstPageAsync();
+        }
+    }
 
     /// <summary>
     /// Повтор після помилки.
@@ -1402,6 +1505,7 @@ public partial class CatalogViewModel : ObservableObject
     {
         try
         {
+            await RefreshAuthStatusAsync(CancellationToken.None);
             await LoadFirstPageAsync(showSpinner: false);
         }
         finally
@@ -1498,6 +1602,14 @@ public partial class CatalogViewModel : ObservableObject
             if (_isLocalFilterActive || HasActiveLocalFilterOrSort())
             {
                 await FetchRemainingPagesForLocalFilterAsync(ct);
+                if (IsDistanceSort(SelectedSortOption) && _distanceService != null && !string.IsNullOrWhiteSpace(_distanceService.UserAddress))
+                {
+                    bool titleOnly = UnifiedTitleOnly
+                        || (SelectedPlatform == "WorkUa" && WorkUaTitleOnly)
+                        || (SelectedPlatform == "Djinni" && DjinniSelectedSearchType.Contains("title-only", StringComparison.OrdinalIgnoreCase));
+                    IEnumerable<VacancyDto> filtered = _loadedDtos.Where(v => MatchesLocalFilters(v, titleOnly));
+                    await PrecalculateDistancesAsync(filtered, ct);
+                }
                 ApplyLocalFilterAndSort();
             }
         }
@@ -1519,12 +1631,26 @@ public partial class CatalogViewModel : ObservableObject
         }
     }
 
+    private VacancyItemViewModel CreateVacancyItemViewModel(VacancyDto dto)
+    {
+        double? cachedKm = _distanceCache.TryGetValue(dto.Id, out double? km) ? km : null;
+        return new VacancyItemViewModel(
+            dto,
+            _gateway,
+            _messenger,
+            message => ErrorMessage = message,
+            _urlLauncher,
+            _distanceService,
+            onDistanceCalculated: (id, dist) => _distanceCache[id] = dist,
+            initialDistanceKm: cachedKm);
+    }
+
     private void Append(PagedResult<VacancyDto> page)
     {
         foreach (VacancyDto vacancy in page.Items)
         {
             _loadedDtos.Add(vacancy);
-            Vacancies.Add(new VacancyItemViewModel(vacancy, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher, _distanceService));
+            Vacancies.Add(CreateVacancyItemViewModel(vacancy));
         }
 
         _page = page.Page;
@@ -1565,13 +1691,26 @@ public partial class CatalogViewModel : ObservableObject
             }
         }
 
+        if (IsDistanceSort(SelectedSortOption) && _distanceService != null && !string.IsNullOrWhiteSpace(_distanceService.UserAddress))
+        {
+            CancellationToken ct = _loadCts?.Token ?? CancellationToken.None;
+            bool titleOnly = UnifiedTitleOnly
+                || (SelectedPlatform == "WorkUa" && WorkUaTitleOnly)
+                || (SelectedPlatform == "Djinni" && DjinniSelectedSearchType.Contains("title-only", StringComparison.OrdinalIgnoreCase));
+            IEnumerable<VacancyDto> filtered = _loadedDtos.Where(v => MatchesLocalFilters(v, titleOnly));
+            await PrecalculateDistancesAsync(filtered, ct);
+        }
+
         ApplyLocalFilterAndSort();
 
         if (updateBanner)
         {
             string whiteInfo = WhiteListWords.Count > 0 ? $", вайт-лист=[{string.Join(", ", WhiteListWords)}]" : string.Empty;
             string banInfo = BanListWords.Count > 0 ? $", бан-слова=[{string.Join(", ", BanListWords)}]" : string.Empty;
-            StaleCacheText = $"⚡ Відфільтровано вакансії з БД: знайдено {TotalCount} із {_loadedDtos.Count} (сортування: {SelectedSortOption}{whiteInfo}{banInfo})";
+            string geoWarning = IsDistanceSort(SelectedSortOption) && string.IsNullOrWhiteSpace(_distanceService?.UserAddress)
+                ? " ⚠️ Вкажіть адресу в профілі для розрахунку відстані"
+                : string.Empty;
+            StaleCacheText = $"⚡ Відфільтровано вакансії з БД: знайдено {TotalCount} із {_loadedDtos.Count} (сортування: {SelectedSortOption}{whiteInfo}{banInfo}){geoWarning}";
         }
     }
 
@@ -1625,7 +1764,7 @@ public partial class CatalogViewModel : ObservableObject
             VacancyDto adjusted = savedStates.TryGetValue(dto.Id, out bool isSaved) && isSaved != dto.IsSaved
                 ? dto with { IsSaved = isSaved }
                 : dto;
-            Vacancies.Add(new VacancyItemViewModel(adjusted, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher, _distanceService));
+            Vacancies.Add(CreateVacancyItemViewModel(adjusted));
         }
 
         TotalCount = Vacancies.Count;
@@ -1782,7 +1921,57 @@ public partial class CatalogViewModel : ObservableObject
             || v.Category.Contains(word, StringComparison.OrdinalIgnoreCase);
     }
 
-    private static IEnumerable<VacancyDto> SortVacancies(IEnumerable<VacancyDto> items, string sortOption)
+    public static bool IsDistanceSort(string? sortOption) =>
+        sortOption is "За відстанню (спочатку ближчі)" or "За відстанню (спочатку дальші)";
+
+    private async Task PrecalculateDistancesAsync(IEnumerable<VacancyDto> items, CancellationToken ct)
+    {
+        if (_distanceService == null || string.IsNullOrWhiteSpace(_distanceService.UserAddress))
+        {
+            return;
+        }
+
+        List<Task> tasks = [];
+        foreach (VacancyDto v in items)
+        {
+            if (_distanceCache.ContainsKey(v.Id))
+            {
+                continue;
+            }
+
+            string target = !string.IsNullOrWhiteSpace(v.FullAddress) ? v.FullAddress : v.Location;
+            if (string.IsNullOrWhiteSpace(target) ||
+                target.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
+                target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase) ||
+                target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
+            {
+                _distanceCache[v.Id] = null;
+                continue;
+            }
+
+            tasks.Add(CalculateAndCacheDistanceAsync(v.Id, target, ct));
+        }
+
+        if (tasks.Count > 0)
+        {
+            await Task.WhenAll(tasks);
+        }
+    }
+
+    private async Task CalculateAndCacheDistanceAsync(Guid id, string target, CancellationToken ct)
+    {
+        try
+        {
+            double? km = await _distanceService!.CalculateDistanceKmAsync(target, ct);
+            _distanceCache[id] = km;
+        }
+        catch
+        {
+            _distanceCache[id] = null;
+        }
+    }
+
+    private IEnumerable<VacancyDto> SortVacancies(IEnumerable<VacancyDto> items, string sortOption)
     {
         return sortOption switch
         {
@@ -1797,6 +1986,14 @@ public partial class CatalogViewModel : ObservableObject
                 .OrderByDescending(v => v.SalaryMin.HasValue || v.SalaryMax.HasValue)
                 .ThenBy(GetSalaryInUah)
                 .ThenByDescending(v => v.PublishedAt),
+            "За відстанню (спочатку ближчі)" => items
+                .OrderByDescending(v => GetDistanceKm(v).HasValue)
+                .ThenBy(v => GetDistanceKm(v) ?? double.MaxValue)
+                .ThenByDescending(v => v.PublishedAt),
+            "За відстанню (спочатку дальші)" => items
+                .OrderByDescending(v => GetDistanceKm(v).HasValue)
+                .ThenByDescending(v => GetDistanceKm(v) ?? double.MinValue)
+                .ThenByDescending(v => v.PublishedAt),
             "За назвою посади (А → Я)" => items
                 .OrderBy(v => v.Title, StringComparer.CurrentCultureIgnoreCase)
                 .ThenByDescending(v => v.PublishedAt),
@@ -1810,6 +2007,23 @@ public partial class CatalogViewModel : ObservableObject
                 .OrderByDescending(v => v.PublishedAt)
                 .ThenByDescending(v => v.LastSeenAt)
         };
+    }
+
+    private double? GetDistanceKm(VacancyDto v)
+    {
+        if (_distanceCache.TryGetValue(v.Id, out double? km))
+        {
+            return km;
+        }
+
+        VacancyItemViewModel? existing = Vacancies.FirstOrDefault(item => item.Id == v.Id);
+        if (existing?.DistanceKm != null)
+        {
+            _distanceCache[v.Id] = existing.DistanceKm;
+            return existing.DistanceKm;
+        }
+
+        return null;
     }
 
     private static decimal GetSalaryInUah(VacancyDto v)

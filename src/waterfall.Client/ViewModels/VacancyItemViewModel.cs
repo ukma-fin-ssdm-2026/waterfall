@@ -6,6 +6,7 @@ using System.Net;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Waterfall.Client.Helpers;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
 
@@ -26,6 +27,7 @@ public partial class VacancyItemViewModel : ObservableObject
     private readonly Action<string> _reportError;
     private readonly IUrlLauncher _urlLauncher;
     private readonly IDistanceCalculatorService? _distanceService;
+    private readonly Action<Guid, double?>? _onDistanceCalculated;
 
     /// <param name="vacancy">Дані вакансії з API.</param>
     /// <param name="gateway">Шлюз для збереження / видалення з «Обраного».</param>
@@ -33,13 +35,17 @@ public partial class VacancyItemViewModel : ObservableObject
     /// <param name="reportError">Куди показати помилку перемикача (банер сторінки).</param>
     /// <param name="urlLauncher">Сервіс запуску посилань у браузері.</param>
     /// <param name="distanceService">Сервіс розрахунку реальної відстані до офісу вакансії.</param>
+    /// <param name="onDistanceCalculated">Зворотний виклик при завершенні розрахунку відстані (id, km).</param>
+    /// <param name="initialDistanceKm">Попередньо розрахована відстань у км (якщо доступна з кешу).</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
         IMessenger messenger,
         Action<string> reportError,
         IUrlLauncher? urlLauncher = null,
-        IDistanceCalculatorService? distanceService = null)
+        IDistanceCalculatorService? distanceService = null,
+        Action<Guid, double?>? onDistanceCalculated = null,
+        double? initialDistanceKm = null)
     {
         Vacancy = vacancy;
         _gateway = gateway;
@@ -47,7 +53,16 @@ public partial class VacancyItemViewModel : ObservableObject
         _reportError = reportError;
         _urlLauncher = urlLauncher ?? new Waterfall.Client.Services.DefaultUrlLauncher();
         _distanceService = distanceService;
+        _onDistanceCalculated = onDistanceCalculated;
         IsSaved = vacancy.IsSaved;
+
+        if (initialDistanceKm.HasValue)
+        {
+            DistanceKm = initialDistanceKm;
+            DistanceText = initialDistanceKm.Value < 1.0
+                ? $"{Math.Round(initialDistanceKm.Value * 1000)} м від вас"
+                : $"{initialDistanceKm.Value.ToString("0.0", CultureInfo.InvariantCulture)} км від вас";
+        }
 
         List<string> skills = CleanSkills(vacancy.Skills);
         VisibleSkills = skills.Take(MaxVisibleSkills).ToList();
@@ -59,7 +74,10 @@ public partial class VacancyItemViewModel : ObservableObject
             _ = vm.RefreshDistanceAsync();
         });
 
-        _ = RefreshDistanceAsync();
+        if (!initialDistanceKm.HasValue)
+        {
+            _ = RefreshDistanceAsync();
+        }
     }
 
     public VacancyDto Vacancy { get; }
@@ -126,6 +144,12 @@ public partial class VacancyItemViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasDistanceText))]
     public partial string? DistanceText { get; set; }
 
+    /// <summary>
+    /// Розрахована числова відстань у км від поточної адреси користувача до офісу.
+    /// </summary>
+    [ObservableProperty]
+    public partial double? DistanceKm { get; set; }
+
     public bool HasDistanceText => !string.IsNullOrWhiteSpace(DistanceText);
 
     public async Task RefreshDistanceAsync(CancellationToken ct = default)
@@ -137,7 +161,9 @@ public partial class VacancyItemViewModel : ObservableObject
                 string.IsNullOrWhiteSpace(_distanceService.UserAddress) ||
                 FullAddress?.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase) == true)
             {
+                DistanceKm = null;
                 DistanceText = null;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 return;
             }
 
@@ -146,13 +172,17 @@ public partial class VacancyItemViewModel : ObservableObject
                 target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase) ||
                 target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
             {
+                DistanceKm = null;
                 DistanceText = null;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 return;
             }
 
             try
             {
                 double? km = await _distanceService.CalculateDistanceKmAsync(target, ct);
+                DistanceKm = km;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, km);
                 if (km.HasValue)
                 {
                     DistanceText = km.Value < 1.0
@@ -166,15 +196,21 @@ public partial class VacancyItemViewModel : ObservableObject
             }
             catch (Exception ex) when (IsNetworkError(ex))
             {
+                DistanceKm = null;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 DistanceText = "Немає інтернету";
             }
             catch
             {
+                DistanceKm = null;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 DistanceText = "Не вдалося розрахувати";
             }
         }
         catch
         {
+            DistanceKm = null;
+            _onDistanceCalculated?.Invoke(Vacancy.Id, null);
             DistanceText = null;
         }
     }
@@ -188,6 +224,114 @@ public partial class VacancyItemViewModel : ObservableObject
         ex.Message.Contains("інтернет", StringComparison.OrdinalIgnoreCase) ||
         ex.Message.Contains("internet", StringComparison.OrdinalIgnoreCase) ||
         ex.Message.Contains("network", StringComparison.OrdinalIgnoreCase);
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(MapToggleText))]
+    public partial bool IsMapExpanded { get; set; }
+
+    [ObservableProperty]
+    public partial bool IsLoadingMap { get; set; }
+
+    [ObservableProperty]
+    public partial string? MapHtml { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMapCoordinates))]
+    [NotifyPropertyChangedFor(nameof(MapCoordinatesDisplay))]
+    public partial double? MapLatitude { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMapCoordinates))]
+    [NotifyPropertyChangedFor(nameof(MapCoordinatesDisplay))]
+    public partial double? MapLongitude { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasMapError))]
+    public partial string? MapErrorMessage { get; set; }
+
+    public bool HasMapCoordinates => MapLatitude.HasValue && MapLongitude.HasValue;
+
+    public string MapCoordinatesDisplay => HasMapCoordinates
+        ? $"{MapLatitude!.Value.ToString("F4", CultureInfo.InvariantCulture)}, {MapLongitude!.Value.ToString("F4", CultureInfo.InvariantCulture)}"
+        : string.Empty;
+
+    public string MapToggleText => IsMapExpanded ? "Приховати мапу ▲" : "Показати на мапі 🗺️";
+
+    public bool HasMapError => !string.IsNullOrWhiteSpace(MapErrorMessage);
+
+    [RelayCommand]
+    public async Task ToggleMapAsync()
+    {
+        if (IsMapExpanded)
+        {
+            IsMapExpanded = false;
+            return;
+        }
+
+        IsMapExpanded = true;
+
+        if (!string.IsNullOrWhiteSpace(MapHtml))
+        {
+            return;
+        }
+
+        string target = !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : (Vacancy.Location ?? string.Empty);
+
+        if (string.IsNullOrWhiteSpace(target) ||
+            target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
+        {
+            MapErrorMessage = "Точну адресу офісу не вказано.";
+            return;
+        }
+
+        if (target.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
+            target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase))
+        {
+            MapErrorMessage = "Вакансія віддалена (Remote), фізичний офіс відсутній.";
+            return;
+        }
+
+        IsLoadingMap = true;
+        MapErrorMessage = null;
+
+        try
+        {
+            (double Lat, double Lon)? coords = null;
+            if (_distanceService != null)
+            {
+                coords = await _distanceService.ResolveCoordinatesAsync(target);
+            }
+            else
+            {
+                coords = Waterfall.Client.Services.GeoDistanceService.LookupKnownLocation(target);
+            }
+
+            if (coords.HasValue)
+            {
+                MapLatitude = coords.Value.Lat;
+                MapLongitude = coords.Value.Lon;
+                string label = !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : $"{Vacancy.Company} ({Vacancy.Location})";
+                MapHtml = MapHtmlHelper.GenerateMapHtml(coords.Value.Lat, coords.Value.Lon, label);
+                MapErrorMessage = null;
+            }
+            else
+            {
+                MapErrorMessage = "Не вдалося визначити координати адреси на карті.";
+            }
+        }
+        catch (Exception ex) when (IsNetworkError(ex))
+        {
+            MapErrorMessage = "Немає підключення до інтернету для завантаження карти.";
+        }
+        catch
+        {
+            MapErrorMessage = "Помилка при спробі визначити координати адреси.";
+        }
+        finally
+        {
+            IsLoadingMap = false;
+        }
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(DetailsToggleText))]
