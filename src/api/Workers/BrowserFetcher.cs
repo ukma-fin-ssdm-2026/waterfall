@@ -25,13 +25,22 @@ public sealed class PlaywrightBrowserFetcher : IBrowserFetcher, IAsyncDisposable
     private static readonly TimeSpan PageTimeout = TimeSpan.FromSeconds(30);
 
     private readonly ILogger<PlaywrightBrowserFetcher> _logger;
+    private readonly Func<Task<IPlaywright>> _createPlaywright;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IPlaywright? _playwright;
     private IBrowser? _browser;
 
     public PlaywrightBrowserFetcher(ILogger<PlaywrightBrowserFetcher> logger)
+        : this(logger, Playwright.CreateAsync)
+    {
+    }
+
+    internal PlaywrightBrowserFetcher(
+        ILogger<PlaywrightBrowserFetcher> logger,
+        Func<Task<IPlaywright>> createPlaywright)
     {
         _logger = logger;
+        _createPlaywright = createPlaywright;
     }
 
     public async Task<string> GetHtmlAsync(string url, CancellationToken ct)
@@ -76,7 +85,7 @@ public sealed class PlaywrightBrowserFetcher : IBrowserFetcher, IAsyncDisposable
             return _browser;
         }
 
-        _playwright = await Playwright.CreateAsync();
+        _playwright = await _createPlaywright();
         _browser = await _playwright.Chromium.LaunchAsync(new BrowserTypeLaunchOptions { Headless = true });
         _logger.LogInformation("Браузер для фонового збору запущено.");
         return _browser;
