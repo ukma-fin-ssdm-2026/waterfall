@@ -53,7 +53,7 @@ jobs:
         run: dotnet build tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -c Release --nologo
 
       - name: Install Chromium
-        run: bash tests/waterfall.Ingestion.Tests/bin/Release/net10.0/playwright.sh install --with-deps chromium
+        run: pwsh tests/waterfall.Ingestion.Tests/bin/Release/net10.0/playwright.ps1 install --with-deps chromium
 
       - name: Ingestion tests
         run: |
