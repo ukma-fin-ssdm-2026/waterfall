@@ -10,7 +10,7 @@ public sealed class PlaywrightBrowserFetcherTests
     [Fact]
     public async Task GetHtmlAsync_LaunchesHeadlessBrowserAndClosesEachPage()
     {
-        const string url = "https://example.test/jobs";
+        const string url = "https://www.work.ua/jobs/?ss=1";
         const string html = "<html><body>jobs</body></html>";
         List<string> calls = [];
         int launchCount = 0;
@@ -52,7 +52,8 @@ public sealed class PlaywrightBrowserFetcherTests
         Assert.Equal(2, calls.Count(name => name == "ClearCookiesAsync"));
         Assert.Equal(2, calls.Count(name => name == "WaitForTimeoutAsync:500"));
         Assert.Equal(2, calls.Count(name => name == "CloseAsync"));
-        Assert.Equal(2, calls.Count(name => name == $"GotoAsync:{url}:NetworkIdle:30000"));
+        Assert.Equal(2, calls.Count(name => name == $"GotoAsync:{url}:DOMContentLoaded:30000"));
+        Assert.Equal(2, calls.Count(name => name == "WaitForSelectorAsync:div.job-link:Visible:10000"));
     }
 
     [Fact]
@@ -70,6 +71,21 @@ public sealed class PlaywrightBrowserFetcherTests
         Assert.Contains(url, exception.Message);
         Assert.Same(failure, exception.InnerException);
         Assert.True(pageClosed);
+    }
+
+    [Fact]
+    public async Task GetHtmlAsync_WhenContentWaitTimesOut_ThrowsHttpRequestExceptionWithUrl()
+    {
+        const string url = "https://www.work.ua/jobs/?ss=1";
+        TimeoutException failure = new("content selector timed out");
+        IPage page = CreatePage([], string.Empty, failure);
+        await using PlaywrightBrowserFetcher fetcher = CreateFetcher(CreatePlaywright(page));
+
+        HttpRequestException exception = await Assert.ThrowsAsync<HttpRequestException>(
+            () => fetcher.GetHtmlAsync(url, CancellationToken.None));
+
+        Assert.Contains(url, exception.Message);
+        Assert.Same(failure, exception.InnerException);
     }
 
     [Fact]
@@ -115,7 +131,7 @@ public sealed class PlaywrightBrowserFetcherTests
     private static IPage CreatePage(
         List<string> calls,
         string html,
-        PlaywrightException? navigationFailure = null,
+        Exception? navigationFailure = null,
         Action? onClose = null)
     {
         IBrowserContext context = PlaywrightTestProxy.Create<IBrowserContext>((name, _) =>
@@ -135,6 +151,15 @@ public sealed class PlaywrightBrowserFetcherTests
             {
                 case "get_Context":
                     return context;
+                case "get_Url":
+                    return "https://www.work.ua/jobs/?ss=1";
+                case "TitleAsync":
+                    return Task.FromResult("Work.ua test page");
+                case "Locator":
+                    return PlaywrightTestProxy.Create<ILocator>((locatorName, _) =>
+                        locatorName == "InnerTextAsync"
+                            ? Task.FromResult("No vacancy cards")
+                            : throw new InvalidOperationException($"Unexpected locator call: {locatorName}"));
                 case "GotoAsync":
                     PageGotoOptions options = (PageGotoOptions)args[1]!;
                     calls.Add($"{name}:{args[0]}:{options.WaitUntil}:{options.Timeout:0}");
@@ -144,6 +169,10 @@ public sealed class PlaywrightBrowserFetcherTests
                 case "WaitForTimeoutAsync":
                     calls.Add($"{name}:{args[0]}");
                     return Task.CompletedTask;
+                case "WaitForSelectorAsync":
+                    PageWaitForSelectorOptions waitOptions = (PageWaitForSelectorOptions)args[1]!;
+                    calls.Add($"{name}:{args[0]}:{waitOptions.State}:{waitOptions.Timeout:0}");
+                    return Task.FromResult<IElementHandle?>(null);
                 case "ContentAsync":
                     return Task.FromResult(html);
                 case "CloseAsync":

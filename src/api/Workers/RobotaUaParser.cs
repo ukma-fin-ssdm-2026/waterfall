@@ -21,9 +21,11 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
 
     public Uri Home { get; } = new($"{BaseHost}/");
 
-    // Без «/» перед «?»: адресу зі «/» сайт перенаправляє (301) сюди ж, а це зайвий запит
+    // Публічний список вакансій; Robota.ua додає параметри сторінки через «;», а не «?»
+    private const string ListingUrl = $"{BaseHost}/zapros/ukraine/params;isReservation=true";
+
     public string? ListPageUrl(int page) => page > 0
-        ? $"{BaseHost}/ua/zapros?page={page}"
+        ? page == 1 ? ListingUrl : $"{ListingUrl};page={page}"
         : null;
 
     public List<RawVacancy> ParseListPage(string html)
@@ -53,7 +55,7 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
                 continue;
             }
 
-            string title = Html.Clean(link);
+            string title = Html.Clean(link.SelectSingleNode(".//h2") ?? link);
             if (title.Length == 0)
             {
                 continue;
