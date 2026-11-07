@@ -115,6 +115,8 @@ builder.Services.AddWaterfallAiConsultantRateLimiting(builder.Configuration);
 builder.Services.AddOptions<IngestionOptions>().Bind(builder.Configuration.GetSection("Ingestion")).ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<IngestionOptions>, IngestionOptionsValidator>();
 builder.Services.AddHttpClient();
+// Work.ua і Robota.ua стоять за Cloudflare й рендерять список у браузері, тож їх обходимо через Playwright
+builder.Services.AddSingleton<IBrowserFetcher, PlaywrightBrowserFetcher>();
 builder.Services.AddHostedService<JobParserService>();
 
 // Реєстрація Health Checks для перевірки критичних залежностей (БД, зовнішній геосервіс) (Lab 9 Bonus)

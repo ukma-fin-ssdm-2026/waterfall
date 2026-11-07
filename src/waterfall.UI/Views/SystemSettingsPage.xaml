@@ -157,7 +157,7 @@
                     <Label Text="Значення прочитано безпосередньо з конфігурації сервісу Ingestion:"
                            Style="{StaticResource SettingsDescription}" />
 
-                    <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="8" Margin="0,6,0,0">
+                    <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="8" Margin="0,6,0,0">
                         <Border Grid.Column="0" Style="{StaticResource InfoPill}">
                             <VerticalStackLayout Spacing="2">
                                 <Label Text="DOU сторінок" FontSize="11" TextColor="{StaticResource TextSecondary}" />
@@ -174,12 +174,19 @@
 
                         <Border Grid.Column="2" Style="{StaticResource InfoPill}">
                             <VerticalStackLayout Spacing="2">
+                                <Label Text="Robota.ua сторінок" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                                <Label Text="{Binding RobotaUaPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border Grid.Column="3" Style="{StaticResource InfoPill}">
+                            <VerticalStackLayout Spacing="2">
                                 <Label Text="Djinni сторінок" FontSize="11" TextColor="{StaticResource TextSecondary}" />
                                 <Label Text="{Binding DjinniPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
                             </VerticalStackLayout>
                         </Border>
 
-                        <Border Grid.Column="3" Style="{StaticResource InfoPill}">
+                        <Border Grid.Column="4" Style="{StaticResource InfoPill}">
                             <VerticalStackLayout Spacing="2">
                                 <Label Text="Затримка запитів" FontSize="11" TextColor="{StaticResource TextSecondary}" />
                                 <Label Text="{Binding RequestDelay}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource Accent}" />
