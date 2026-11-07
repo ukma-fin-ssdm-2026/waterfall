@@ -29,10 +29,20 @@ public partial class SystemSettingsViewModel : ObservableObject
         ["24:00:00"] = "24 години (24:00:00)"
     };
 
+    private readonly string? _settingsFilePath;
     private string? _loadedFilePath;
 
-    public SystemSettingsViewModel()
+    public SystemSettingsViewModel() : this(LocateAppSettingsFile())
     {
+    }
+
+    /// <summary>
+    /// Читає налаштування із заданого файлу й зберігає їх у нього ж. Тести передають сюди тимчасовий файл,
+    /// щоб не переписувати справжній src/api/appsettings.json. DI цей конструктор не обирає: рядка в контейнері немає.
+    /// </summary>
+    public SystemSettingsViewModel(string? settingsFilePath)
+    {
+        _settingsFilePath = settingsFilePath;
         IntervalOptions = new ObservableCollection<string>(IntervalMapping.Values);
         LoadSettingsFromIngestionService();
     }
@@ -65,6 +75,9 @@ public partial class SystemSettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private int _workUaPages = 3;
+
+    [ObservableProperty]
+    private int _robotaUaPages = 1;
 
     [ObservableProperty]
     private int _djinniPages = 3;
@@ -115,7 +128,7 @@ public partial class SystemSettingsViewModel : ObservableObject
     /// </summary>
     public void LoadSettingsFromIngestionService()
     {
-        IngestionSettingsModel settings = ReadIngestionConfig();
+        IngestionSettingsModel settings = ReadIngestionConfig(_settingsFilePath);
 
         _loadedFilePath = settings.FilePath;
         ConfigFilePath = !string.IsNullOrWhiteSpace(settings.FilePath)
@@ -143,6 +156,7 @@ public partial class SystemSettingsViewModel : ObservableObject
 
         DouPages = settings.DouPages;
         WorkUaPages = settings.WorkUaPages;
+        RobotaUaPages = settings.RobotaUaPages;
         DjinniPages = settings.DjinniPages;
         RequestDelay = settings.RequestDelay;
     }
@@ -217,10 +231,8 @@ public partial class SystemSettingsViewModel : ObservableObject
         IsSuccessStatus = true;
     }
 
-    private static IngestionSettingsModel ReadIngestionConfig()
+    private static IngestionSettingsModel ReadIngestionConfig(string? resolvedPath)
     {
-        string? resolvedPath = LocateAppSettingsFile();
-
         if (resolvedPath != null && File.Exists(resolvedPath))
         {
             try
@@ -236,11 +248,12 @@ public partial class SystemSettingsViewModel : ObservableObject
                         : "00:30:00";
                     int djinni = ingestion.TryGetProperty("DjinniPages", out JsonElement dj) ? dj.GetInt32() : 3;
                     int workUa = ingestion.TryGetProperty("WorkUaPages", out JsonElement wk) ? wk.GetInt32() : 3;
+                    int robotaUa = ingestion.TryGetProperty("RobotaUaPages", out JsonElement ro) ? ro.GetInt32() : 1;
                     int dou = ingestion.TryGetProperty("DouPages", out JsonElement du) ? du.GetInt32() : 1;
                     string delay = ingestion.TryGetProperty("RequestDelay", out JsonElement dl) ? dl.GetString() ?? "00:00:02" : "00:00:02";
                     string? rawDir = ingestion.TryGetProperty("RawDataDirectory", out JsonElement rd) ? rd.GetString() : null;
 
-                    return new IngestionSettingsModel(resolvedPath, enabled, interval, djinni, workUa, dou, delay, rawDir);
+                    return new IngestionSettingsModel(resolvedPath, enabled, interval, djinni, workUa, robotaUa, dou, delay, rawDir);
                 }
             }
             catch
@@ -250,7 +263,7 @@ public partial class SystemSettingsViewModel : ObservableObject
         }
 
         // Значення за замовчуванням з секції Ingestion
-        return new IngestionSettingsModel(resolvedPath, true, "00:30:00", 3, 3, 1, "00:00:02", string.Empty);
+        return new IngestionSettingsModel(resolvedPath, true, "00:30:00", 3, 3, 1, 1, "00:00:02", string.Empty);
     }
 
     private static string? LocateAppSettingsFile()

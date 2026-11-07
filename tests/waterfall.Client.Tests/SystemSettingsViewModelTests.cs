@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.Text.Json;
 using Waterfall.Client.ViewModels;
 using Xunit;
 
@@ -28,6 +29,7 @@ public class SystemSettingsViewModelTests
         // Перевірка завантажених параметрів сервісу
         Assert.True(vm.DouPages > 0);
         Assert.True(vm.WorkUaPages > 0);
+        Assert.True(vm.RobotaUaPages > 0);
         Assert.True(vm.DjinniPages > 0);
         Assert.NotEmpty(vm.RequestDelay);
     }
@@ -97,15 +99,29 @@ public class SystemSettingsViewModelTests
     [Fact]
     public void SaveSettingsCommand_SetsSuccessStatus()
     {
-        // Arrange
-        SystemSettingsViewModel vm = new();
+        // Arrange: тимчасовий файл налаштувань, щоб тест не переписував справжній src/api/appsettings.json
+        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, """{ "Ingestion": { "Enabled": false, "Interval": "00:30:00", "RobotaUaPages": 1 } }""");
+        try
+        {
+            SystemSettingsViewModel vm = new(path);
+            vm.SelectedIntervalDisplay = "1 година (01:00:00)";
 
-        // Act
-        vm.SaveSettingsCommand.Execute(null);
+            // Act
+            vm.SaveSettingsCommand.Execute(null);
 
-        // Assert
-        Assert.True(vm.HasStatusMessage);
-        Assert.True(vm.IsSuccessStatus);
+            // Assert
+            Assert.True(vm.HasStatusMessage);
+            Assert.True(vm.IsSuccessStatus);
+            using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(path));
+            JsonElement ingestion = saved.RootElement.GetProperty("Ingestion");
+            Assert.Equal("01:00:00", ingestion.GetProperty("Interval").GetString());
+            Assert.Equal(1, ingestion.GetProperty("RobotaUaPages").GetInt32()); // решта параметрів лишається
+        }
+        finally
+        {
+            File.Delete(path);
+        }
     }
 }
 

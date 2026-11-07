@@ -11,6 +11,7 @@ public sealed record IngestionSettingsModel(
     string Interval,
     int DjinniPages,
     int WorkUaPages,
+    int RobotaUaPages,
     int DouPages,
     string RequestDelay,
     string? RawDataDirectory);

@@ -5,8 +5,12 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Robota.ua parser** (`RobotaUaParser`): reads schema.org `JobPosting` JSON-LD and vacancy links; wired into `JobParserService` (`Ingestion:RobotaUaPages`), URL domain check and UAH default in `VacancyIngestionService`, page count on the system settings screen. It gets no real vacancies yet: robota.ua answers `robots.txt` with a Cloudflare challenge (403), and its list page is rendered client-side.
 - **Нормалізація вакансій (#3)**: `VacancyDB` отримує `WorkFormat` (прапорці `Remote`/`Hybrid`/`Office`), `ExperienceMonths` (мінімальний досвід у місяцях), `CategoryGroup` (закритий довідник широких IT і не-IT категорій) і `SearchText` (нижній регістр назви, компанії, опису й тегів). Похідні поля обчислюються на кожному записі вакансії — парсерами, `POST`/`PUT` каталогу та сідуванням. Djinni зберігає `monthsOfExperience`, DOU позначає досвід за фасетними стрічками, решту джерел розбирає текст досвіду й опису.
 - **Фільтри каталогу (#3)**: `workFormat` (будь-який із вибраних форматів), `maxExperienceMonths` (включна межа; невідомий досвід не відсіюється), `categoryGroup` (точна канонічна група), `location` (підрядок без урахування регістру) і `skills` (усі терміни через AND, кожен — у тегах або тексті). `VacancyDto` віддає `workFormat`, `experienceMonths`, `categoryGroup`.
+
+### Changed
+- **`robots.txt` answered with 401/403** now means the site is skipped and paused, like 5xx and 429; before, any 4xx counted as a missing file that allows everything.
 
 ### Fixed
 - Пошук каталогу знаходить кирилицю незалежно від регістру («бухгалтер» → «Бухгалтер») на SQLite і MSSQL завдяки `SearchText`.

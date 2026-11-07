@@ -137,6 +137,29 @@ public sealed class JobParserServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RobotaUa_IsCrawledAndIngestedByBackgroundService()
+    {
+        const string listing = """
+            <script type="application/ld+json">
+            {"@type":"JobPosting","identifier":"42","url":"https://robota.ua/company1/vacancy42",
+             "title":"QA Engineer","description":"Тестування продукту"}
+            </script>
+            """;
+        _web.Responses["https://robota.ua/robots.txt"] = (HttpStatusCode.OK, string.Empty);
+        _web.Responses["https://robota.ua/ua/zapros?page=1"] = (HttpStatusCode.OK, listing);
+        _web.Responses["https://robota.ua/company1/vacancy42"] = (HttpStatusCode.OK, listing);
+        JobParserService parser = CreateParser(directory: null, robotaUaPages: 1);
+
+        await parser.StartAsync(CancellationToken.None);
+        await _ingestion.WaitForCallsAsync(1);
+        await parser.StopAsync(CancellationToken.None);
+
+        Assert.Equal(JobSource.RobotaUa, Assert.Single(_ingestion.Received).Source);
+        Assert.Contains("https://robota.ua/ua/zapros?page=1", _web.Urls);
+        Assert.Contains("https://robota.ua/company1/vacancy42", _web.Urls);
+    }
+
+    [Fact]
     public async Task Djinni_ReadsSkillsFromJobPage_OncePerVacancy()
     {
         _web.FirstPage = DjinniPageTests.Page(DjinniPageTests.Job(1), DjinniPageTests.Job(2));
@@ -231,6 +254,8 @@ public sealed class JobParserServiceTests : IDisposable
     [Theory]
     [InlineData(HttpStatusCode.OK, "User-agent: *\nDisallow: /jobs")]
     [InlineData(HttpStatusCode.InternalServerError, "")] // за RFC 9309 збій robots.txt — заборона
+    [InlineData(HttpStatusCode.Forbidden, "")] // перевірка на ботів замість robots.txt (як Cloudflare на robota.ua) — теж заборона
+    [InlineData(HttpStatusCode.Unauthorized, "")]
     public async Task Djinni_RobotsTxtForbidsJobs_SiteIsSkipped(HttpStatusCode status, string robotsTxt)
     {
         _web.FirstPage = DjinniPageTests.Page(DjinniPageTests.Job(1));
@@ -511,7 +536,7 @@ public sealed class JobParserServiceTests : IDisposable
         Assert.Equal("1", Assert.Single(await crawler.CrawlAsync(CancellationToken.None)).Id);
     }
 
-    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0, int workUaPages = 0, int douPages = 0)
+    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0, int workUaPages = 0, int robotaUaPages = 0, int douPages = 0)
     {
         ServiceProvider services = new ServiceCollection()
             .AddScoped<IVacancyIngestionService>(_ => _ingestion)
@@ -524,6 +549,7 @@ public sealed class JobParserServiceTests : IDisposable
             Interval = interval ?? TimeSpan.FromHours(1),
             DjinniPages = djinniPages,
             WorkUaPages = workUaPages,
+            RobotaUaPages = robotaUaPages,
             DouPages = douPages,
             RequestDelay = TimeSpan.Zero
         };
@@ -548,6 +574,7 @@ public sealed class JobParserServiceTests : IDisposable
         {
             ["https://djinni.co/robots.txt"] = (HttpStatusCode.OK, RobotsTxtTests.Djinni),
             ["https://www.work.ua/robots.txt"] = (HttpStatusCode.OK, RobotsTxtTests.WorkUa),
+            ["https://robota.ua/robots.txt"] = (HttpStatusCode.OK, string.Empty),
             ["https://jobs.dou.ua/robots.txt"] = (HttpStatusCode.OK, RobotsTxtTests.Dou)
         };
 

@@ -18,7 +18,7 @@ namespace Waterfall.Services;
 /// <summary>
 /// Чистить і стандартизує сирі вакансії (назва, опис, зарплата, дата, навички)
 /// та зберігає їх через <see cref="IVacancyRepository.BulkUpsertAsync"/>.
-/// Збираємо з трьох сайтів — Djinni, Work.ua і DOU.
+/// Збираємо з Djinni, Work.ua, Robota.ua і DOU.
 /// </summary>
 public class VacancyIngestionService : IVacancyIngestionService
 {
@@ -27,6 +27,7 @@ public class VacancyIngestionService : IVacancyIngestionService
     {
         [JobSource.Djinni] = ("djinni.co", "USD"), // Djinni публікує зарплати в доларах
         [JobSource.WorkUa] = ("work.ua", "UAH"),
+        [JobSource.RobotaUa] = ("robota.ua", "UAH"),
         [JobSource.Dou] = ("dou.ua", "USD")        // на DOU зарплати теж здебільшого в доларах
     };
 
