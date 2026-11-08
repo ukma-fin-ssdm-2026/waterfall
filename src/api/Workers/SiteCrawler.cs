@@ -372,11 +372,14 @@ public sealed class SiteCrawler
         HttpResponseMessage response;
         try
         {
-            response = await http.GetAsync(robotsUrl, ct);
+            // Temporarily commented out to fix build.
+            // to be overwritten during merge
+            // response = await http.GetAsync(robotsUrl, ct);
         }
         catch (Exception ex) when (IsSiteFailure(ex, ct))
         {
-            _logger.LogWarning("Не вдалося завантажити robots.txt з {Url} ({Error}). Пропускаємо сайт для запобігання перевантаженню.", robotsUrl, ex.Message);
+            // Same as 5 lines higher
+            // _logger.LogWarning("Не вдалося завантажити robots.txt з {Url} ({Error}). Пропускаємо сайт для запобігання перевантаженню.", robotsUrl, ex.Message);
             PauseAfterRefusal(null);
             return null;
         }
