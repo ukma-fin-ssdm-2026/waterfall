@@ -132,7 +132,130 @@ public sealed class RobotaUaPageTests
     public void ListPageUrl_UsesOneBasedPaging()
     {
         Assert.Null(RobotaUa.ListPageUrl(0));
-        Assert.Equal("https://robota.ua/zapros/ukraine/params;isReservation=true", RobotaUa.ListPageUrl(1));
-        Assert.Equal("https://robota.ua/zapros/ukraine/params;isReservation=true;page=2", RobotaUa.ListPageUrl(2));
+        Assert.Equal("https://robota.ua/zapros/ukraine", RobotaUa.ListPageUrl(1));
+        Assert.Equal("https://robota.ua/zapros/ukraine;page=2", RobotaUa.ListPageUrl(2));
+    }
+
+    [Fact]
+    public void ParseListPage_UsesSafeSameHostLinksAndTitleFallbacks()
+    {
+        List<RawVacancy> jobs = RobotaUa.ParseListPage("""
+            <a href="https://www.robota.ua/company1/vacancy10?searchId=x#details" title="Title attribute"></a>
+            <a href="https://example.com/vacancy12">External link</a>
+            <a href="javascript:void(0)/vacancy13">Non-HTTP link</a>
+            <a href="/company1/vacancy14"><span class="vacancy-title">  Nested title  </span><span>extra text</span></a>
+            """);
+
+        Assert.Collection(
+            jobs,
+            titleFallback =>
+            {
+                Assert.Equal("10", titleFallback.Id);
+                Assert.Equal("Title attribute", titleFallback.Title);
+                Assert.Equal("https://www.robota.ua/company1/vacancy10", titleFallback.Url);
+            },
+            nestedTitle =>
+            {
+                Assert.Equal("14", nestedTitle.Id);
+                Assert.Equal("Nested title", nestedTitle.Title);
+                Assert.Equal("https://robota.ua/company1/vacancy14", nestedTitle.Url);
+            });
+    }
+
+    [Fact]
+    public void ParseListPage_ReadsNestedJsonLdVariantsAndSkipsInvalidJobRecords()
+    {
+        List<RawVacancy> jobs = RobotaUa.ParseListPage("""
+            <script type="application/ld+json">
+            [
+              {"@type":"Organization","name":"Other"},
+              {"@graph":[
+                {"@type":["JobPosting"],"identifier":{"name":"20"},
+                 "url":"/company20/vacancy20","title":"Remote engineer",
+                 "hiringOrganization":"Acme","jobLocationType":"TELECOMMUTE",
+                 "baseSalary":{"currency":"eur","value":{"minValue":1250.5}},
+                 "employmentType":["PART_TIME","TEMPORARY","INTERNSHIP"],
+                 "experienceRequirements":"3+ years"},
+                {"@type":"JobPosting","title":"No vacancy id"},
+                {"@type":"JobPosting","identifier":{"value":"21"},
+                 "url":"https://robota.ua/company21/vacancy21?ref=list","title":"Hybrid engineer",
+                 "jobLocation":[
+                   {"address":{"addressLocality":"Kyiv","addressCountry":"UA"}},
+                   {"address":{"addressLocality":"kyiv","addressCountry":"UA"}}],
+                 "jobLocationType":"TELECOMMUTE",
+                 "baseSalary":{"currency":"GBP","value":{"maxValue":2500}},
+                 "experienceRequirements":{"monthsOfExperience":36},
+                 "employmentType":"FULL_TIME"},
+                {"@type":"JobPosting","identifier":"22","url":"/vacancy22",
+                 "experienceRequirements":{"monthsOfExperience":0},
+                 "baseSalary":{"value":{"value":900}},
+                 "employmentType":null}
+              ]}
+            ]
+            </script>
+            """);
+
+        Assert.Equal(3, jobs.Count);
+        Assert.Equal("20", jobs[0].Id);
+        Assert.Equal("Acme", jobs[0].Company);
+        Assert.Equal("від 1250.5 EUR", jobs[0].Salary);
+        Assert.Equal("Віддалено", jobs[0].Location);
+        Assert.Equal("Часткова зайнятість, Тимчасова робота, INTERNSHIP", jobs[0].Employment);
+        Assert.Equal("3+ years", jobs[0].Experience);
+
+        Assert.Equal("21", jobs[1].Id);
+        Assert.Equal("Kyiv, UA / Віддалено", jobs[1].Location);
+        Assert.Equal("до 2500", jobs[1].Salary);
+        Assert.Equal("3 роки досвіду", jobs[1].Experience);
+        Assert.Equal("Повна зайнятість", jobs[1].Employment);
+        Assert.Equal("https://robota.ua/company21/vacancy21", jobs[1].Url);
+
+        Assert.Equal("22", jobs[2].Id);
+        Assert.Equal("900", jobs[2].Salary);
+        Assert.Equal("Без досвіду", jobs[2].Experience);
+        Assert.Null(jobs[2].Employment);
+    }
+
+    [Theory]
+    [InlineData(12, "1 рік досвіду")]
+    [InlineData(24, "2 роки досвіду")]
+    [InlineData(60, "5 років досвіду")]
+    [InlineData(132, "11 років досвіду")]
+    [InlineData(144, "12 років досвіду")]
+    [InlineData(18, "18 міс. досвіду")]
+    public void ParseJobPage_FormatsExperienceMonths(int months, string expected)
+    {
+        RawVacancy job = RobotaUa.ParseJobPage($$$"""
+            <script type="application/ld+json">
+            {"@type":"JobPosting","identifier":"1","url":"/vacancy1",
+             "description":"Details",
+             "experienceRequirements":{"monthsOfExperience":{{{months}}}}}
+            </script>
+            """);
+
+        Assert.Equal(expected, job.Experience);
+    }
+
+    [Fact]
+    public void ParseJobPage_FallsBackToRenderedDescriptionAndTitle()
+    {
+        RawVacancy job = RobotaUa.ParseJobPage("""
+            <main>
+              <h1>Rendered title</h1>
+              <div class="vacancy-description"><p>Rendered description</p></div>
+            </main>
+            """);
+
+        Assert.Equal("Rendered title", job.Title);
+        Assert.Contains("Rendered description", job.DescriptionHtml);
+    }
+
+    [Fact]
+    public void ParseJobPage_UsesMainAsLastDescriptionFallback()
+    {
+        RawVacancy job = RobotaUa.ParseJobPage("<main><p>Only main content</p></main>");
+
+        Assert.Contains("Only main content", job.DescriptionHtml);
+        Assert.Equal("Опис вакансії на сайті robota.ua", RobotaUa.ParseJobPage(string.Empty).DescriptionHtml);
     }
 }

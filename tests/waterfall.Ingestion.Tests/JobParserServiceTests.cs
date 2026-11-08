@@ -146,7 +146,7 @@ public sealed class JobParserServiceTests : IDisposable
             </script>
             """;
         _web.Responses["https://robota.ua/robots.txt"] = (HttpStatusCode.OK, string.Empty);
-        _web.Responses["https://robota.ua/zapros/ukraine/params;isReservation=true"] = (HttpStatusCode.OK, listing);
+        _web.Responses["https://robota.ua/zapros/ukraine"] = (HttpStatusCode.OK, listing);
         _web.Responses["https://robota.ua/company1/vacancy42"] = (HttpStatusCode.OK, listing);
         JobParserService parser = CreateParser(directory: null, robotaUaPages: 1);
 
@@ -155,7 +155,7 @@ public sealed class JobParserServiceTests : IDisposable
         await parser.StopAsync(CancellationToken.None);
 
         Assert.Equal(JobSource.RobotaUa, Assert.Single(_ingestion.Received).Source);
-        Assert.Contains("https://robota.ua/zapros/ukraine/params;isReservation=true", _web.Urls);
+        Assert.Contains("https://robota.ua/zapros/ukraine", _web.Urls);
         Assert.Contains("https://robota.ua/company1/vacancy42", _web.Urls);
     }
 
@@ -342,14 +342,14 @@ public sealed class JobParserServiceTests : IDisposable
             """;
         FakeBrowserFetcher browser = new();
         browser.Pages["https://robota.ua/robots.txt"] = string.Empty;
-        browser.Pages["https://robota.ua/zapros/ukraine/params;isReservation=true"] = listing;
+        browser.Pages["https://robota.ua/zapros/ukraine"] = listing;
         JobParserService parser = CreateParser(directory: null, robotaUaPages: 1, browserFetcher: browser);
 
         await parser.StartAsync(CancellationToken.None);
         await _ingestion.WaitForCallsAsync(1);
         await parser.StopAsync(CancellationToken.None);
 
-        Assert.Contains("https://robota.ua/zapros/ukraine/params;isReservation=true", browser.Urls);
+        Assert.Contains("https://robota.ua/zapros/ukraine", browser.Urls);
         Assert.Equal(JobSource.RobotaUa, Assert.Single(_ingestion.Received).Source);
     }
 
@@ -681,8 +681,9 @@ public sealed class JobParserServiceTests : IDisposable
 
         public IReadOnlyList<string> Urls => _urls;
 
-        public Task<string> GetHtmlAsync(string url, CancellationToken ct)
+        public Task<string> GetPageAsync(string url, CancellationToken ct)
         {
+            ct.ThrowIfCancellationRequested();
             _urls.Add(url);
             return Task.FromResult(Pages.TryGetValue(url, out string? html) ? html : Fallback);
         }
