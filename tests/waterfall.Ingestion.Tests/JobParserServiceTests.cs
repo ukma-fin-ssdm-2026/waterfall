@@ -146,7 +146,7 @@ public sealed class JobParserServiceTests : IDisposable
             </script>
             """;
         _web.Responses["https://robota.ua/robots.txt"] = (HttpStatusCode.OK, string.Empty);
-        _web.Responses["https://robota.ua/ua/zapros?page=1"] = (HttpStatusCode.OK, listing);
+        _web.Responses["https://robota.ua/zapros/ukraine/params;isReservation=true"] = (HttpStatusCode.OK, listing);
         _web.Responses["https://robota.ua/company1/vacancy42"] = (HttpStatusCode.OK, listing);
         JobParserService parser = CreateParser(directory: null, robotaUaPages: 1);
 
@@ -155,7 +155,7 @@ public sealed class JobParserServiceTests : IDisposable
         await parser.StopAsync(CancellationToken.None);
 
         Assert.Equal(JobSource.RobotaUa, Assert.Single(_ingestion.Received).Source);
-        Assert.Contains("https://robota.ua/ua/zapros?page=1", _web.Urls);
+        Assert.Contains("https://robota.ua/zapros/ukraine/params;isReservation=true", _web.Urls);
         Assert.Contains("https://robota.ua/company1/vacancy42", _web.Urls);
     }
 
@@ -357,14 +357,14 @@ public sealed class JobParserServiceTests : IDisposable
             """;
         FakeBrowserFetcher browser = new();
         browser.Pages["https://robota.ua/robots.txt"] = string.Empty;
-        browser.Pages["https://robota.ua/ua/zapros?page=1"] = listing;
+        browser.Pages["https://robota.ua/zapros/ukraine/params;isReservation=true"] = listing;
         JobParserService parser = CreateParser(directory: null, robotaUaPages: 1, browserFetcher: browser);
 
         await parser.StartAsync(CancellationToken.None);
         await _ingestion.WaitForCallsAsync(1);
         await parser.StopAsync(CancellationToken.None);
 
-        Assert.Contains("https://robota.ua/ua/zapros?page=1", browser.Urls);
+        Assert.Contains("https://robota.ua/zapros/ukraine/params;isReservation=true", browser.Urls);
         Assert.Equal(JobSource.RobotaUa, Assert.Single(_ingestion.Received).Source);
     }
 

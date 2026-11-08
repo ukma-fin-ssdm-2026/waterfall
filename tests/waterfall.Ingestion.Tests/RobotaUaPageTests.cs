@@ -73,6 +73,23 @@ public sealed class RobotaUaPageTests
     }
 
     [Fact]
+    public void ParseListPage_UsesHeadingAsTitleForRenderedVacancyCard()
+    {
+        List<RawVacancy> jobs = RobotaUa.ParseListPage("""
+            <a class="new-design-card" href="/company477532/vacancy11371686">
+                <h2>Вантажник (Правий берег, Київ)</h2>
+                <span>28 000 — 38 000 ₴</span>
+                <span>Нова пошта</span>
+                <span>Київ</span>
+            </a>
+            """);
+
+        RawVacancy job = Assert.Single(jobs);
+        Assert.Equal("11371686", job.Id);
+        Assert.Equal("Вантажник (Правий берег, Київ)", job.Title);
+    }
+
+    [Fact]
     public void ParseJobPage_ReadsJsonLdAndCanBeNormalized()
     {
         RawVacancy raw = RobotaUa.ParseJobPage("""
@@ -115,7 +132,7 @@ public sealed class RobotaUaPageTests
     public void ListPageUrl_UsesOneBasedPaging()
     {
         Assert.Null(RobotaUa.ListPageUrl(0));
-        Assert.Equal("https://robota.ua/ua/zapros?page=1", RobotaUa.ListPageUrl(1));
-        Assert.Equal("https://robota.ua/ua/zapros?page=2", RobotaUa.ListPageUrl(2));
+        Assert.Equal("https://robota.ua/zapros/ukraine/params;isReservation=true", RobotaUa.ListPageUrl(1));
+        Assert.Equal("https://robota.ua/zapros/ukraine/params;isReservation=true;page=2", RobotaUa.ListPageUrl(2));
     }
 }
