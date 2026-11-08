@@ -1,4 +1,5 @@
 using System.Reflection;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Playwright;
 using Waterfall.Api.Workers;
@@ -78,7 +79,7 @@ public sealed class PlaywrightBrowserFetcherTests
     {
         const string url = "https://www.work.ua/jobs/?ss=1";
         TimeoutException failure = new("content selector timed out");
-        IPage page = CreatePage([], string.Empty, failure);
+        IPage page = CreatePage([], string.Empty, selectorFailure: failure);
         await using PlaywrightBrowserFetcher fetcher = CreateFetcher(CreatePlaywright(page));
 
         HttpRequestException exception = await Assert.ThrowsAsync<HttpRequestException>(
@@ -86,6 +87,46 @@ public sealed class PlaywrightBrowserFetcherTests
 
         Assert.Contains(url, exception.Message);
         Assert.Same(failure, exception.InnerException);
+    }
+
+    [Fact]
+    public async Task GetHtmlAsync_WhenContentWaitTimesOut_LogsPageDiagnostics()
+    {
+        const string url = "https://www.work.ua/jobs/?ss=1";
+        string body = new('x', 350);
+        RecordingLogger logger = new();
+        PlaywrightException failure = new("selector timed out");
+        IPage page = CreatePage([], string.Empty, selectorFailure: failure, body: body);
+        await using PlaywrightBrowserFetcher fetcher = new(logger, () => Task.FromResult(CreatePlaywright(page)));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => fetcher.GetHtmlAsync(url, CancellationToken.None));
+
+        string warning = Assert.Single(logger.Warnings);
+        Assert.Contains("div.job-link", warning);
+        Assert.Contains(url, warning);
+        Assert.Contains("Work.ua test page", warning);
+        Assert.Contains(new string('x', 300), warning);
+        Assert.DoesNotContain(new string('x', 301), warning);
+    }
+
+    [Fact]
+    public async Task GetHtmlAsync_WhenPageDiagnosticsFail_LogsFallbackWarning()
+    {
+        const string url = "https://www.work.ua/jobs/?ss=1";
+        RecordingLogger logger = new();
+        PlaywrightException failure = new("selector timed out");
+        IPage page = CreatePage(
+            [],
+            string.Empty,
+            selectorFailure: failure,
+            diagnosticFailure: new PlaywrightException("page detached"));
+        await using PlaywrightBrowserFetcher fetcher = new(logger, () => Task.FromResult(CreatePlaywright(page)));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() => fetcher.GetHtmlAsync(url, CancellationToken.None));
+
+        string warning = Assert.Single(logger.Warnings);
+        Assert.Contains("не вдалося прочитати діагностику сторінки", warning);
+        Assert.Contains("page detached", warning);
     }
 
     [Fact]
@@ -106,6 +147,24 @@ public sealed class PlaywrightBrowserFetcherTests
             () => fetcher.GetHtmlAsync("https://example.test/jobs", cancellation.Token));
 
         Assert.Equal(0, factoryCalls);
+    }
+
+    [Theory]
+    [InlineData("not a url", false)]
+    [InlineData("https://www.work.ua/robots.txt", false)]
+    [InlineData("https://www.work.ua/jobs/?ss=1", true)]
+    [InlineData("https://www.work.ua/jobs/42/", false)]
+    [InlineData("https://work.ua/jobs/?ss=1", false)]
+    [InlineData("https://robota.ua/zapros/ukraine", true)]
+    [InlineData("https://robota.ua/company1/vacancy42", false)]
+    public async Task GetHtmlAsync_WaitsForContentOnlyOnSupportedListingUrls(string url, bool shouldWait)
+    {
+        List<string> calls = [];
+        await using PlaywrightBrowserFetcher fetcher = CreateFetcher(CreatePlaywright(CreatePage(calls, "<html />")));
+
+        await fetcher.GetHtmlAsync(url, CancellationToken.None);
+
+        Assert.Equal(shouldWait, calls.Any(call => call.StartsWith("WaitForSelectorAsync:", StringComparison.Ordinal)));
     }
 
     private static PlaywrightBrowserFetcher CreateFetcher(IPlaywright playwright) =>
@@ -132,7 +191,10 @@ public sealed class PlaywrightBrowserFetcherTests
         List<string> calls,
         string html,
         Exception? navigationFailure = null,
-        Action? onClose = null)
+        Action? onClose = null,
+        Exception? selectorFailure = null,
+        Exception? diagnosticFailure = null,
+        string body = "No vacancy cards")
     {
         IBrowserContext context = PlaywrightTestProxy.Create<IBrowserContext>((name, _) =>
         {
@@ -158,7 +220,9 @@ public sealed class PlaywrightBrowserFetcherTests
                 case "Locator":
                     return PlaywrightTestProxy.Create<ILocator>((locatorName, _) =>
                         locatorName == "InnerTextAsync"
-                            ? Task.FromResult("No vacancy cards")
+                            ? diagnosticFailure is null
+                                ? Task.FromResult(body)
+                                : Task.FromException<string>(diagnosticFailure)
                             : throw new InvalidOperationException($"Unexpected locator call: {locatorName}"));
                 case "GotoAsync":
                     PageGotoOptions options = (PageGotoOptions)args[1]!;
@@ -172,7 +236,9 @@ public sealed class PlaywrightBrowserFetcherTests
                 case "WaitForSelectorAsync":
                     PageWaitForSelectorOptions waitOptions = (PageWaitForSelectorOptions)args[1]!;
                     calls.Add($"{name}:{args[0]}:{waitOptions.State}:{waitOptions.Timeout:0}");
-                    return Task.FromResult<IElementHandle?>(null);
+                    return selectorFailure is null
+                        ? Task.FromResult<IElementHandle?>(null)
+                        : Task.FromException<IElementHandle?>(selectorFailure);
                 case "ContentAsync":
                     return Task.FromResult(html);
                 case "CloseAsync":
@@ -183,6 +249,28 @@ public sealed class PlaywrightBrowserFetcherTests
                     throw new InvalidOperationException($"Unexpected page call: {name}");
             }
         });
+    }
+
+    private sealed class RecordingLogger : ILogger<PlaywrightBrowserFetcher>
+    {
+        public List<string> Warnings { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(
+            LogLevel logLevel,
+            EventId eventId,
+            TState state,
+            Exception? exception,
+            Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == LogLevel.Warning)
+            {
+                Warnings.Add(formatter(state, exception));
+            }
+        }
     }
 }
 
