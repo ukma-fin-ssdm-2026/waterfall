@@ -27,3 +27,7 @@ Clean / Layered Architecture в одному процесі: .NET MAUI кліє�
 
 - [`../high-level-design.md`](../high-level-design.md) §1
 - [`../traceability-matrix.md`](../traceability-matrix.md) FR-001, REL-001/REL-003
+
+## Використання ШІ та внесок
+- **Автор:** Данило
+- **ШІ:** структурування та формулювання рішення (перевірено: самоперевірка автора за §8 Статуту, рев'ю в PR, зведено в [README.md](./README.md))

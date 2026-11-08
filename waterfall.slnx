@@ -16,5 +16,6 @@
     <Project Path="tests/waterfall.Repository.Tests/waterfall.Repository.Tests.csproj" />
     <Project Path="tests/waterfall.Services.Tests/waterfall.Services.Tests.csproj" />
     <Project Path="tests/waterfall.Api.Tests/waterfall.Api.Tests.csproj" />
+    <Project Path="tests/reliability/waterfall.Reliability.Tests.csproj" />
   </Folder>
 </Solution>

@@ -93,4 +93,14 @@ public class GeoControllerTests
         GeoSyncResponseDto response = Assert.IsType<GeoSyncResponseDto>(ok.Value);
         Assert.NotNull(response);
     }
+
+    [Fact]
+    public async Task SyncCache_ReturnsBadRequest_WhenRequestIsNull()
+    {
+        GeoController controller = CreateController();
+
+        ActionResult<GeoSyncResponseDto> result = await controller.SyncCoordinates(null, CancellationToken.None);
+
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
 }

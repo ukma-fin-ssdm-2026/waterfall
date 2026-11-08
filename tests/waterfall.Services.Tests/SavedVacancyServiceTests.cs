@@ -163,4 +163,27 @@ public sealed class SavedVacancyServiceTests
         Assert.False(result);
         Assert.Empty(_cacheService.InvalidateVacancyCalls);
     }
+
+    [Fact]
+    public async Task SaveAsync_ThrowsArgumentNullException_WhenRequestIsNull()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _service.SaveAsync(null!, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public async Task SaveAsync_ThrowsArgumentException_WhenVacancyIdOrUserIdIsEmpty()
+    {
+        SaveVacancyRequest emptyVacancy = new() { VacancyId = Guid.Empty };
+        SaveVacancyRequest validVacancy = new() { VacancyId = Guid.NewGuid() };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.SaveAsync(emptyVacancy, Guid.NewGuid()));
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.SaveAsync(validVacancy, Guid.Empty));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ThrowsArgumentException_WhenIdsAreEmpty()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.DeleteAsync(Guid.Empty, Guid.NewGuid()));
+        await Assert.ThrowsAsync<ArgumentException>(() => _service.DeleteAsync(Guid.NewGuid(), Guid.Empty));
+    }
 }

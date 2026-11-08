@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Primitives;
 using Microsoft.OpenApi;
 using Waterfall.Api.Extensions;
+using Waterfall.Api.Health;
 using Waterfall.Api.Models.Common;
 using Waterfall.Api.Services;
 using Waterfall.Api.Workers;
@@ -119,6 +120,11 @@ builder.Services.AddHttpClient();
 builder.Services.AddHostedService<JobParserService>();
 // Реєструємо BrowserFetcher як Singleton
 builder.Services.AddSingleton<IBrowserFetcher, BrowserFetcher>();
+
+// Реєстрація Health Checks для перевірки критичних залежностей (БД, зовнішній геосервіс) (Lab 9 Bonus)
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database", tags: ["ready", "db"])
+    .AddCheck<PhotonGeocodingHealthCheck>("geocoding_api", tags: ["ready", "external"]);
 
 // 2b. JWT Bearer, auth-сервіси та перевірка секретів (fail-fast, THR-09).
 // Генерація docs (--generate-openapi-and-exit) свідомо пропускає перевірку ключа:
@@ -237,6 +243,16 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();
+
+// Ендпоінти перевірки здоров'я сервісу (Lab 9 Bonus)
+app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    ResponseWriter = HealthCheckResponseWriter.WriteResponse
+});
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false
+});
 
 // 7. Автоматична генерація OpenAPI YAML специфікації у docs/api/openapi-generated.yaml
 OpenApiGenerator.ExportOpenApiYaml(app.Services, app.Environment, app.Logger);

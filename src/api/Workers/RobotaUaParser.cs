@@ -30,8 +30,6 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
 
     public List<RawVacancy> ParseListPage(string html)
     {
-        File.WriteAllText("robota_debug.html", html);
-
         HtmlNode document = Html.Load(html).DocumentNode;
         List<RawVacancy> jobs = ReadStructuredJobs(document).ToList();
         HashSet<string> ids = jobs.Select(job => job.Id).OfType<string>().ToHashSet(StringComparer.Ordinal);

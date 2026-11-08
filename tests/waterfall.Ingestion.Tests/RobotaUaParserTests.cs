@@ -1,4 +1,5 @@
 using Waterfall.Api.Workers;
+using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Vacancies;
 using Xunit;
 

@@ -60,8 +60,14 @@ public class GeoController : ApiControllerBase
     [HttpPost("sync")]
     [SwaggerOperation(Summary = "Синхронізувати геокеш", Description = "Приймає знайдені офлайн координати з клієнта та повертає всі актуальні збережені координати з сервера.", OperationId = "SyncCoordinates")]
     [ProducesResponseType(typeof(GeoSyncResponseDto), StatusCodes.Status200OK)]
-    public async Task<ActionResult<GeoSyncResponseDto>> SyncCoordinates([FromBody] GeoSyncRequestDto request, CancellationToken ct)
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<GeoSyncResponseDto>> SyncCoordinates([FromBody] GeoSyncRequestDto? request, CancellationToken ct)
     {
+        if (request == null || !ModelState.IsValid)
+        {
+            return ErrorBadRequest("Тіло запиту синхронізації геокешу не може бути порожнім або невалідним.");
+        }
+
         GeoSyncResponseDto response = await _geoService.SyncCacheAsync(request, ct);
         return Ok(response);
     }
