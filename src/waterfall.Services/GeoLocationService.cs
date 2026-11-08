@@ -73,11 +73,21 @@ public class GeoLocationService : IGeoLocationService
 
     public async Task<GeoSyncResponseDto> SyncCacheAsync(GeoSyncRequestDto request, CancellationToken ct = default)
     {
-        if (request?.ClientItems != null && request.ClientItems.Count > 0)
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (request.ClientItems != null && request.ClientItems.Count > 0)
         {
-            foreach (var item in request.ClientItems)
+            // Обмежуємо розмір одного пакета для захисту від перевантаження СУБД (REL)
+            IEnumerable<GeoSyncItemDto> batch = request.ClientItems.Take(500);
+
+            foreach (var item in batch)
             {
-                if (!string.IsNullOrWhiteSpace(item.Address))
+                if (item != null &&
+                    !string.IsNullOrWhiteSpace(item.Address) &&
+                    !double.IsNaN(item.Latitude) && !double.IsInfinity(item.Latitude) &&
+                    !double.IsNaN(item.Longitude) && !double.IsInfinity(item.Longitude) &&
+                    item.Latitude >= -90.0 && item.Latitude <= 90.0 &&
+                    item.Longitude >= -180.0 && item.Longitude <= 180.0)
                 {
                     await _cacheRepository.SetCoordinatesAsync(item.Address, item.Latitude, item.Longitude, ct);
                 }
