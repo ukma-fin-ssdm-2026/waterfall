@@ -28,3 +28,7 @@ EF Core репозиторії (§3.4.3); MSSQL на сервері (TDS/TCP), S
 - [`../high-level-design.md`](../high-level-design.md) §3.1/§3.4
 - [`../data-model.md`](../data-model.md) §1–§3
 - [`../traceability-matrix.md`](../traceability-matrix.md) FR-005, SEC-001
+
+## Використання ШІ та внесок
+- **Автор:** Данило
+- **ШІ:** структурування та формулювання рішення (перевірено: самоперевірка автора за §8 Статуту, рев'ю в PR, зведено в [README.md](./README.md))

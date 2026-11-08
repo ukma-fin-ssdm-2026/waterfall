@@ -1,10 +1,3 @@
-# 🛡️ Командний звіт про надійність (Reliability Report)
-**Проєкт**: Waterfall — Career Aggregator Platform  
-**Лабораторна робота 9**: Надійність та "Resilience Scavenger Hunt"  
-**Команда**: Денис Сидоренко, Дмитро, Данило  
-
----
-
 ## 1. 📊 Таблиця всіх знайдених проблем надійності
 
 У ході проведення активності **Resilience Scavenger Hunt** у кодовій базі проєкту було виявлено **8 реальних проблем із надійністю**, які покривають усі категорії ризиків (A–E).
@@ -291,6 +284,7 @@ public static IReadOnlyList<string> ParseSkills(string? json, ILogger? logger = 
   * Клас `tests/reliability/HealthCheckTests.cs` (8 тестів):
     * `DatabaseHealthCheck_ReturnsHealthy_WhenDatabaseConnectionIsAvailable` підтверджує статус `Healthy` (HTTP 200) у нормальному стані.
     * `DatabaseHealthCheck_ReturnsUnhealthy_WhenDatabaseConnectionFails_FaultInjection` ін'єктує збій (пошкоджене/закрите підключення до БД) і доводить, що перевірка повертає статус `Unhealthy` (HTTP 503) із детальним описом збою.
+    * `PhotonGeocodingHealthCheck_ReturnsUnhealthy_WhenPhotonApiFails_FaultInjection` доводить перехід у стан `Unhealthy` при недоступності зовнішнього API.
     * `DatabaseHealthCheck_ReturnsUnhealthy_WhenOperationIsCancelled_ThrowsException` перевіряє поведінку при таймауті/перериванні операції перевірки.
     * `PhotonGeocodingHealthCheck_ReturnsHealthy_WhenPhotonApiIsReachable` підтверджує `Healthy` при доступності геосервісу.
     * `PhotonGeocodingHealthCheck_ReturnsDegraded_WhenRateLimited_429` підтверджує перехід у стан `Degraded` при отриманні коду 429.
@@ -298,3 +292,16 @@ public static IReadOnlyList<string> ParseSkills(string? json, ILogger? logger = 
     * `PhotonGeocodingHealthCheck_ReturnsUnhealthy_WhenPhotonApiFails_FaultInjection` доводить перехід у стан `Unhealthy` при повному обриві мережі (мережевий виняток).
     * `HealthCheckResponseWriter_WritesExpectedJsonStructure_WhenReportProvided` перевіряє коректну серіалізацію структури JSON і статусів у відповідь клієнту.
 
+---
+
+## 6.Використання ШІ та внесок
+
+| Об'єкт | Внесок | ШІ | Як перевірено |
+| :--- | :--- | :--- | :--- |
+| Розділ 1: Зведена таблиця 8 проблем надійності, статус виправлень | Сидоренко Денис | Зведення та форматування таблиці статусів | Звірка з реальними комітами у гілці `practice-lab09` |
+| Розділ 2: Патерни надійності для FIND-01, FIND-05, FIND-06, FIND-07 (До / Після) | Сидоренко Денис | Допомога в оформленні прикладів дифу та патернів стійкості | Звірка з фінальним кодом у `src/api`, `src/waterfall.Services`, `src/waterfall.Repository` |
+| Розділ 3: Режими відмов, сприйняття користувачем та стратегії відновлення (Recovery) | Садиков Константін | Формулювання стратегій відновлення та поведінки системи | Узгодження з HLD, threat-model та специфікацією помилок API |
+| Розділ 4: Аналіз проблем беклогу (FIND-02, FIND-03, FIND-04, FIND-08) та плани | Мельник Дмитро | Структурування технічного боргу та плану міграції на стрімінг | Звірка з поточними обмеженнями навантаження та базою SQLite/MSSQL |
+| Розділ 5 (Бонус): Реалізація Health Checks (`/health`, `/health/live`) та ін'єкція збоїв | Сидоренко Денис | Генерація каркасу перевірок `DatabaseHealthCheck` та `PhotonGeocodingHealthCheck` | Написання 8 тестів у `HealthCheckTests.cs` із симуляцією відмов СУБД та 429/500 геосервісу; прогін тестів |
+| Стійкість парсерів Robota.ua / Work.ua під збоями, headless browser та CI-тести | Саєнко Данило | Оптимізація Playwright-браузера, обробка кодів 401/403 robots.txt | Прогін тестів у CI workflow, перевірка стабільності на Windows та Linux |
+| Контроль злиття гілок, стійкість фонових воркерів та перевірка Quality Gate | Мельник Дмитро | Виправлення конфліктів у `SiteCrawler`, контроль CI конвеєра | Перевірка проходження тестів у GitHub Actions, SonarCloud Quality Gate |

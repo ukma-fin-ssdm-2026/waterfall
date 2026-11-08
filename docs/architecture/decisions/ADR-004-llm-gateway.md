@@ -44,3 +44,7 @@ FR-002 вимагає передати запит шукача роботи до
 - [`../../api/quality-attributes.md`](../../api/quality-attributes.md) — R-2 «Відмова LLM не ламає API»
 - [`ADR-002-ef-core-dual-db.md`](./ADR-002-ef-core-dual-db.md) — та сама конфігураційна модель для інфраструктури
 - [Microsoft.Extensions.AI](https://learn.microsoft.com/dotnet/ai/microsoft-extensions-ai), [OpenAI .NET SDK](https://github.com/openai/openai-dotnet), [Anthropic .NET SDK](https://platform.claude.com/docs/en/cli-sdks-libraries/sdks/csharp)
+
+## Використання ШІ та внесок
+- **Автор:** Данило
+- **ШІ:** структурування та формулювання рішення (перевірено: самоперевірка автора за §8 Статуту, рев'ю в PR, зведено в [README.md](./README.md))
