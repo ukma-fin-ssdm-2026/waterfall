@@ -15,14 +15,14 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
 {
     private const string BaseHost = "https://robota.ua";
     private static readonly TimeSpan RegexTimeout = TimeSpan.FromMilliseconds(200);
-    private static readonly Regex VacancyUrl = new(@"/vacancy(?<id>\d+)(?:/|$)", RegexOptions.IgnoreCase, RegexTimeout);
-
+    // Дозволяємо як /vacancy123, так і /vacancy/123, а також обрізаємо будь-які query-параметри (?, &, #)
+    private static readonly Regex VacancyUrl = new(@"/vacancy/?(?<id>\d+)(?:[/?#]|$)", RegexOptions.IgnoreCase, RegexTimeout);
     public string Name => "robota.ua";
 
     public Uri Home { get; } = new($"{BaseHost}/");
 
     // Публічний список вакансій; Robota.ua додає параметри сторінки через «;», а не «?»
-    private const string ListingUrl = $"{BaseHost}/zapros/ukraine/params;isReservation=true";
+    private const string ListingUrl = $"{BaseHost}/zapros/ukraine";
 
     public string? ListPageUrl(int page) => page > 0
         ? page == 1 ? ListingUrl : $"{ListingUrl};page={page}"
@@ -30,6 +30,8 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
 
     public List<RawVacancy> ParseListPage(string html)
     {
+        File.WriteAllText("robota_debug.html", html);
+
         HtmlNode document = Html.Load(html).DocumentNode;
         List<RawVacancy> jobs = ReadStructuredJobs(document).ToList();
         HashSet<string> ids = jobs.Select(job => job.Id).OfType<string>().ToHashSet(StringComparer.Ordinal);
@@ -37,8 +39,7 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
         foreach (HtmlNode link in document.SelectNodes("//a[@href]") ?? Enumerable.Empty<HtmlNode>())
         {
             string href = WebUtility.HtmlDecode(link.GetAttributeValue("href", string.Empty));
-            // Відносне посилання (/company1/vacancy1) веде на сам robota.ua, тож перевіряємо лише повні адреси.
-            // На Linux Uri.TryCreate(…, UriKind.Absolute) приймає «/company1/vacancy1» за шлях до файлу (file:///…), і такі вакансії губились
+            
             bool sitePath = href.StartsWith('/') && !href.StartsWith("//", StringComparison.Ordinal);
             if (!sitePath
                 && Uri.TryCreate(href, UriKind.Absolute, out Uri? absolute)
@@ -55,17 +56,27 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
                 continue;
             }
 
-            string title = Html.Clean(link.SelectSingleNode(".//h2") ?? link);
+            // Шукаємо заголовок: або всередині лінка (h2, span), або атрибут title, або текст самого лінка
+            string title = Html.Clean(link.SelectSingleNode(".//h2 | .//h3 | .//span[contains(@class, 'title')]") ?? link);
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                title = link.GetAttributeValue("title", string.Empty).Trim();
+            }
+
+            // Якщо лінк виявився кнопкою без тексту — пропускаємо
             if (title.Length == 0)
             {
                 continue;
             }
 
+            // Забираємо чистий URL без сміття від трекерів (?searchId=...)
+            string cleanHref = href.Split('?')[0].Split('#')[0];
+
             jobs.Add(new RawVacancy
             {
                 Source = JobSource.RobotaUa,
                 Id = match.Groups["id"].Value,
-                Url = AbsoluteUrl(href),
+                Url = AbsoluteUrl(cleanHref),
                 Title = title
             });
         }
@@ -76,10 +87,29 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
     public RawVacancy ParseJobPage(string html)
     {
         HtmlNode document = Html.Load(html).DocumentNode;
-        return ReadStructuredJobs(document).FirstOrDefault() ?? new RawVacancy
+
+        // 1. Пробуємо structured data (якщо є)
+        RawVacancy? structured = ReadStructuredJobs(document).FirstOrDefault();
+        if (structured != null && !string.IsNullOrWhiteSpace(structured.DescriptionHtml))
         {
-            Title = Html.Text(document, "//h1"),
-            DescriptionHtml = document.SelectSingleNode("//*[@itemprop='description']")?.InnerHtml
+            return structured;
+        }
+
+        // 2. Шукаємо контейнер опису за актуальними селекторами Robota.ua
+        HtmlNode? descNode = document.SelectSingleNode("//*[@itemprop='description']")
+            ?? document.SelectSingleNode("//alliance-vacancy-description")
+            ?? document.SelectSingleNode("//*[contains(@class, 'vacancy-description') or contains(@class, 'card-description')]")
+            ?? document.SelectSingleNode("//main//*[contains(@class, 'description')]")
+            ?? document.SelectSingleNode("//main//div[contains(@class, 'santa-typo')]")
+            ?? document.SelectSingleNode("//main");
+
+        string? title = Html.Text(document, "//h1");
+        string? desc = descNode?.InnerHtml?.Trim();
+
+        return new RawVacancy
+        {
+            Title = !string.IsNullOrWhiteSpace(title) ? title : null,
+            DescriptionHtml = !string.IsNullOrWhiteSpace(desc) ? desc : "Опис вакансії на сайті robota.ua"
         };
     }
 
