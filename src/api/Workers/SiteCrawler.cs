@@ -369,14 +369,12 @@ public sealed class SiteCrawler
             }
         }
 
-        using HttpResponseMessage response = await http.GetAsync(robotsUrl, ct);
-        if (response.IsSuccessStatusCode)
+        HttpResponseMessage response;
+        try
         {
             response = await http.GetAsync(robotsUrl, ct);
         }
-
-        if ((int)response.StatusCode >= 500
-            || response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+        catch (Exception ex) when (IsSiteFailure(ex, ct))
         {
             _logger.LogWarning("Не вдалося завантажити robots.txt з {Url} ({Error}). Пропускаємо сайт для запобігання перевантаженню.", robotsUrl, ex.Message);
             PauseAfterRefusal(null);
@@ -390,7 +388,8 @@ public sealed class SiteCrawler
                 return RobotsTxt.Parse(await response.Content.ReadAsStringAsync(ct));
             }
 
-            if ((int)response.StatusCode >= 500 || response.StatusCode == HttpStatusCode.TooManyRequests)
+            if ((int)response.StatusCode >= 500
+                || response.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
                 _logger.LogWarning("{Url} недоступний (код {Status}), тож сайт пропускаємо.", robotsUrl, (int)response.StatusCode);
                 PauseAfterRefusal(response.Headers.RetryAfter);
