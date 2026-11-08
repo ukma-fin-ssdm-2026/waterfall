@@ -30,3 +30,5 @@ coverage/
 *.db-wal
 /TestResults
 /src/waterfall.UI/.vs/ProjectEvaluation
+
+*.db-*.old

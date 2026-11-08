@@ -116,8 +116,10 @@ builder.Services.AddOptions<IngestionOptions>().Bind(builder.Configuration.GetSe
 builder.Services.AddSingleton<IValidateOptions<IngestionOptions>, IngestionOptionsValidator>();
 builder.Services.AddHttpClient();
 // Work.ua і Robota.ua стоять за Cloudflare й рендерять список у браузері, тож їх обходимо через Playwright
-builder.Services.AddSingleton<IBrowserFetcher, PlaywrightBrowserFetcher>();
+// builder.Services.AddSingleton<IBrowserFetcher, PlaywrightBrowserFetcher>();
 builder.Services.AddHostedService<JobParserService>();
+// Реєструємо BrowserFetcher як Singleton
+builder.Services.AddSingleton<IBrowserFetcher, BrowserFetcher>();
 
 // Реєстрація Health Checks для перевірки критичних залежностей (БД, зовнішній геосервіс) (Lab 9 Bonus)
 builder.Services.AddHealthChecks()

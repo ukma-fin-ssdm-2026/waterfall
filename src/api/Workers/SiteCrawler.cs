@@ -356,17 +356,23 @@ public sealed class SiteCrawler
         Uri robotsUrl = new(_site.Home, "/robots.txt");
 
         // Сайт за Cloudflare пускає до robots.txt лише браузер, тож і його читаємо браузером
-        if (_browserFetcher is not null && _site is IBrowserOnlySite)
+        if (_site is IBrowserOnlySite)
         {
-            try
+            if (_browserFetcher is not null)
             {
-                return RobotsTxt.Parse(await _browserFetcher.GetHtmlAsync(robotsUrl.ToString(), ct));
+                try
+                {
+                    string rawContent = await _browserFetcher.GetPageAsync(robotsUrl.ToString(), ct);
+                    return RobotsTxt.Parse(ExtractPlainText(rawContent));
+                }
+                catch (Exception ex) when (IsSiteFailure(ex, ct))
+                {
+                    _logger.LogWarning("{Url} недоступний у браузері ({Error}), тож сайт пропускаємо.", robotsUrl, ex.Message);
+                    return null;
+                }
             }
-            catch (Exception ex) when (IsSiteFailure(ex, ct))
-            {
-                _logger.LogWarning("{Url} недоступний у браузері ({Error}), тож сайт пропускаємо.", robotsUrl, ex.Message);
-                return null;
-            }
+
+            _logger.LogWarning("{Site} вимагає браузера для читання robots.txt, але IBrowserFetcher відсутній; пробуємо HTTP-запит.", _site.Name);
         }
 
         HttpResponseMessage response;
@@ -407,9 +413,14 @@ public sealed class SiteCrawler
 
         // Сайти за Cloudflare чи з клієнтським рендером обходимо справжнім браузером: звичайний запит ботом
         // вони не пускають (403) або віддають порожню оболонку без вакансій.
-        if (_browserFetcher is not null && _site is IBrowserOnlySite)
+        if (_site is IBrowserOnlySite)
         {
-            return await _browserFetcher.GetHtmlAsync(url, ct);
+            if (_browserFetcher is not null)
+            {
+                return await _browserFetcher.GetPageAsync(url, ct);
+            }
+
+            _logger.LogWarning("{Site} вимагає справжнього браузера (IBrowserOnlySite), але IBrowserFetcher не налаштовано; пробуємо прямий HTTP-запит.", _site.Name);
         }
 
         using HttpResponseMessage response = await http.GetAsync(url, ct);
@@ -442,9 +453,40 @@ public sealed class SiteCrawler
         && uri.Host == _site.Home.Host
         && robots.IsAllowed(uri.PathAndQuery);
 
-    // Збій мережі, код 4xx/5xx або тайм-аут запиту (TaskCanceledException без скасування ct)
+    /// <summary>
+    /// Перевіряє, чи є помилка збоєм сайту/мережі (мережевий запит, HTTP 4xx/5xx, таймаут або збій рушія браузера).
+    /// </summary>
     private static bool IsSiteFailure(Exception ex, CancellationToken ct) =>
-        ex is HttpRequestException || (ex is TaskCanceledException && !ct.IsCancellationRequested);
+        ex is HttpRequestException
+        || ex is TimeoutException
+        || ex.GetType().Namespace?.StartsWith("PuppeteerSharp", StringComparison.Ordinal) == true
+        || (ex is TaskCanceledException && !ct.IsCancellationRequested);
+
+    /// <summary>
+    /// Chromium автоматично огортає чистий текст (text/plain) сторінки robots.txt у розмітку HTML:
+    /// &lt;html&gt;&lt;body&gt;&lt;pre&gt;...&lt;/pre&gt;&lt;/body&gt;&lt;/html&gt;. Цей метод дістає чистий текст для парсера.
+    /// </summary>
+    private static string ExtractPlainText(string content)
+    {
+        if (string.IsNullOrWhiteSpace(content)) return string.Empty;
+
+        int preStart = content.IndexOf("<pre", StringComparison.OrdinalIgnoreCase);
+        if (preStart >= 0)
+        {
+            int contentStart = content.IndexOf('>', preStart);
+            if (contentStart >= 0)
+            {
+                contentStart++;
+                int preEnd = content.IndexOf("</pre>", contentStart, StringComparison.OrdinalIgnoreCase);
+                if (preEnd > contentStart)
+                {
+                    return WebUtility.HtmlDecode(content[contentStart..preEnd]);
+                }
+            }
+        }
+
+        return content;
+    }
 
     /// <summary>Сайт прямо відмовив (403, 429, 503) — на відміну від випадкового збою, це привід зробити паузу.</summary>
     private sealed class SiteRefusedException(HttpResponseMessage response)
