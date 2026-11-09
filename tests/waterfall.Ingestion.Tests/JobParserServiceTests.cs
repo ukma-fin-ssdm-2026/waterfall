@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting.Internal;
 using Microsoft.Extensions.Logging;
@@ -96,6 +97,78 @@ public sealed class JobParserServiceTests : IDisposable
         Assert.Empty(_ingestion.Received);
         Assert.Empty(_web.Urls);
         Assert.Contains(_logger.Entries, e => e.Message.Contains("вимкнено"));
+    }
+
+    [Fact]
+    public async Task DisabledParser_StartsWhenEnabledWithoutRestart()
+    {
+        File.WriteAllText(Path.Combine(_directory, "dump.json"), ValidDump);
+        IConfigurationRoot settings = Settings("false");
+        JobParserService parser = CreateParser(_directory, enabled: false, configuration: settings);
+
+        await parser.StartAsync(CancellationToken.None);
+        await _logger.WaitForMessageAsync("вимкнено");
+        Assert.Empty(_ingestion.Received);
+
+        // Так само, як збереження appsettings.json вручну чи з екрана «Системні налаштування»
+        settings["Ingestion:Enabled"] = "true";
+        settings.Reload();
+        await _ingestion.WaitForCallsAsync(1);
+        await parser.StopAsync(CancellationToken.None);
+
+        Assert.Contains(_logger.Entries, e => e.Message.Contains("увімкнено без перезапуску"));
+        Assert.True(parser.ExecuteTask?.IsCompletedSuccessfully);
+    }
+
+    [Fact]
+    public async Task EnabledParser_StopsCollectingWhenDisabledWithoutRestart()
+    {
+        File.WriteAllText(Path.Combine(_directory, "dump.json"), ValidDump);
+        IConfigurationRoot settings = Settings("true");
+        JobParserService parser = CreateParser(_directory, interval: TimeSpan.FromMilliseconds(50), configuration: settings);
+
+        await parser.StartAsync(CancellationToken.None);
+        await _ingestion.WaitForCallsAsync(1);
+        settings["Ingestion:Enabled"] = "false";
+        settings.Reload();
+        await _logger.WaitForMessageAsync("вимкнено без перезапуску");
+        int callsWhenDisabled = _ingestion.Received.Count;
+
+        // Увімкнений збір за цей час пройшов би ще кілька разів (інтервал 50 мс); вимкнений — щонайбільше доходить поточний
+        await Task.Delay(TimeSpan.FromMilliseconds(400));
+        await parser.StopAsync(CancellationToken.None);
+
+        Assert.InRange(_ingestion.Received.Count, callsWhenDisabled, callsWhenDisabled + 1);
+    }
+
+    [Fact]
+    public async Task EnableOnStart_CollectsAlthoughSettingsFileSaysDisabled()
+    {
+        File.WriteAllText(Path.Combine(_directory, "dump.json"), ValidDump);
+        JobParserService parser = CreateParser(_directory, enabled: false, enableOnStart: true, configuration: Settings("false"));
+
+        await parser.StartAsync(CancellationToken.None);
+        await _ingestion.WaitForCallsAsync(1);
+        await parser.StopAsync(CancellationToken.None);
+
+        Assert.Single(_ingestion.Received);
+    }
+
+    [Fact]
+    public async Task UnreadableEnabledValue_KeepsParserAsItWas()
+    {
+        File.WriteAllText(Path.Combine(_directory, "dump.json"), ValidDump);
+        IConfigurationRoot settings = Settings("false");
+        JobParserService parser = CreateParser(_directory, enabled: false, configuration: settings);
+
+        await parser.StartAsync(CancellationToken.None);
+        settings["Ingestion:Enabled"] = "так";
+        settings.Reload();
+        await _logger.WaitForWarningAsync();
+        await parser.StopAsync(CancellationToken.None);
+
+        Assert.Empty(_ingestion.Received);
+        Assert.Contains(_logger.Entries, e => e.Level == LogLevel.Warning && e.Message.Contains("true або false"));
     }
 
     [Fact]
@@ -593,7 +666,12 @@ public sealed class JobParserServiceTests : IDisposable
         Assert.Equal("1", Assert.Single(await crawler.CrawlAsync(CancellationToken.None)).Id);
     }
 
-    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0, int workUaPages = 0, int robotaUaPages = 0, int douPages = 0, IBrowserFetcher? browserFetcher = null)
+    // Налаштування, які тест змінює під час роботи служби, як файл appsettings.json
+    private static IConfigurationRoot Settings(string enabled) => new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?> { ["Ingestion:Enabled"] = enabled })
+        .Build();
+
+    private JobParserService CreateParser(string? directory, bool enabled = true, TimeSpan? interval = null, int djinniPages = 0, int workUaPages = 0, int robotaUaPages = 0, int douPages = 0, IBrowserFetcher? browserFetcher = null, bool enableOnStart = false, IConfiguration? configuration = null)
     {
         ServiceProvider services = new ServiceCollection()
             .AddScoped<IVacancyIngestionService>(_ => _ingestion)
@@ -602,6 +680,7 @@ public sealed class JobParserServiceTests : IDisposable
         IngestionOptions options = new()
         {
             Enabled = enabled,
+            EnableOnStart = enableOnStart,
             RawDataDirectory = directory,
             Interval = interval ?? TimeSpan.FromHours(1),
             DjinniPages = djinniPages,
@@ -617,7 +696,8 @@ public sealed class JobParserServiceTests : IDisposable
             Options.Create(options),
             new HostingEnvironment { ContentRootPath = _directory },
             _logger,
-            browserFetcher);
+            browserFetcher,
+            configuration);
     }
 
     /// <summary>
@@ -789,5 +869,14 @@ public sealed class JobParserServiceTests : IDisposable
         }
 
         public Task WaitForWarningAsync() => _logged.Task.WaitAsync(WaitLimit);
+
+        public async Task WaitForMessageAsync(string fragment)
+        {
+            using CancellationTokenSource limit = new(WaitLimit);
+            while (!Entries.Any(entry => entry.Message.Contains(fragment, StringComparison.Ordinal)))
+            {
+                await Task.Delay(10, limit.Token);
+            }
+        }
     }
 }

@@ -1,8 +1,9 @@
-// AI: фоновий збір вакансій з djinni.co, work.ua та JSON-дампів (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API проти справжніх djinni.co і work.ua, самоперевірка автора (§8)
+// AI: фоновий збір вакансій з djinni.co, work.ua та JSON-дампів (issue #62), увімкнення й вимкнення без перезапуску API; перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API проти справжніх djinni.co і work.ua, ручне перемикання Ingestion:Enabled у файлі на запущеному API, самоперевірка автора (§8)
 
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Primitives;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Vacancies;
 
@@ -13,9 +14,12 @@ namespace Waterfall.Api.Workers;
 /// (а якщо задано каталог — ще й JSON-дампи) та передає їх на нормалізацію й збереження
 /// (<see cref="IVacancyIngestionService.ProcessRawVacanciesAsync"/>).
 /// Збій сайту чи одного файлу записується в журнал і не зупиняє ні інші джерела, ні API.
+/// Збір вмикається й вимикається без перезапуску API: служба стежить за Ingestion:Enabled в appsettings.json.
 /// </summary>
 public class JobParserService : BackgroundService
 {
+    private const string EnabledKey = "Ingestion:Enabled";
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly IServiceScopeFactory _scopeFactory;
@@ -23,6 +27,12 @@ public class JobParserService : BackgroundService
     private readonly string? _directory;
     private readonly ILogger<JobParserService> _logger;
     private readonly List<SiteCrawler> _sites;
+    private readonly IConfiguration? _configuration;
+    private readonly IDisposable? _settingsWatch;
+
+    // Будить службу, коли Enabled змінився: вона чекає або на ввімкнення, або на наступний збір
+    private readonly SemaphoreSlim _settingsChanged = new(0, 1);
+    private volatile bool _enabled;
 
     public JobParserService(
         IServiceScopeFactory scopeFactory,
@@ -30,11 +40,21 @@ public class JobParserService : BackgroundService
         IOptions<IngestionOptions> options,
         IHostEnvironment environment,
         ILogger<JobParserService> logger,
-        IBrowserFetcher? browserFetcher = null)
+        IBrowserFetcher? browserFetcher = null,
+        IConfiguration? configuration = null)
     {
         _scopeFactory = scopeFactory;
         _options = options.Value;
         _logger = logger;
+        _configuration = configuration;
+        _enabled = _options.Enabled || _options.EnableOnStart;
+
+        // Без конфігурації (як у частині тестів) стан задається лише на старті
+        if (configuration is not null)
+        {
+            _settingsWatch = ChangeToken.OnChange(configuration.GetReloadToken, ReadEnabledSetting);
+        }
+
         _sites =
         [
             new SiteCrawler(new DjinniParser(), _options.DjinniPages, _options.RequestDelay, httpClientFactory, logger),
@@ -51,7 +71,7 @@ public class JobParserService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_options.Enabled)
+        if (!_enabled && _configuration is null)
         {
             _logger.LogInformation("Фоновий збір вакансій вимкнено (Ingestion:Enabled = false).");
             return;
@@ -61,24 +81,94 @@ public class JobParserService : BackgroundService
             "Фоновий збір вакансій: djinni.co — {DjinniPages} стор., work.ua — {WorkUaPages} стор., robota.ua — {RobotaUaPages} стор., jobs.dou.ua — {DouPages} стор., каталог з дампами — {Directory}, інтервал {Interval}.",
             _options.DjinniPages, _options.WorkUaPages, _options.RobotaUaPages, _options.DouPages, _directory ?? "вимкнено", _options.Interval);
 
-        using PeriodicTimer timer = new(_options.Interval);
         try
         {
-            do
+            while (true)
             {
-                // Сайти обходимо по черзі: так до кожного йде не більше одного запиту за раз
-                foreach (SiteCrawler site in _sites.Where(site => site.Enabled))
+                if (!_enabled)
                 {
-                    await IngestAsync(site.Name, () => site.CrawlAsync(stoppingToken), stoppingToken);
+                    _logger.LogInformation("Фоновий збір вакансій вимкнено (Ingestion:Enabled = false). Щоб увімкнути без перезапуску, поставте true в appsettings.json.");
+                    while (!_enabled)
+                    {
+                        await _settingsChanged.WaitAsync(Timeout.InfiniteTimeSpan, stoppingToken);
+                    }
                 }
 
-                await ParseAllFilesAsync(stoppingToken);
+                await CollectOnceAsync(stoppingToken);
+
+                // Наступний збір — через Interval або одразу після вимкнення, щоб не чекати його до кінця
+                await _settingsChanged.WaitAsync(_options.Interval, stoppingToken);
             }
-            while (await timer.WaitForNextTickAsync(stoppingToken));
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
             // Штатна зупинка застосунку
+        }
+    }
+
+    public override void Dispose()
+    {
+        _settingsWatch?.Dispose();
+        _settingsChanged.Dispose();
+        base.Dispose();
+        GC.SuppressFinalize(this);
+    }
+
+    private async Task CollectOnceAsync(CancellationToken ct)
+    {
+        // Сайти обходимо по черзі: так до кожного йде не більше одного запиту за раз.
+        // Вимкнений посеред збору — до решти сайтів і дампів уже не йдемо
+        foreach (SiteCrawler site in _sites.Where(site => site.Enabled))
+        {
+            if (!_enabled)
+            {
+                return;
+            }
+
+            await IngestAsync(site.Name, () => site.CrawlAsync(ct), ct);
+        }
+
+        if (_enabled)
+        {
+            await ParseAllFilesAsync(ct);
+        }
+    }
+
+    /// <summary>
+    /// appsettings.json збережено (вручну чи з екрана «Системні налаштування»): беремо з нього Enabled без перезапуску API.
+    /// Решта параметрів збору (сторінки, інтервал, пауза) діє з наступного запуску.
+    /// </summary>
+    private void ReadEnabledSetting()
+    {
+        bool enabled;
+        try
+        {
+            enabled = _configuration!.GetValue<bool>(EnabledKey);
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogWarning("Ingestion:Enabled має бути true або false ({Error}), тож фоновий збір лишається як був.", ex.Message);
+            return;
+        }
+
+        // Файл зберігають і з інших причин, а подія про зміну іноді приходить двічі: реагуємо лише на справжню зміну
+        if (enabled == _enabled)
+        {
+            return;
+        }
+
+        _enabled = enabled;
+        _logger.LogInformation(enabled
+            ? "Фоновий збір вакансій увімкнено без перезапуску API (Ingestion:Enabled = true)."
+            : "Фоновий збір вакансій вимкнено без перезапуску API (Ingestion:Enabled = false).");
+
+        try
+        {
+            _settingsChanged.Release();
+        }
+        catch (Exception ex) when (ex is SemaphoreFullException or ObjectDisposedException)
+        {
+            // Служба вже розбуджена або зупиняється
         }
     }
 
@@ -144,7 +234,15 @@ public class JobParserService : BackgroundService
 /// <summary>Налаштування із секції Ingestion в appsettings.json.</summary>
 public class IngestionOptions
 {
+    /// <summary>Чи збирати вакансії. За замовчуванням ні; зміна в appsettings.json діє без перезапуску API.</summary>
     public bool Enabled { get; set; }
+
+    /// <summary>
+    /// Увімкнути збір на старті, не змінюючи appsettings.json: <c>dotnet run --project src/api -- --Ingestion:EnableOnStart=true</c>.
+    /// Під час роботи збір і далі вмикає та вимикає <see cref="Enabled"/>.
+    /// </summary>
+    public bool EnableOnStart { get; set; }
+
     public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(30);
 
     /// <summary>
