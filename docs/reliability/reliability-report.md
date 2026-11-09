@@ -254,6 +254,17 @@ public static IReadOnlyList<string> ParseSkills(string? json, ILogger? logger = 
 
 ## 5. 🏆 Бонуси (+0,25 бала)
 
+### Бонус: Тести надійності як обов'язкова перевірка PR
+* **Що зроблено**:
+  * Тести надійності додано окремим кроком до `test` job у воркфлоу `CI`:
+```yml
+      - name: Reliability tests
+        run: dotnet test tests/reliability/waterfall.Reliability.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Reliability
+```
+  * `test` додана як обов'язкова перевірка у branch ruleset.
+
+* Прогін в якому доданий крок пройшов: https://github.com/ukma-fin-ssdm-2026/waterfall/actions/runs/42507166594/job/128812180756
+
 ### Бонус: Перевірка здоров'я (Health Checks) сервісу з ін'єкцією збою (§3.4) — +0,25 бала
 * **Що зроблено**:
   * Створено ендпоінти перевірки здоров'я: `/health` (готовність до обробки трафіку, readiness) та `/health/live` (працездатність процесу, liveness).

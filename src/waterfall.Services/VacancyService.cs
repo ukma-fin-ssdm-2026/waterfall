@@ -129,6 +129,7 @@ public class VacancyService : IVacancyService
         VacancyDB? entity = await _vacancyRepository.GetByIdAsync(id, ct);
         if (entity == null)
         {
+            _logger.LogWarning("Вакансію з Id {VacancyId} не знайдено в базі даних", id);
             return null;
         }
 
@@ -186,6 +187,7 @@ public class VacancyService : IVacancyService
         VacancyDB? entity = await _vacancyRepository.GetByIdAsync(id, ct);
         if (entity == null)
         {
+            _logger.LogWarning("Спроба оновити неіснуючу вакансію з Id {VacancyId}", id);
             return null;
         }
 
@@ -215,6 +217,7 @@ public class VacancyService : IVacancyService
         VacancyDB? updated = await _vacancyRepository.UpdateAsync(entity, ct);
         if (updated == null)
         {
+            _logger.LogWarning("Не вдалося оновити вакансію з Id {VacancyId}: запис зник між читанням та записом (можлива гонка)", id);
             return null;
         }
 

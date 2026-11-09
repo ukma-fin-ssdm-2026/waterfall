@@ -66,6 +66,9 @@ jobs:
 
       - name: Api tests
         run: dotnet test tests/waterfall.Api.Tests/waterfall.Api.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Api
+        
+      - name: Reliability tests
+        run: dotnet test tests/reliability/waterfall.Reliability.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Reliability
 
       - name: Restore tools & Generate coverage report
         run: |
@@ -111,3 +114,4 @@ jobs:
           else:
               print(f'✅ Code coverage gate PASSED: {coverage}% >= {threshold}%!')
           "
+
