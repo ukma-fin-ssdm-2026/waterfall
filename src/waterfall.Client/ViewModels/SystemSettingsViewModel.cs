@@ -26,8 +26,14 @@ public partial class SystemSettingsViewModel : ObservableObject
         ["04:00:00"] = "4 години (04:00:00)",
         ["06:00:00"] = "6 годин (06:00:00)",
         ["12:00:00"] = "12 годин (12:00:00)",
-        ["24:00:00"] = "24 години (24:00:00)"
+        // Добу TimeSpan записує як «1.00:00:00»: «24:00:00» .NET читає як 24 дні
+        [OneDayInterval] = "24 години (1.00:00:00)"
     };
+
+    private const string OneDayInterval = "1.00:00:00";
+
+    // Так «24 години» записували раніше; сервер читав це як 24 дні
+    private const string LegacyOneDayInterval = "24:00:00";
 
     private readonly string? _settingsFilePath;
     private string? _loadedFilePath;
@@ -141,6 +147,12 @@ public partial class SystemSettingsViewModel : ObservableObject
         SelectedInterval = !string.IsNullOrWhiteSpace(settings.Interval)
             ? settings.Interval
             : "00:30:00";
+
+        // Файл, збережений до виправлення, показуємо як добу, і наступне збереження запише вже правильне значення
+        if (SelectedInterval == LegacyOneDayInterval)
+        {
+            SelectedInterval = OneDayInterval;
+        }
 
         if (IntervalMapping.TryGetValue(SelectedInterval, out string? display))
         {
@@ -321,7 +333,7 @@ public partial class SystemSettingsViewModel : ObservableObject
             "04:00:00" => "4 год",
             "06:00:00" => "6 год",
             "12:00:00" => "12 год",
-            "24:00:00" => "24 год",
+            OneDayInterval => "24 год",
             _ => interval
         };
     }
