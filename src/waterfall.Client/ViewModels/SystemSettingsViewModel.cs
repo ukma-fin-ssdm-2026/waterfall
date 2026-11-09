@@ -124,7 +124,7 @@ public partial class SystemSettingsViewModel : ObservableObject
 
     /// <summary>
     /// Завантажує налаштування із секції Ingestion у appsettings.json.
-    /// За вимогою, фоновий парсинг за замовчуванням встановлюється у false.
+    /// Перемикач показує справжній стан Ingestion:Enabled з файлу; без файлу чи поля — вимкнено, як і на сервері.
     /// </summary>
     public void LoadSettingsFromIngestionService()
     {
@@ -135,7 +135,8 @@ public partial class SystemSettingsViewModel : ObservableObject
             ? settings.FilePath
             : "src/api/appsettings.json (значення за замовчуванням)";
 
-        IsBackgroundParsingEnabled = false;
+        // Раніше тут завжди був false: екран показував «Вимкнено», навіть коли збір ішов, а «Зберегти» його вимикало
+        IsBackgroundParsingEnabled = settings.FileEnabled;
 
         SelectedInterval = !string.IsNullOrWhiteSpace(settings.Interval)
             ? settings.Interval
@@ -198,7 +199,8 @@ public partial class SystemSettingsViewModel : ObservableObject
                     ingestionObj["Interval"] = SelectedInterval;
 
                     File.WriteAllText(_loadedFilePath, rootObj.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-                    StatusMessage = $"✓ Налаштування успішно збережено у {_loadedFilePath}";
+                    // Сервер перечитує Enabled одразу після збереження файлу, а інтервал — лише після перезапуску API
+                    StatusMessage = $"✓ Налаштування збережено у {_loadedFilePath}. Фоновий збір перемкнеться за кілька секунд, новий інтервал діятиме після перезапуску API.";
                     IsSuccessStatus = true;
                     return;
                 }
@@ -262,8 +264,8 @@ public partial class SystemSettingsViewModel : ObservableObject
             }
         }
 
-        // Значення за замовчуванням з секції Ingestion
-        return new IngestionSettingsModel(resolvedPath, true, "00:30:00", 3, 3, 1, 1, "00:00:02", string.Empty);
+        // Значення за замовчуванням з секції Ingestion; збір без налаштувань вимкнений, як і на сервері
+        return new IngestionSettingsModel(resolvedPath, false, "00:30:00", 3, 3, 1, 1, "00:00:02", string.Empty);
     }
 
     private static string? LocateAppSettingsFile()

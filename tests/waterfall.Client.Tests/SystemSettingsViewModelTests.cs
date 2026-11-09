@@ -123,5 +123,46 @@ public class SystemSettingsViewModelTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void LoadedSettings_ShowEnabledParsingFromFile_AndSavingKeepsItEnabled()
+    {
+        // Arrange: збір на сервері ввімкнений
+        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, """{ "Ingestion": { "Enabled": true, "Interval": "00:30:00" } }""");
+        try
+        {
+            SystemSettingsViewModel vm = new(path);
+
+            // Assert: екран показує справжній стан, а не завжди «Вимкнено»
+            Assert.True(vm.IsBackgroundParsingEnabled);
+            Assert.Equal("Увімкнено", vm.StatusLabelText);
+
+            // Act: зберегли інший параметр — збір не має вимкнутися
+            vm.SelectedIntervalDisplay = "1 година (01:00:00)";
+            vm.SaveSettingsCommand.Execute(null);
+
+            using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(path));
+            Assert.True(saved.RootElement.GetProperty("Ingestion").GetProperty("Enabled").GetBoolean());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void MissingSettingsFile_ShowsParsingDisabled()
+    {
+        // Arrange: файлу налаштувань немає (застосунок не на тому комп'ютері, що API)
+        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
+
+        // Act
+        SystemSettingsViewModel vm = new(path);
+
+        // Assert: як і сервер без налаштувань, збір вимкнений
+        Assert.False(vm.IsBackgroundParsingEnabled);
+        Assert.Equal("Вимкнено", vm.StatusLabelText);
+    }
 }
 
