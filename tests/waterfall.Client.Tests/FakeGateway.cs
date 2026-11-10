@@ -7,6 +7,7 @@ using Waterfall.Client.Models.Ai;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SavedVacancies;
+using Waterfall.Client.Models.SiteSearch;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Tests;
@@ -95,6 +96,32 @@ internal sealed class FakeGateway : IHttpGatewayService
     }
 
     public Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+
+    /// <summary>Запити пошуку на сайтах, що надіслав каталог.</summary>
+    public List<SiteSearchRequest> SiteSearchRequests { get; } = [];
+
+    /// <summary>Відповіді на запуск і наступні опитування пошуку на сайті — по черзі; остання повторюється.</summary>
+    public Queue<SiteSearchStatusDto> SiteSearchStatuses { get; } = new();
+
+    /// <summary>Виняток замість запуску пошуку на сайті (наприклад, 401 чи 429).</summary>
+    public Exception? SiteSearchError { get; set; }
+
+    public int SiteSearchPolls { get; private set; }
+
+    public Task<SiteSearchStatusDto> StartSiteSearchAsync(SiteSearchRequest request, CancellationToken ct = default)
+    {
+        SiteSearchRequests.Add(request);
+        return SiteSearchError is null ? Task.FromResult(NextSiteSearchStatus()) : Task.FromException<SiteSearchStatusDto>(SiteSearchError);
+    }
+
+    public Task<SiteSearchStatusDto> GetSiteSearchAsync(Guid id, CancellationToken ct = default)
+    {
+        SiteSearchPolls++;
+        return Task.FromResult(NextSiteSearchStatus());
+    }
+
+    private SiteSearchStatusDto NextSiteSearchStatus() =>
+        SiteSearchStatuses.Count > 1 ? SiteSearchStatuses.Dequeue() : SiteSearchStatuses.Peek();
     /// <summary>
     /// Відповідь на GetSavedVacanciesAsync: список або виняток.
     /// </summary>

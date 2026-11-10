@@ -4,6 +4,7 @@ using Waterfall.Client.Models.Ai;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SavedVacancies;
+using Waterfall.Client.Models.SiteSearch;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Interfaces;
@@ -19,6 +20,12 @@ public interface IHttpGatewayService
     Task<PagedResult<VacancyDto>> GetVacanciesAsync(string? search, int page, int pageSize, CancellationToken ct = default);
 
     Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Запускає пошук на сайті за фільтрами (POST /api/v1/site-searches); потрібен вхід.</summary>
+    Task<SiteSearchStatusDto> StartSiteSearchAsync(SiteSearchRequest request, CancellationToken ct = default);
+
+    /// <summary>Стан пошуку на сайті: прогрес, а коли завершено — знайдені вакансії.</summary>
+    Task<SiteSearchStatusDto> GetSiteSearchAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<SavedVacancyDto>> GetSavedVacanciesAsync(CancellationToken ct = default);
 

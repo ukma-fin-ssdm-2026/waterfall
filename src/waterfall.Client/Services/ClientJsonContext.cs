@@ -8,6 +8,7 @@ using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Geo;
 using Waterfall.Client.Models.Profile;
 using Waterfall.Client.Models.SavedVacancies;
+using Waterfall.Client.Models.SiteSearch;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Services;
@@ -21,6 +22,8 @@ namespace Waterfall.Client.Services;
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web, Converters = [typeof(JsonStringEnumConverter)])]
 [JsonSerializable(typeof(PagedResult<VacancyDto>))]
 [JsonSerializable(typeof(VacancyDto))]
+[JsonSerializable(typeof(SiteSearchRequest))]
+[JsonSerializable(typeof(SiteSearchStatusDto))]
 [JsonSerializable(typeof(List<SavedVacancyDto>))]
 [JsonSerializable(typeof(SavedVacancyDto))]
 [JsonSerializable(typeof(SaveVacancyRequest))]

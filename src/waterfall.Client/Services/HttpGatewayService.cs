@@ -15,6 +15,7 @@ using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Geo;
 using Waterfall.Client.Models.Profile;
 using Waterfall.Client.Models.SavedVacancies;
+using Waterfall.Client.Models.SiteSearch;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Services;
@@ -50,6 +51,12 @@ public sealed class HttpGatewayService : IHttpGatewayService
 
     public Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default) =>
         SendAsync(new HttpRequestMessage(HttpMethod.Get, $"api/v1/vacancies/{id}"), Json.VacancyDto, ct);
+
+    public Task<SiteSearchStatusDto> StartSiteSearchAsync(SiteSearchRequest request, CancellationToken ct = default) =>
+        SendAsync(Post("api/v1/site-searches", request, Json.SiteSearchRequest), Json.SiteSearchStatusDto, ct);
+
+    public Task<SiteSearchStatusDto> GetSiteSearchAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync(new HttpRequestMessage(HttpMethod.Get, $"api/v1/site-searches/{id}"), Json.SiteSearchStatusDto, ct);
 
     public async Task<IReadOnlyList<SavedVacancyDto>> GetSavedVacanciesAsync(CancellationToken ct = default) =>
         await SendAsync(new HttpRequestMessage(HttpMethod.Get, "api/v1/saved-vacancies"), Json.ListSavedVacancyDto, ct);

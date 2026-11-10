@@ -353,6 +353,12 @@
                                         VerticalOptions="Center" />
                             </Grid>
 
+                            <!-- Пошук на сайті: шкала прочитаних сторінок, поки сервер читає сайт -->
+                            <VerticalStackLayout IsVisible="{Binding IsSiteSearchRunning}" Spacing="4">
+                                <ProgressBar Progress="{Binding SiteSearchProgress}" ProgressColor="{StaticResource Accent}" HeightRequest="6" />
+                                <Label Text="{Binding SiteSearchStatusText}" FontSize="11" TextColor="{StaticResource Accent}" />
+                            </VerticalStackLayout>
+
                             <!-- Параметри сайту DOU (1 компактний рядок) -->
                             <Grid IsVisible="{Binding IsDouSelected}" ColumnDefinitions="*,*,*" ColumnSpacing="8">
                                 <VerticalStackLayout Grid.Column="0">

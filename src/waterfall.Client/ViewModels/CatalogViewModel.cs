@@ -1,11 +1,15 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: пошук на сайтах за фільтрами панелі зі шкалою прогресу (issue #62, зі згоди Дениса); перевірено: тести CatalogSiteSearchTests, самоперевірка автора (§8)
 
 using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Common;
+using Waterfall.Client.Models.SiteSearch;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.ViewModels;
@@ -23,12 +27,19 @@ public partial class CatalogViewModel : ObservableObject
     public const int PageSize = 20;
     public static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(400);
 
+    /// <summary>Як часто питати сервер про прогрес пошуку на сайті.</summary>
+    public static readonly TimeSpan SiteSearchPollInterval = TimeSpan.FromMilliseconds(700);
+
+    /// <summary>Більше сторінок сервер за один пошук не читає (кожна сторінка Djinni — 15 вакансій).</summary>
+    public const int MaxSitePages = 5;
+
     private readonly IHttpGatewayService _gateway;
     private readonly IMessenger _messenger;
     private readonly TimeProvider _time;
 
     private CancellationTokenSource? _loadCts;
     private CancellationTokenSource? _debounceCts;
+    private CancellationTokenSource? _siteSearchCts;
     private string? _loadedQuery;
     private int _page;
     private bool _hasNextPage;
@@ -1000,6 +1011,19 @@ public partial class CatalogViewModel : ObservableObject
 
     public bool HasStaleCache => !string.IsNullOrEmpty(StaleCacheText);
 
+    /// <summary>Іде пошук на сайті: показуємо шкалу прогресу й блокуємо повторний запуск.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(FetchFromSitesCommand))]
+    public partial bool IsSiteSearchRunning { get; set; }
+
+    /// <summary>Частка прочитаних сторінок сайту, 0…1.</summary>
+    [ObservableProperty]
+    public partial double SiteSearchProgress { get; set; }
+
+    /// <summary>Підпис під шкалою: що саме зараз робить пошук.</summary>
+    [ObservableProperty]
+    public partial string? SiteSearchStatusText { get; set; }
+
     /// <summary>
     /// Хоча б один запит каталогу завершився успішно.
     /// </summary>
@@ -1312,19 +1336,234 @@ public partial class CatalogViewModel : ObservableObject
         }
     }
 
-    [RelayCommand]
-    private Task FetchFromSitesAsync()
+    /// <summary>
+    /// «Знайти» в блоці «Запит на сайт»: сервер читає Djinni чи DOU з фільтрами панелі, зберігає вакансії в каталог
+    /// і повертає їх. Поки йде пошук, шкала показує прочитані сторінки; результат замінює список, а фільтри блоку 2
+    /// далі уточнюють його локально, без повторного звернення до сайту.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanFetchFromSites))]
+    private async Task FetchFromSitesAsync()
     {
-        string siteRequestInfo = SelectedPlatform switch
+        SiteSearchRequest? request = BuildSiteSearchRequest();
+        if (request is null)
         {
-            "DOU" => $"DOU (jobs.dou.ua): стор.={DouPagesToParse}, категорія='{DouSelectedCategory}', місто='{DouSelectedCity}', досвід='{DouSelectedExperience}'",
-            "WorkUa" => $"Work.ua (work.ua): стор.={WorkUaPagesToParse}, категорія='{WorkUaSelectedCategory}', місто='{WorkUaSelectedCity}', досвід='{WorkUaSelectedExperience}', зайнятість='{WorkUaSelectedEmployment}'",
-            "Djinni" => $"Djinni (djinni.co): стор.={DjinniPagesToParse}, категорія='{DjinniSelectedCategory}', досвід='{DjinniSelectedExperience}', зайнятість='{DjinniSelectedEmployment}', англ.='{DjinniSelectedEnglish}'",
-            _ => string.Empty
-        };
-        StaleCacheText = $"🌐 Запит на сайт та оновлення списку [{siteRequestInfo}] (інтеграція з парсером очікується)";
-        return LoadFirstPageAsync();
+            StaleCacheText = "🌐 Пошук на сайті поки працює для Djinni і DOU.";
+            return;
+        }
+
+        _siteSearchCts?.Cancel();
+        CancellationTokenSource cts = new();
+        _siteSearchCts = cts;
+        string site = request.Source == JobSource.Djinni ? "Djinni" : "DOU";
+        IsSiteSearchRunning = true;
+        SiteSearchProgress = 0;
+        SiteSearchStatusText = $"🌐 {site}: надсилаємо запит…";
+        ErrorMessage = null;
+        try
+        {
+            SiteSearchStatusDto status = await _gateway.StartSiteSearchAsync(request, cts.Token);
+            while (status.IsInProgress)
+            {
+                ShowSiteSearchProgress(site, status);
+                await Task.Delay(SiteSearchPollInterval, _time, cts.Token);
+                status = await _gateway.GetSiteSearchAsync(status.Id, cts.Token);
+            }
+
+            // Результат з кешу приходить уже завершеним, але без вакансій: їх віддає окремий запит стану
+            if (status.State == SiteSearchStatusDto.Completed && status.Vacancies is null)
+            {
+                status = await _gateway.GetSiteSearchAsync(status.Id, cts.Token);
+            }
+
+            ShowSiteSearchResult(site, status);
+        }
+        catch (ApiException ex) when (!cts.IsCancellationRequested)
+        {
+            StaleCacheText = ex.StatusCode == System.Net.HttpStatusCode.Unauthorized
+                ? "🔒 Увійдіть в обліковий запис, щоб шукати вакансії на сайтах."
+                : $"⚠️ {ex.Message}";
+        }
+        catch (OperationCanceledException) when (cts.IsCancellationRequested)
+        {
+            // Запущено новий пошук або користувач пішов зі сторінки
+        }
+        finally
+        {
+            if (_siteSearchCts == cts)
+            {
+                IsSiteSearchRunning = false;
+                SiteSearchStatusText = null;
+            }
+        }
     }
+
+    private bool CanFetchFromSites() => !IsSiteSearchRunning;
+
+    private void ShowSiteSearchProgress(string site, SiteSearchStatusDto status)
+    {
+        SiteSearchProgress = status.Progress;
+        SiteSearchStatusText = status.State == SiteSearchStatusDto.Queued
+            ? $"🌐 {site}: у черзі — сайт зараз обробляє інший пошук…"
+            : $"🌐 {site}: сторінка {status.PagesDone} з {status.PagesTotal}, знайдено {status.Found}";
+    }
+
+    private void ShowSiteSearchResult(string site, SiteSearchStatusDto status)
+    {
+        SiteSearchProgress = 1;
+        if (status.State != SiteSearchStatusDto.Completed)
+        {
+            StaleCacheText = $"⚠️ {site}: {status.Message ?? "пошук не вдався. Спробуйте пізніше."}";
+            return;
+        }
+
+        List<VacancyDto> found = status.Vacancies ?? [];
+        Vacancies.Clear();
+        _loadedDtos.Clear();
+        foreach (VacancyDto vacancy in found)
+        {
+            _loadedDtos.Add(vacancy);
+            Vacancies.Add(CreateVacancyItemViewModel(vacancy));
+        }
+
+        // Список тепер — результат пошуку на сайті, тож «завантажити ще» з каталогу не підмішує інших вакансій
+        _hasNextPage = false;
+        _page = 1;
+        HasLoaded = true;
+        TotalCount = found.Count;
+        if (_isLocalFilterActive || HasActiveLocalFilterOrSort())
+        {
+            ApplyLocalFilterAndSort();
+        }
+
+        OnPropertyChanged(nameof(IsEmpty));
+        string cache = status.FromCache ? " (такий пошук уже виконувався протягом 3 годин, тож показано збережене)" : string.Empty;
+        StaleCacheText = found.Count == 0
+            ? $"🌐 {site}: {status.Message ?? "за цими фільтрами нічого не знайдено."}"
+            : $"🌐 {site}: знайдено {found.Count} вакансій{cache}. Їх збережено в каталог, а фільтри нижче уточнюють список без нового пошуку.";
+    }
+
+    /// <summary>Запит до сервера з фільтрів обраної панелі; null — для цього сайту пошук ще не підключено.</summary>
+    internal SiteSearchRequest? BuildSiteSearchRequest() => SelectedPlatform switch
+    {
+        "Djinni" => new SiteSearchRequest
+        {
+            Source = JobSource.Djinni,
+            Categories = DjinniCategoryKeys.GetValueOrDefault(DjinniSelectedCategory)?.ToList(),
+            Experience = CodeInParentheses(DjinniSelectedExperience),
+            City = CodeInParentheses(DjinniSelectedCity),
+            Employment = CodeInParentheses(DjinniSelectedEmployment),
+            SalaryFrom = int.TryParse(DjinniCustomMinSalary, NumberStyles.Integer, CultureInfo.InvariantCulture, out int custom) && custom > 0
+                ? custom
+                : DigitsOf(DjinniSelectedSalary),
+            Keywords = string.IsNullOrWhiteSpace(DjinniAllKeywords) ? null : DjinniAllKeywords.Trim(),
+            Pages = Math.Clamp(int.TryParse(DjinniPagesToParse, out int pages) ? pages : 1, 1, MaxSitePages)
+        },
+        "DOU" => new SiteSearchRequest
+        {
+            Source = JobSource.Dou,
+            Categories = DouSelectedCategory == DouCategoryOptions[0] ? null : [DouSelectedCategory],
+            // «Без досвіду (First Job)» на DOU — це стрічка «для початківців», тобто досвід до року
+            Experience = DouSelectedExperience == DouExperienceOptions[0] ? null
+                : DouSelectedExperience == DouExperienceOptions[1] ? "0-1"
+                : CodeInParentheses(DouSelectedExperience),
+            City = DouSelectedCity == DouCityOptions[0] ? null : DouSelectedCity,
+            Remote = DouIsRemote,
+            Keywords = string.IsNullOrWhiteSpace(DouSearchQuery) ? null : DouSearchQuery.Trim(),
+            Pages = 1
+        },
+        _ => null
+    };
+
+    /// <summary>«1 рік (1y)» → «1y», «Київ (kyiv)» → «kyiv», «1…3 роки (exp=1-3)» → «1-3»; без дужок — null.</summary>
+    public static string? CodeInParentheses(string option)
+    {
+        Match match = OptionCode().Match(option);
+        if (!match.Success)
+        {
+            return null;
+        }
+
+        string code = match.Groups[1].Value;
+        int equals = code.IndexOf('=', StringComparison.Ordinal);
+        return equals >= 0 ? code[(equals + 1)..] : code;
+    }
+
+    private static int? DigitsOf(string option)
+    {
+        string digits = new(option.Where(char.IsAsciiDigit).ToArray());
+        return int.TryParse(digits, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) && value > 0 ? value : null;
+    }
+
+    [GeneratedRegex(@"\(([^()]+)\)\s*$", RegexOptions.None, 1000)]
+    private static partial Regex OptionCode();
+
+    /// <summary>Назви категорій у панелі Djinni → ключі категорій сайту (параметр primary_keyword).</summary>
+    private static readonly Dictionary<string, string[]> DjinniCategoryKeys = new(StringComparer.Ordinal)
+    {
+        ["JavaScript / Front-End"] = ["JavaScript"],
+        ["React.js"] = ["React.js"],
+        ["Angular"] = ["Angular"],
+        ["Vue.js"] = ["Vue.js"],
+        ["Svelte"] = ["Svelte"],
+        ["Markup"] = ["Markup"],
+        ["Fullstack"] = ["Fullstack"],
+        ["C# / .NET"] = [".NET"],
+        ["ASP.NET"] = ["ASP.NET"],
+        ["Blazor"] = ["Blazor"],
+        ["MAUI / Xamarin"] = ["MAUI", "Xamarin"],
+        ["WPF / WinForms"] = ["WPF", "WinForms"],
+        [".NET Gamedev"] = [".NET Gamedev"],
+        ["Java"] = ["Java"],
+        ["Python"] = ["Python"],
+        ["PHP (Laravel / Symfony / WordPress)"] = ["PHP"],
+        ["Node.js"] = ["Node.js"],
+        ["iOS"] = ["iOS"],
+        ["Android"] = ["Android"],
+        ["React Native"] = ["React Native"],
+        ["Flutter"] = ["Flutter"],
+        ["C / C++ / Embedded"] = ["C++"],
+        ["Golang"] = ["Golang"],
+        ["Ruby"] = ["Ruby"],
+        ["Scala"] = ["Scala"],
+        ["Rust"] = ["Rust"],
+        ["Elixir"] = ["Elixir"],
+        ["Kotlin"] = ["Kotlin"],
+        ["Salesforce"] = ["Salesforce"],
+        ["ERP Systems (SAP / Odoo / MS Dynamics)"] = ["ERP"],
+        ["No Code"] = ["No Code"],
+        ["QA Manual"] = ["QA"],
+        ["QA Automation"] = ["QA Automation"],
+        ["QA Hardware / Embedded"] = ["QA Hardware / Embedded"],
+        ["Design (UI/UX, Product, Graphic)"] = ["Design"],
+        ["2D/3D Artist / Illustrator / Motion"] = ["Artist"],
+        ["Gamedev (Unity / Unreal / Game Design)"] = ["Unity"],
+        ["Business Analyst"] = ["Business Analyst"],
+        ["Data Science"] = ["Data Science"],
+        ["ML / AI"] = ["ML AI"],
+        ["Data Analyst / Web Analyst"] = ["Data Analyst", "Web Analyst"],
+        ["Data Engineer"] = ["Data Engineer"],
+        ["Project Manager"] = ["Project Manager"],
+        ["Product Manager"] = ["Product Manager"],
+        ["Delivery Manager"] = ["Delivery Manager"],
+        ["Scrum Master"] = ["Scrum Master"],
+        ["Engineering Manager"] = ["Engineering Manager"],
+        ["C-Level (CTO / CEO / CPO / CMO / COO)"] = ["Head Chief"],
+        ["DevOps"] = ["DevOps"],
+        ["Security / Penetration Tester"] = ["Security"],
+        ["Sysadmin"] = ["Sysadmin"],
+        ["DefTech (UAV / EW / C4ISR / Weapons)"] = ["DefTech"],
+        ["Hardware / Firmware / FPGA / Robotics"] = ["Hardware"],
+        ["Engineering / CAD Design"] = ["Engineering / CAD Design"],
+        ["Marketing / PPC / Media Buying / SMM"] = ["Marketing"],
+        ["Sales / Business Development / Account Manager"] = ["Sales"],
+        ["Lead Generation"] = ["Lead Generation"],
+        ["SEO"] = ["SEO"],
+        ["HR / Recruiter"] = ["HR"],
+        ["Technical Writing"] = ["Technical Writing"],
+        ["Customer / Technical Support"] = ["Support"],
+        ["Finances / FinOps / Accountant"] = ["Finances"],
+        ["(Other)"] = ["Other"],
+    };
 
     [RelayCommand]
     private Task FilterExistingAsync()
