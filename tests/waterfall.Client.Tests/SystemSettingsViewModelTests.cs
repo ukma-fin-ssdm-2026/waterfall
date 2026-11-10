@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.Globalization;
 using System.Text.Json;
 using Waterfall.Client.ViewModels;
 using Xunit;
@@ -122,6 +123,73 @@ public class SystemSettingsViewModelTests
         {
             File.Delete(path);
         }
+    }
+
+    [Fact]
+    public void LoadedSettings_ShowEnabledParsingFromFile_AndSavingKeepsItEnabled()
+    {
+        // Arrange: збір на сервері ввімкнений
+        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, """{ "Ingestion": { "Enabled": true, "Interval": "00:30:00" } }""");
+        try
+        {
+            SystemSettingsViewModel vm = new(path);
+
+            // Assert: екран показує справжній стан, а не завжди «Вимкнено»
+            Assert.True(vm.IsBackgroundParsingEnabled);
+            Assert.Equal("Увімкнено", vm.StatusLabelText);
+
+            // Act: зберегли інший параметр — збір не має вимкнутися
+            vm.SelectedIntervalDisplay = "1 година (01:00:00)";
+            vm.SaveSettingsCommand.Execute(null);
+
+            using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(path));
+            Assert.True(saved.RootElement.GetProperty("Ingestion").GetProperty("Enabled").GetBoolean());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void DayInterval_IsWrittenAsOneDay_NotTwentyFourDays()
+    {
+        // Arrange: файл, збережений до виправлення, з «24:00:00»
+        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
+        File.WriteAllText(path, """{ "Ingestion": { "Enabled": false, "Interval": "24:00:00" } }""");
+        try
+        {
+            SystemSettingsViewModel vm = new(path);
+
+            // Assert: на екрані — доба, а значення таке, яке сервер прочитає як добу
+            Assert.Equal("24 години (1.00:00:00)", vm.SelectedIntervalDisplay);
+            Assert.Equal(TimeSpan.FromDays(1), TimeSpan.Parse(vm.SelectedInterval, CultureInfo.InvariantCulture));
+
+            // Act
+            vm.SaveSettingsCommand.Execute(null);
+
+            using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(path));
+            Assert.Equal("1.00:00:00", saved.RootElement.GetProperty("Ingestion").GetProperty("Interval").GetString());
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void MissingSettingsFile_ShowsParsingDisabled()
+    {
+        // Arrange: файлу налаштувань немає (застосунок не на тому комп'ютері, що API)
+        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
+
+        // Act
+        SystemSettingsViewModel vm = new(path);
+
+        // Assert: як і сервер без налаштувань, збір вимкнений
+        Assert.False(vm.IsBackgroundParsingEnabled);
+        Assert.Equal("Вимкнено", vm.StatusLabelText);
     }
 }
 

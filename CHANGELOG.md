@@ -11,6 +11,7 @@ All notable changes to this project will be documented in this file.
 - **Фільтри каталогу (#3)**: `workFormat` (будь-який із вибраних форматів), `maxExperienceMonths` (включна межа; невідомий досвід не відсіюється), `categoryGroup` (точна канонічна група), `location` (підрядок без урахування регістру) і `skills` (усі терміни через AND, кожен — у тегах або тексті). `VacancyDto` віддає `workFormat`, `experienceMonths`, `categoryGroup`.
 
 ### Changed
+- **Background ingestion can be switched on and off without restarting the API**: `JobParserService` watches `Ingestion:Enabled` in `appsettings.json` (edited by hand or from the system settings screen) and starts or stops collecting within a second; `Ingestion:EnableOnStart` turns collection on at startup without editing the file. It still starts disabled by default.
 - **`robots.txt` answered with 401/403** now means the site is skipped and paused, like 5xx and 429; before, any 4xx counted as a missing file that allows everything.
 
 ### Fixed
