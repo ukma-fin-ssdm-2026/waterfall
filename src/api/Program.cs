@@ -118,6 +118,8 @@ builder.Services.AddHttpClient();
 // Work.ua і Robota.ua стоять за Cloudflare й рендерять список у браузері, тож їх обходимо через Playwright
 // builder.Services.AddSingleton<IBrowserFetcher, PlaywrightBrowserFetcher>();
 builder.Services.AddHostedService<JobParserService>();
+// Пошук на сайтах на запит користувача: черга, прогрес і кеш живуть у пам'яті, тож сервіс один на застосунок
+builder.Services.AddSingleton<ISiteSearchService, SiteSearchService>();
 // Реєструємо BrowserFetcher як Singleton
 builder.Services.AddSingleton<IBrowserFetcher, BrowserFetcher>();
 

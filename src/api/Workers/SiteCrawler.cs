@@ -73,6 +73,7 @@ public sealed class SiteCrawler
     private readonly TimeSpan _requestDelay;
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IBrowserFetcher? _browserFetcher;
+    private readonly bool _readJobPages;
     private readonly ILogger _logger;
     private readonly TimeProvider _time;
 
@@ -82,13 +83,15 @@ public sealed class SiteCrawler
     private TimeSpan _pause = TimeSpan.Zero;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
 
-    public SiteCrawler(IJobSiteParser site, int pages, TimeSpan requestDelay, IHttpClientFactory httpClientFactory, ILogger logger, TimeProvider? time = null, IBrowserFetcher? browserFetcher = null)
+    // readJobPages = false — лише сторінки списку, без сторінки кожної вакансії: так пошук на запит відповідає за секунди, а не хвилини
+    public SiteCrawler(IJobSiteParser site, int pages, TimeSpan requestDelay, IHttpClientFactory httpClientFactory, ILogger logger, TimeProvider? time = null, IBrowserFetcher? browserFetcher = null, bool readJobPages = true)
     {
         _site = site;
         _pages = pages;
         _requestDelay = requestDelay;
         _httpClientFactory = httpClientFactory;
         _browserFetcher = browserFetcher;
+        _readJobPages = readJobPages;
         _logger = logger;
         _time = time ?? TimeProvider.System;
     }
@@ -101,8 +104,9 @@ public sealed class SiteCrawler
     /// <summary>
     /// Читає перші сторінки списку вакансій і сторінки нових вакансій.
     /// Якщо сайт перестав відповідати посеред обходу, повертає те, що встигли зібрати.
+    /// Після кожної прочитаної сторінки списку викликає onListPage з її номером і кількістю зібраних вакансій (для шкали прогресу).
     /// </summary>
-    public async Task<List<RawVacancy>> CrawlAsync(CancellationToken ct)
+    public async Task<List<RawVacancy>> CrawlAsync(CancellationToken ct, Action<int, int>? onListPage = null)
     {
         if (_time.GetUtcNow() < _pausedUntil)
         {
@@ -124,7 +128,7 @@ public sealed class SiteCrawler
             return [];
         }
 
-        CrawlState crawl = new();
+        CrawlState crawl = new() { ReadJobPages = _readJobPages };
         for (int page = 1; page <= _pages; page++)
         {
             List<RawVacancy> fresh = await ReadListPageAsync(http, robots, page, crawl, ct);
@@ -137,6 +141,8 @@ public sealed class SiteCrawler
             {
                 crawl.Items.Add(await WithJobPageAsync(http, robots, job, crawl, ct));
             }
+
+            onListPage?.Invoke(page, crawl.Items.Count);
         }
 
         // Мінімальний досвід із фасетних стрічок — лише для вакансій, у яких джерело не дало числа

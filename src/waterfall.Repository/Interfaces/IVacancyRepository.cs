@@ -45,6 +45,12 @@ public interface IVacancyRepository
     /// </summary>
     Task<(int Created, int Updated)> BulkUpsertAsync(IReadOnlyList<VacancyDB> vacancies, CancellationToken ct = default);
 
+    /// <summary>
+    /// Вакансії одного джерела за їхніми id на сайті (<see cref="VacancyDB.ExternalId"/>): так пошук на сайтах
+    /// повертає клієнту саме те, що знайшов і зберіг.
+    /// </summary>
+    Task<IReadOnlyList<VacancyDB>> GetBySourceIdsAsync(string source, IReadOnlyCollection<string> externalIds, CancellationToken ct = default);
+
     Task<VacancyDB> CreateAsync(VacancyDB entity, CancellationToken ct = default);
     Task<VacancyDB?> UpdateAsync(VacancyDB entity, CancellationToken ct = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);

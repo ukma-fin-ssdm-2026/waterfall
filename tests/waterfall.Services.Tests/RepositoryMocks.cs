@@ -126,6 +126,9 @@ public sealed class FakeVacancyRepository : IVacancyRepository
         return Task.FromResult(false);
     }
 
+    public Task<IReadOnlyList<VacancyDB>> GetBySourceIdsAsync(string source, IReadOnlyCollection<string> externalIds, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<VacancyDB>>(Vacancies.Where(v => v.Source == source && v.ExternalId is not null && externalIds.Contains(v.ExternalId)).ToList());
+
     public Task<(int Created, int Updated)> BulkUpsertAsync(IReadOnlyList<VacancyDB> vacancies, CancellationToken ct = default)
     {
         return Task.FromResult((vacancies.Count, 0));

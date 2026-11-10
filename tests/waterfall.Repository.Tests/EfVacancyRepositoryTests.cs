@@ -56,6 +56,27 @@ public sealed class EfVacancyRepositoryTests : IDisposable
     }
 
     [Fact]
+    public async Task GetBySourceIdsAsync_ReturnsOnlyThatSourcesVacanciesWithGivenIds()
+    {
+        // Arrange: той самий id на іншому сайті — інша вакансія, тож не повертається
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+        db.Vacancies.AddRange(
+            CreateVacancy(title: "Djinni 1", source: "Djinni", externalId: "1"),
+            CreateVacancy(title: "Djinni 2", source: "Djinni", externalId: "2"),
+            CreateVacancy(title: "Djinni 3", source: "Djinni", externalId: "3"),
+            CreateVacancy(title: "Dou 1", source: "Dou", externalId: "1"));
+        await db.SaveChangesAsync();
+
+        // Act
+        IReadOnlyList<VacancyDB> found = await repo.GetBySourceIdsAsync("Djinni", ["1", "3", "404"]);
+
+        // Assert
+        Assert.Equal(["Djinni 1", "Djinni 3"], found.Select(v => v.Title).Order());
+        Assert.Empty(await repo.GetBySourceIdsAsync("Djinni", []));
+    }
+
+    [Fact]
     public async Task GetAllAsync_NoFilters_ReturnsActiveVacanciesOrderedByPublishedAtDescending()
     {
         // Arrange
