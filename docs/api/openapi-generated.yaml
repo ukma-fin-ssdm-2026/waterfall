@@ -353,6 +353,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/GeoSyncResponseDto'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/profile/address:
     get:
       tags:
@@ -645,6 +651,78 @@ paths:
           description: Вакансію успішно видалено зі збережених.
         '404':
           description: Запис у збережених вакансіях не знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/site-searches:
+    post:
+      tags:
+        - SiteSearches
+      summary: Запустити пошук на сайті за фільтрами.
+      description: "Повертає ідентифікатор пошуку; стан і результат — через GET /api/v1/site-searches/{id}.\r\nТакий самий пошук протягом 3 годин віддається з бази без звернення до сайту (fromCache = true)."
+      operationId: StartSiteSearch
+      requestBody:
+        description: 'Сайт, фільтри в позначеннях сайту та кількість сторінок (1–5).'
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SiteSearchRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/SiteSearchRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/SiteSearchRequest'
+      responses:
+        '202':
+          description: Пошук запущено (або результат уже готовий з кешу).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteSearchStatusDto'
+        '400':
+          description: Невалідні фільтри.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Потрібно увійти.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '429':
+          description: Попередній пошук ще триває або перевищено ліміт пошуків на годину.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  '/api/v1/site-searches/{id}':
+    get:
+      tags:
+        - SiteSearches
+      summary: 'Стан пошуку на сайті: прогрес, а коли завершено — знайдені вакансії.'
+      description: 'state: queued, running, completed або failed; pagesDone / pagesTotal — для шкали прогресу; vacancies — коли completed.'
+      operationId: GetSiteSearch
+      parameters:
+        - name: id
+          in: path
+          description: Ідентифікатор пошуку з POST.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Стан пошуку.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SiteSearchStatusDto'
+        '404':
+          description: 'Пошуку немає (чужий, застарілий або сервер перезапускався).'
           content:
             application/json:
               schema:
@@ -1306,6 +1384,103 @@ components:
           format: date-time
       additionalProperties: false
       description: DTO представлення збереженої вакансії («лайку» / закладки) для клієнтів API.
+    SiteSearchRequest:
+      required:
+        - source
+      type: object
+      properties:
+        source:
+          $ref: '#/components/schemas/JobSource'
+        categories:
+          type: array
+          items:
+            type: string
+          description: 'Категорії: для Djinni — ключі категорій сайту (Python, .NET, QA Automation…), для DOU — одна категорія (Python, QA…).'
+          nullable: true
+          example:
+            - Python
+        experience:
+          type: string
+          description: 'Досвід у позначенні сайту: Djinni — no_exp, 1y … 10y; DOU — 0-1, 1-3, 3-5, 5plus.'
+          nullable: true
+          example: 2y
+        city:
+          maxLength: 50
+          minLength: 0
+          type: string
+          description: 'Місто: для Djinni — код (kyiv, lviv…), для DOU — назва (Київ, Львів…).'
+          nullable: true
+          example: kyiv
+        remote:
+          type: boolean
+          description: Лише віддалена робота.
+        employment:
+          type: string
+          description: 'Зайнятість на Djinni: remote, office або parttime (remote можна задати й через Waterfall.Services.Models.SiteSearch.SiteSearchRequest.Remote).'
+          nullable: true
+          example: office
+        salaryFrom:
+          maximum: 100000
+          minimum: 0
+          type: integer
+          description: 'Зарплата від, доларів (лише Djinni).'
+          format: int32
+          nullable: true
+          example: 2000
+        keywords:
+          maxLength: 100
+          minLength: 0
+          type: string
+          description: 'Ключові слова: на Djinni — усі слова мають бути у вакансії, на DOU — пошуковий рядок.'
+          nullable: true
+          example: Django
+        pages:
+          maximum: 5
+          minimum: 1
+          type: integer
+          description: 'Скільки сторінок списку читати: 1–5 (DOU завжди віддає одну стрічку з 25 найсвіжіших).'
+          format: int32
+          example: 2
+      additionalProperties: false
+      description: "Запит «знайти вакансії на сайті за фільтрами»: сервер читає сайт, зберігає знайдене в базу й повертає результат.\r\nЗначення фільтрів — у позначеннях самого сайту, як їх подає застосунок."
+    SiteSearchStatusDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          description: 'queued — чекає, поки сайт звільниться від іншого пошуку; running; completed; failed.'
+          nullable: true
+          example: running
+        pagesDone:
+          type: integer
+          description: Прочитано сторінок списку.
+          format: int32
+        pagesTotal:
+          type: integer
+          description: Скільки сторінок планується прочитати (сайт може закінчитися раніше).
+          format: int32
+        found:
+          type: integer
+          description: Скільки вакансій уже знайдено.
+          format: int32
+        fromCache:
+          type: boolean
+          description: 'Результат узято з бази: такий самий пошук уже виконувався нещодавно, тож сайт не читали.'
+        message:
+          type: string
+          description: 'Пояснення для користувача (наприклад, причина збою).'
+          nullable: true
+        vacancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/VacancyDto'
+          description: 'Знайдені вакансії, найновіші першими; лише коли state = completed.'
+          nullable: true
+      additionalProperties: false
+      description: 'Стан пошуку на сайті: прогрес для шкали і, коли завершено, знайдені вакансії.'
     StatCountDto:
       type: object
       properties:
@@ -1657,5 +1832,7 @@ tags:
     description: Керування персональними даними та локаційними налаштуваннями профілю
   - name: SavedVacancies
     description: Керування вподобаними («лайкнутими») вакансіями для рекомендацій та статистики
+  - name: SiteSearches
+    description: Пошук вакансій на Djinni і DOU за фільтрами на запит користувача
   - name: Vacancies
     description: Керування агрегованими вакансіями платформи Waterfall (CRUD)

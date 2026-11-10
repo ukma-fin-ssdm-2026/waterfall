@@ -78,6 +78,14 @@
 - **Синхронізація (`GeoSyncRequestDto` / `GeoSyncResponseDto`):** список `{ id, address, latitude, longitude, created_at }`; клієнт надсилає знайдені офлайн записи, сервер повертає всі актуальні.
 - **Зв'язки:** Кеш спільний для всіх користувачів і не містить `user_id`; результати Wikipedia не кешуються.
 
+
+### 2.6. Ресурс SiteSearches (Пошук на сайтах на запит)
+- **Кінцева точка (URI):** `/api/v1/site-searches`
+- **Опис:** Користувач обирає сайт (Djinni чи DOU) і фільтри — сервер читає лише сторінки списку з цими фільтрами (Djinni — сторінка пошуку, DOU — офіційна RSS-стрічка, 25 найсвіжіших), зберігає вакансії в каталог і повертає їх. Поки йде обхід, клієнт опитує стан і показує шкалу прогресу.
+- **Запит (`SiteSearchRequest`):** `source` (`Djinni` | `Dou`), `categories`, `experience`, `city`, `remote`, `employment`, `salaryFrom`, `keywords` — у позначеннях сайту; `pages` 1–5 (DOU — завжди 1).
+- **Стан (`SiteSearchStatusDto`):** `id`, `state` (`queued` | `running` | `completed` | `failed`), `pagesDone`, `pagesTotal`, `found`, `fromCache`, `message`, `vacancies` (лише коли `completed`).
+- **Обмеження:** потрібен JWT; один активний пошук на користувача й до 20 пошуків на годину (`429 SITE_SEARCH_LIMIT`); до одного сайту одночасно йде один обхід (решта — `queued`); такий самий пошук протягом 3 годин віддається з бази без звернення до сайту (`fromCache = true`). Стан пошуків зберігається в пам'яті API.
+
 ---
 
 ## 3. Таблиця кінцевих точок (Endpoint Mapping)
@@ -103,6 +111,8 @@
 | **POST** | `/api/v1/profile/searches` | Записати пошуковий запит | `RecordSearchRequest` | `202 Accepted`, `204 No Content` | `400 Bad Request`, `401 Unauthorized`, `403 Forbidden` |
 | **DELETE** | `/api/v1/profile/searches` | Очистити історію пошукових запитів | — (JWT) | `204 No Content` | `401 Unauthorized` |
 | **POST** | `/api/v1/profile/views` | Відправити запис про перегляд вакансії | `RecordVacancyViewRequest` | `202 Accepted` | `401 Unauthorized`, `403 Forbidden`, `404 Not Found` |
+| **POST** | `/api/v1/site-searches` | Запустити пошук на сайті за фільтрами | `SiteSearchRequest` | `202 Accepted` (`SiteSearchStatusDto`, + `Location`) | `400 Bad Request`, `401 Unauthorized`, `429 Too Many Requests` |
+| **GET** | `/api/v1/site-searches/{id}` | Стан пошуку і знайдені вакансії | — (JWT) | `200 OK` (`SiteSearchStatusDto`) | `401 Unauthorized`, `404 Not Found` |
 
 ---
 
