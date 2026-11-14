@@ -1,4 +1,5 @@
 // AI: розбір robota.ua (schema.org JobPosting у JSON-LD і посилання на вакансії в списку) (issue #62); перевірено: юніт-тести RobotaUaPageTests на розмітці за schema.org, ручний запит до robota.ua (листопад 2026: robots.txt — 403 від Cloudflare, список без JS — порожня оболонка, тож справжніх вакансій парсер поки не отримує), самоперевірка автора (§8)
+// AI: сторінка вакансії за розміткою robota.ua (#description-wrap, data-id полів), сторінка перевірки Cloudflare не стає вакансією (issue #62); перевірено: тести RobotaUaParserTests і RobotaUaPageTests, ручна перевірка robota.ua 14.11.2026, самоперевірка автора (§8)
 
 using System.Globalization;
 using System.Net;
@@ -82,9 +83,21 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
         return jobs;
     }
 
+    /// <summary>
+    /// Сторінка вакансії. Справжня сторінка robota.ua (листопад 2026) не має ні JSON-LD, ні &lt;main&gt;: опис лежить
+    /// у #description-wrap, а назва, зарплата, місто й адреса — в елементах з data-id (vacancy-title…).
+    /// Якщо опису немає (зокрема це сторінка перевірки Cloudflare), DescriptionHtml і Title — null: обхід лишає
+    /// вакансію такою, як у списку, а нормалізація без опису її не збереже, тож заглушка в базу не потрапляє.
+    /// </summary>
     public RawVacancy ParseJobPage(string html)
     {
         HtmlNode document = Html.Load(html).DocumentNode;
+
+        // На сторінці перевірки теж є <h1> («robota.ua»): не можна брати з неї ні назву, ні опис
+        if (BotCheckPage.Is(document))
+        {
+            return new RawVacancy();
+        }
 
         // 1. Пробуємо structured data (якщо є)
         RawVacancy? structured = ReadStructuredJobs(document).FirstOrDefault();
@@ -93,21 +106,28 @@ public sealed class RobotaUaParser : IJobSiteParser, IBrowserOnlySite
             return structured;
         }
 
-        // 2. Шукаємо контейнер опису за актуальними селекторами Robota.ua
-        HtmlNode? descNode = document.SelectSingleNode("//*[@itemprop='description']")
+        // 2. Шукаємо контейнер опису: спершу актуальна розмітка robota.ua, далі запасні селектори
+        HtmlNode? descNode = document.SelectSingleNode("//*[@id='description-wrap']")
+            ?? document.SelectSingleNode("//*[@itemprop='description']")
             ?? document.SelectSingleNode("//alliance-vacancy-description")
             ?? document.SelectSingleNode("//*[contains(@class, 'vacancy-description') or contains(@class, 'card-description')]")
             ?? document.SelectSingleNode("//main//*[contains(@class, 'description')]")
             ?? document.SelectSingleNode("//main//div[contains(@class, 'santa-typo')]")
             ?? document.SelectSingleNode("//main");
 
-        string? title = Html.Text(document, "//h1");
+        string? title = Html.Text(document, "//h1[@data-id='vacancy-title']") ?? Html.Text(document, "//h1");
         string? desc = descNode?.InnerHtml?.Trim();
+        string? city = Html.Text(document, "//*[@data-id='vacancy-city']");
+        string? address = Html.Text(document, "//*[@data-id='vacancy-address']");
 
         return new RawVacancy
         {
             Title = !string.IsNullOrWhiteSpace(title) ? title : null,
-            DescriptionHtml = !string.IsNullOrWhiteSpace(desc) ? desc : "Опис вакансії на сайті robota.ua"
+            Company = Html.Text(document, "//h1[@data-id='vacancy-title']/ancestor::lib-content[1]//a[starts-with(@href, '/company')]"),
+            Salary = Html.Text(document, "//*[@data-id='vacancy-salary-from-to']"),
+            Location = city,
+            FullAddress = address is null ? null : city is null ? address : $"{city}, {address}",
+            DescriptionHtml = !string.IsNullOrWhiteSpace(desc) ? desc : null
         };
     }
 

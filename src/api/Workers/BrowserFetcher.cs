@@ -1,4 +1,5 @@
 // AI: отримання сторінок, захищених перевіркою на ботів (Cloudflare), через справжній браузер; перевірено: юніт-тести JobParserServiceTests з підробленим браузером, самоперевірка автора (§8)
+// AI: перевірка Cloudflare розпізнається незалежно від мови браузера, сторінка вакансії robota.ua чекає опису (issue #62); перевірено: ручна перевірка robota.ua 14.11.2026, самоперевірка автора (§8)
 
 using System.Diagnostics.CodeAnalysis;
 using PuppeteerSharp;
@@ -70,19 +71,16 @@ public sealed class BrowserFetcher : IBrowserFetcher, IAsyncDisposable
                 Timeout = 35000
             });
 
-            // Даємо Cloudflare Turnstile час (1.5-3 сек) тихо підтвердити домашній IP
-            int retries = 0;
-            while (retries < 10)
+            // Даємо Cloudflare Turnstile час тихо підтвердити домашній IP. Заголовок перевірки залежить від мови
+            // браузера («Just a moment...» / «Трохи зачекайте…»), тож чекаємо за умовою BotCheckPage.PassedScript
+            try
             {
-                string title = await page.GetTitleAsync();
-                if (!title.Contains("Just a moment", StringComparison.OrdinalIgnoreCase))
-                {
-                    break;
-                }
-
-                _logger.LogDebug("Очікування проходження Cloudflare перевірки...");
-                await Task.Delay(1500, ct);
-                retries++;
+                await page.WaitForFunctionAsync(BotCheckPage.PassedScript, new WaitForFunctionOptions { Timeout = 20000 });
+            }
+            catch (WaitTaskTimeoutException)
+            {
+                // Вміст сторінки перевірки не має стати вакансією: обхід сприйме це як збій сайту
+                throw new TimeoutException($"Cloudflare не пропустив {url} за 20 секунд.");
             }
 
             // Розділяємо: сторінка списку чи сторінка конкретної вакансії
@@ -114,14 +112,15 @@ public sealed class BrowserFetcher : IBrowserFetcher, IAsyncDisposable
             }
             else if (isRobotaJobPage)
             {
-                // Для сторінки ОДНІЄЇ ВАКАНСІЇ: чекаємо лише заголовок h1 (вантажиться за 1-2 сек!)
+                // Для сторінки ОДНІЄЇ ВАКАНСІЇ: чекаємо опис (#description-wrap) або хоча б назву вакансії.
+                // Будь-який h1 не годиться: він є і на сторінці перевірки Cloudflare («robota.ua»)
                 try
                 {
-                    await page.WaitForSelectorAsync("h1", new WaitForSelectorOptions { Timeout = 6000 });
+                    await page.WaitForSelectorAsync("#description-wrap, h1[data-id='vacancy-title']", new WaitForSelectorOptions { Timeout = 12000 });
                 }
-                catch
+                catch (WaitTaskTimeoutException)
                 {
-                    // Якщо h1 не з'явився вчасно, просто продовжуємо
+                    _logger.LogWarning("Robota.ua (вакансія): опис не з'явився за 12 секунд: {Url}", url);
                 }
 
                 await Task.Delay(500, ct);

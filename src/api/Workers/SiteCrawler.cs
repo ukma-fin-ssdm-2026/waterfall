@@ -282,6 +282,7 @@ public sealed class SiteCrawler
         Company = fromPage.Company ?? fromList.Company,
         Salary = fromPage.Salary ?? fromList.Salary,
         Location = fromPage.Location ?? fromList.Location,
+        FullAddress = fromPage.FullAddress ?? fromList.FullAddress,
         Posted = fromPage.Posted ?? fromList.Posted,
         Experience = fromPage.Experience ?? fromList.Experience,
         Employment = fromPage.Employment ?? fromList.Employment,
