@@ -2113,7 +2113,7 @@ public partial class CatalogViewModel : ObservableObject
         {
             if (updateBanner)
             {
-                StaleCacheText = "🌐 Спочатку знайдіть вакансії: оберіть сайт і фільтри в блоці 1 та натисніть «Знайти».";
+                StaleCacheText = "🌐 Спочатку спарсіть вакансії: оберіть сайт і фільтри в блоці 1 та натисніть «Спарсити з сайту».";
             }
 
             return;

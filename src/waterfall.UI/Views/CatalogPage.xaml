@@ -84,7 +84,7 @@
             </Border>
 
             <Button Grid.Column="1"
-                    Text="Фільтрувати ⚡"
+                    Text="Фільтрувати список ⚡"
                     Command="{Binding FilterExistingCommand}"
                     Style="{StaticResource CardActionPrimary}"
                     FontSize="12"
@@ -372,7 +372,7 @@
                                 </HorizontalStackLayout>
 
                                 <Button Grid.Column="2"
-                                        Text="Знайти 🔍"
+                                        Text="Спарсити з сайту 🌐"
                                         Command="{Binding FetchFromSitesCommand}"
                                         Style="{StaticResource CardActionPrimary}"
                                         FontSize="12"
@@ -631,7 +631,7 @@
                                         VerticalOptions="Center" />
 
                                 <Button Grid.Column="3"
-                                        Text="Фільтрувати ⚡"
+                                        Text="Фільтрувати список ⚡"
                                         Command="{Binding FilterExistingCommand}"
                                         Style="{StaticResource CardAction}"
                                         BackgroundColor="{StaticResource Accent}"
@@ -919,11 +919,11 @@
                             <Label Text="🌐"
                                    FontSize="36"
                                    HorizontalOptions="Center" />
-                            <Label Text="Оберіть сайт і фільтри, потім натисніть «Знайти»"
+                            <Label Text="Оберіть сайт і фільтри, потім натисніть «Спарсити з сайту»"
                                    HorizontalOptions="Center"
                                    HorizontalTextAlignment="Center"
                                    Style="{StaticResource CardTitle}" />
-                            <Label Text="Вакансії з'являться тут після пошуку на сайті: DOU, Djinni, Work.ua чи Robota.ua. Пошук потребує входу в обліковий запис."
+                            <Label Text="Вакансії з'являться тут після парсингу обраного сайту: DOU, Djinni, Work.ua чи Robota.ua. Пошук потребує входу в обліковий запис."
                                    HorizontalOptions="Center"
                                    HorizontalTextAlignment="Center"
                                    Style="{StaticResource MutedLabel}" />
@@ -940,7 +940,7 @@
                                    HorizontalOptions="Center"
                                    HorizontalTextAlignment="Center"
                                    Style="{StaticResource CardTitle}" />
-                            <Label Text="Змініть фільтри сайту й натисніть «Знайти» ще раз або скиньте фільтри списку"
+                            <Label Text="Змініть фільтри сайту й натисніть «Спарсити з сайту» ще раз або скиньте фільтри списку"
                                    HorizontalOptions="Center"
                                    HorizontalTextAlignment="Center"
                                    Style="{StaticResource MutedLabel}" />

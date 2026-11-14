@@ -152,7 +152,7 @@ public class CatalogViewModelTests
         await _vm.AddBanListWordCommand.ExecuteAsync(null);
         await _vm.FilterExistingCommand.ExecuteAsync(null);
 
-        Assert.Contains("Спочатку знайдіть вакансії", _vm.StaleCacheText, StringComparison.Ordinal);
+        Assert.Contains("Спочатку спарсіть вакансії", _vm.StaleCacheText, StringComparison.Ordinal);
 
         await SearchSiteAsync(_vm, "Python Developer", "Gambling Engineer");
 
