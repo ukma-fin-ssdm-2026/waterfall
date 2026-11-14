@@ -298,6 +298,35 @@ public class VacancyIngestionServiceTests
     }
 
     [Fact]
+    public void KeepStoredDetails_FillsWhatTheListLacks_ButKeepsWhatItGivesFully()
+    {
+        VacancyDB stored = VacancyIngestionService.Normalize(Raw() with
+        {
+            DescriptionHtml = "<p>Повний опис вакансії зі сторінки</p>",
+            Experience = "Досвід від 2 років",
+            Employment = "Повна зайнятість",
+            Category = "Backend"
+        }, Now).Vacancy!;
+        VacancyDB fromList = VacancyIngestionService.Normalize(Raw() with
+        {
+            Title = "Senior .NET Developer",
+            Company = null,
+            Salary = null,
+            DescriptionHtml = "<p>Повний опис…</p>",
+            Tags = null
+        }, Now).Vacancy!;
+
+        VacancyIngestionService.KeepStoredDetails(fromList, stored);
+
+        Assert.Equal("Senior .NET Developer", fromList.Title);
+        Assert.Equal(stored.Description, fromList.Description);
+        Assert.Equal(stored.SkillsJson, fromList.SkillsJson);
+        Assert.Equal(("Досвід від 2 років", stored.ExperienceMonths), (fromList.Experience, fromList.ExperienceMonths));
+        Assert.Equal(("Повна зайнятість", "Backend", "Kvitka Software"), (fromList.Schedule, fromList.Category, fromList.Company));
+        Assert.Equal((3500m, 4500m), (fromList.SalaryMin, fromList.SalaryMax));
+    }
+
+    [Fact]
     public async Task SampleDump_IsSavedOnce_AndUpdatedOnRepeatedRun()
     {
         // Справжній репозиторій на SQLite в пам'яті: перевіряємо і нормалізацію, і BulkUpsertAsync

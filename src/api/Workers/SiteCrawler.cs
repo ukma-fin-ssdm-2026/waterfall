@@ -1,5 +1,6 @@
 // AI: ввічливий обхід сайтів-джерел вакансій; перевірено: юніт-тести JobParserServiceTests з підробленими сайтами, ручний запуск API проти djinni.co і work.ua, самоперевірка автора (§8)
 // AI: читання фасетних стрічок досвіду тим самим ввічливим механізмом; перевірено: тести JobParserServiceTests
+// AI: вакансія без прочитаної сторінки позначається ListOnly (issue #62); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 
 using System.Net;
 using System.Net.Http.Headers;
@@ -74,6 +75,7 @@ public sealed class SiteCrawler
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IBrowserFetcher? _browserFetcher;
     private readonly bool _readJobPages;
+    private readonly bool _followRobotsTxt;
     private readonly ILogger _logger;
     private readonly TimeProvider _time;
 
@@ -83,8 +85,9 @@ public sealed class SiteCrawler
     private TimeSpan _pause = TimeSpan.Zero;
     private DateTimeOffset _pausedUntil = DateTimeOffset.MinValue;
 
-    // readJobPages = false — лише сторінки списку, без сторінки кожної вакансії: так пошук на запит відповідає за секунди, а не хвилини
-    public SiteCrawler(IJobSiteParser site, int pages, TimeSpan requestDelay, IHttpClientFactory httpClientFactory, ILogger logger, TimeProvider? time = null, IBrowserFetcher? browserFetcher = null, bool readJobPages = true)
+    // readJobPages = false — лише сторінки списку, без сторінки кожної вакансії: так пошук на запит відповідає за секунди, а не хвилини.
+    // followRobotsTxt = false — robots.txt не читаємо (пошук на запит по Work.ua і Robota.ua, рішення команди); пауза між запитами лишається
+    public SiteCrawler(IJobSiteParser site, int pages, TimeSpan requestDelay, IHttpClientFactory httpClientFactory, ILogger logger, TimeProvider? time = null, IBrowserFetcher? browserFetcher = null, bool readJobPages = true, bool followRobotsTxt = true)
     {
         _site = site;
         _pages = pages;
@@ -92,6 +95,7 @@ public sealed class SiteCrawler
         _httpClientFactory = httpClientFactory;
         _browserFetcher = browserFetcher;
         _readJobPages = readJobPages;
+        _followRobotsTxt = followRobotsTxt;
         _logger = logger;
         _time = time ?? TimeProvider.System;
     }
@@ -122,7 +126,7 @@ public sealed class SiteCrawler
         http.DefaultRequestHeaders.AcceptLanguage.ParseAdd("uk");
 
         // robots.txt читаємо щоразу: сайт може будь-коли закрити розділ для ботів
-        RobotsTxt? robots = await LoadRobotsAsync(http, ct);
+        RobotsTxt? robots = _followRobotsTxt ? await LoadRobotsAsync(http, ct) : RobotsTxt.AllowAll;
         if (robots is null)
         {
             return [];
@@ -140,6 +144,12 @@ public sealed class SiteCrawler
             foreach (RawVacancy job in fresh)
             {
                 crawl.Items.Add(await WithJobPageAsync(http, robots, job, crawl, ct));
+
+                // Сторінки вакансій читаються довго (Robota.ua — браузером): лічильник знайдених росте по одній
+                if (crawl.ReadJobPages)
+                {
+                    onListPage?.Invoke(page - 1, crawl.Items.Count);
+                }
             }
 
             onListPage?.Invoke(page, crawl.Items.Count);
@@ -221,7 +231,8 @@ public sealed class SiteCrawler
 
         if (details is null)
         {
-            return job;
+            // Лише дані зі списку: при збереженні вони не затруть повніші, прочитані раніше зі сторінки вакансії
+            return job with { ListOnly = true };
         }
 
         crawl.JobPages[job.Id!] = details;

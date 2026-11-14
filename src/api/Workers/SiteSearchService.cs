@@ -1,4 +1,5 @@
 // AI: пошук на сайтах на запит користувача: адреси з фільтрами, черга за сайтами, прогрес, кеш і ліміти (issue #62); перевірено: юніт-тести SiteSearchServiceTests і SiteSearchUrlsTests, ручний запуск проти djinni.co і jobs.dou.ua, самоперевірка автора (§8)
+// AI: Work.ua і Robota.ua через браузер автора (IBrowserFetcher) без robots.txt, адреси з фільтрами звірено в браузері 10.11.2026 (issue #62); перевірено: юніт-тести з підробленим браузером, самоперевірка автора (§8)
 
 using System.Collections.Concurrent;
 using System.Globalization;
@@ -25,10 +26,12 @@ public interface ISiteSearchService
 public sealed record SiteSearchStart(SiteSearchStatusDto? Status, string? Rejection);
 
 /// <summary>
-/// Пошук на запит (issue #62): користувач обрав сайт і фільтри — сервер читає лише сторінки списку з цими фільтрами
-/// тим самим ввічливим <see cref="SiteCrawler"/> (robots.txt, пауза між запитами), зберігає вакансії через
-/// <see cref="IVacancyIngestionService"/> і віддає їх клієнту. Поки йде обхід, клієнт бачить прогрес.
-/// До одного сайту одночасно йде один пошук; такий самий пошук протягом <see cref="CacheLifetime"/> віддається з бази.
+/// Пошук на запит (issue #62): користувач обрав сайт і фільтри — сервер читає сторінки списку з цими фільтрами
+/// через <see cref="SiteCrawler"/> (пауза між запитами), зберігає вакансії через <see cref="IVacancyIngestionService"/>
+/// і віддає їх клієнту. Поки йде обхід, клієнт бачить прогрес. Djinni і DOU читаються звичайним HTTP з robots.txt;
+/// Work.ua і Robota.ua — браузером (<see cref="IBrowserFetcher"/>) без robots.txt разом зі сторінкою кожної вакансії,
+/// бо повного опису, навичок і графіка в їхньому списку немає (Work.ua за бажанням — лише за списком). До одного сайту одночасно йде один пошук; такий самий пошук протягом
+/// <see cref="CacheLifetime"/> віддається з бази.
 /// </summary>
 public sealed class SiteSearchService : ISiteSearchService
 {
@@ -42,6 +45,7 @@ public sealed class SiteSearchService : ISiteSearchService
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly IngestionOptions _options;
     private readonly ILogger<SiteSearchService> _logger;
+    private readonly IBrowserFetcher? _browserFetcher;
     private readonly TimeProvider _time;
     private readonly CancellationToken _stopping;
 
@@ -56,12 +60,14 @@ public sealed class SiteSearchService : ISiteSearchService
         IOptions<IngestionOptions> options,
         IHostApplicationLifetime lifetime,
         ILogger<SiteSearchService> logger,
+        IBrowserFetcher? browserFetcher = null,
         TimeProvider? time = null)
     {
         _scopeFactory = scopeFactory;
         _httpClientFactory = httpClientFactory;
         _options = options.Value;
         _logger = logger;
+        _browserFetcher = browserFetcher;
         _time = time ?? TimeProvider.System;
         _stopping = lifetime.ApplicationStopping;
     }
@@ -120,9 +126,22 @@ public sealed class SiteSearchService : ISiteSearchService
         return status with { Vacancies = await LoadVacanciesAsync(job.Source, job.ExternalIds, userId, ct) };
     }
 
-    /// <summary>Адреса сторінки списку з фільтрами: Djinni — сторінка пошуку, DOU — офіційна RSS-стрічка (25 найсвіжіших).</summary>
+    /// <summary>
+    /// Адреса сторінки списку з фільтрами: Djinni — сторінка пошуку, DOU — офіційна RSS-стрічка (25 найсвіжіших),
+    /// Work.ua — /jobs-{місто}-{сфера}-{запит}/?фільтри, Robota.ua — /zapros/{запит}/{місто}/params;фільтри.
+    /// </summary>
     public static string? ListPageUrl(SiteSearchRequest request, int page)
     {
+        if (request.Source == JobSource.WorkUa)
+        {
+            return WorkUaListPageUrl(request, page);
+        }
+
+        if (request.Source == JobSource.RobotaUa)
+        {
+            return RobotaUaListPageUrl(request, page);
+        }
+
         List<KeyValuePair<string, string>> query = [];
         void Add(string name, string? value)
         {
@@ -169,6 +188,64 @@ public sealed class SiteSearchService : ISiteSearchService
             : url + "?" + string.Join("&", query.Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value)}"));
     }
 
+    /// <summary>
+    /// Work.ua: місто, сфера й запит — у шляху (/jobs-kyiv-it-python/, слова запиту через «+»), решта фільтрів — параметри.
+    /// Віддалена робота на Work.ua — це «місто» remote.
+    /// </summary>
+    private static string WorkUaListPageUrl(SiteSearchRequest request, int page)
+    {
+        string? city = !string.IsNullOrWhiteSpace(request.City) ? request.City.Trim() : request.Remote ? "remote" : null;
+        List<string> path = new[] { city, request.Categories?.FirstOrDefault()?.Trim(), SlugOf(request.Keywords, "+") }
+            .OfType<string>()
+            .Where(part => part.Length > 0)
+            .ToList();
+
+        // Без міста, сфери й запиту /jobs/ — сторінка пошуку без вакансій; ss=1 дає результати по всій Україні
+        List<KeyValuePair<string, string>> query = path.Count == 0 ? [new("ss", "1")] : [];
+        query.AddRange(SortedOptions(request));
+        if (page > 1)
+        {
+            query.Add(new("page", page.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        string url = path.Count == 0 ? "https://www.work.ua/jobs/" : $"https://www.work.ua/jobs-{string.Join('-', path)}/";
+        return query.Count == 0 ? url : url + "?" + string.Join("&", query.Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value)}"));
+    }
+
+    /// <summary>
+    /// Robota.ua: /zapros/{запит через «-»}/{місто, без нього — ukraine}, фільтри й сторінка — після «/params;» через «;».
+    /// Віддалена робота — scheduleIds=3.
+    /// </summary>
+    private static string RobotaUaListPageUrl(SiteSearchRequest request, int page)
+    {
+        string city = string.IsNullOrWhiteSpace(request.City) ? "ukraine" : request.City.Trim();
+        string? keywords = SlugOf(request.Keywords, "-");
+        List<KeyValuePair<string, string>> parameters = SortedOptions(request).ToList();
+        if (request.Remote && parameters.All(p => p.Key != "scheduleIds"))
+        {
+            parameters.Add(new("scheduleIds", "3"));
+        }
+
+        if (page > 1)
+        {
+            parameters.Add(new("page", page.ToString(CultureInfo.InvariantCulture)));
+        }
+
+        string url = keywords is null ? $"https://robota.ua/zapros/{city}" : $"https://robota.ua/zapros/{keywords}/{city}";
+        return parameters.Count == 0 ? url : url + "/params;" + string.Join(";", parameters.Select(p => $"{p.Key}={p.Value}"));
+    }
+
+    /// <summary>Пошуковий запит для шляху адреси: слова в нижньому регістрі, кожне закодоване, між ними — роздільник сайту.</summary>
+    private static string? SlugOf(string? keywords, string separator)
+    {
+        string[] words = (keywords ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        return words.Length == 0 ? null : string.Join(separator, words.Select(word => Uri.EscapeDataString(word.ToLowerInvariant())));
+    }
+
+    // Порядок фільтрів у адресі сталий: однаковий пошук — однакова адреса
+    private static IEnumerable<KeyValuePair<string, string>> SortedOptions(SiteSearchRequest request) =>
+        (request.Options ?? new Dictionary<string, string>()).OrderBy(option => option.Key, StringComparer.Ordinal);
+
     private async Task RunAsync(SearchJob job, SiteSearchRequest request)
     {
         SemaphoreSlim gate = _siteGates.GetOrAdd(job.Source, _ => new SemaphoreSlim(1, 1));
@@ -179,9 +256,18 @@ public sealed class SiteSearchService : ISiteSearchService
             try
             {
                 job.Run(PagesFor(request));
-                IJobSiteParser site = new FilteredSiteParser(job.Source == JobSource.Djinni ? new DjinniParser() : new DouParser(), page => ListPageUrl(request, page));
-                SiteCrawler crawler = new(site, PagesFor(request), _options.RequestDelay, _httpClientFactory, _logger, _time, readJobPages: false);
-                List<RawVacancy> raw = await crawler.CrawlAsync(_stopping, job.Progress);
+                SiteCrawler crawler = new(
+                    FilteredSiteParser.For(ParserFor(job.Source), page => ListPageUrl(request, page)),
+                    PagesFor(request),
+                    _options.RequestDelay,
+                    _httpClientFactory,
+                    _logger,
+                    _time,
+                    _browserFetcher,
+                    readJobPages: ReadsJobPages(request),
+                    // Work.ua і Robota.ua обходимо браузером без robots.txt (рішення команди, 10.11.2026)
+                    followRobotsTxt: job.Source is JobSource.Djinni or JobSource.Dou);
+                List<RawVacancy> raw = WithRequestedCategory(await crawler.CrawlAsync(_stopping, job.Progress), request);
 
                 await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
                 await scope.ServiceProvider.GetRequiredService<IVacancyIngestionService>().ProcessRawVacanciesAsync(raw, _stopping);
@@ -223,7 +309,40 @@ public sealed class SiteSearchService : ISiteSearchService
             .ToList();
     }
 
+    /// <summary>
+    /// Категорія з запиту для вакансій, у яких сайт її не вказав. RSS DOU категорії не містить (вона є лише на сторінці
+    /// вакансії, яку пошук не відкриває), але стрічка з category=C++ складається тільки з вакансій цієї категорії.
+    /// Категорію, яку дав сам сайт (Djinni — у JSON-LD), не чіпаємо. Кілька категорій у запиті — не вгадуємо, яка чия.
+    /// </summary>
+    public static List<RawVacancy> WithRequestedCategory(List<RawVacancy> raw, SiteSearchRequest request)
+    {
+        if (request.Categories is not [string only] || string.IsNullOrWhiteSpace(only))
+        {
+            return raw;
+        }
+
+        return raw
+            .Select(item => string.IsNullOrWhiteSpace(item.Category) ? item with { Category = only.Trim() } : item)
+            .ToList();
+    }
+
     private static int PagesFor(SiteSearchRequest request) => request.Source == JobSource.Dou ? 1 : request.Pages;
+
+    private static IJobSiteParser ParserFor(JobSource source) => source switch
+    {
+        JobSource.Djinni => new DjinniParser(),
+        JobSource.WorkUa => new WorkUaParser(),
+        JobSource.RobotaUa => new RobotaUaParser(),
+        _ => new DouParser()
+    };
+
+    /// <summary>
+    /// У списку Robota.ua лише назва й посилання, а Work.ua — 1–2 рядки опису без навичок, досвіду й графіка:
+    /// повні дані є тільки на сторінці вакансії. Для Work.ua користувач може обрати швидкий пошук лише за списком
+    /// (<see cref="SiteSearchRequest.ListOnly"/>). Djinni і DOU дають повний опис уже в списку.
+    /// </summary>
+    internal static bool ReadsJobPages(SiteSearchRequest request) =>
+        request.Source == JobSource.RobotaUa || request.Source == JobSource.WorkUa && !request.ListOnly;
 
     private static string CacheKey(SiteSearchRequest request) => string.Join('|',
         request.Source,
@@ -234,7 +353,10 @@ public sealed class SiteSearchService : ISiteSearchService
         request.Employment,
         request.SalaryFrom,
         request.Keywords?.Trim().ToLowerInvariant(),
-        PagesFor(request));
+        string.Join(',', SortedOptions(request).Select(option => $"{option.Key}={option.Value}")),
+        PagesFor(request),
+        // Швидкий результат без описів не має підміняти повний (і навпаки)
+        ReadsJobPages(request));
 
     private void ForgetOldJobs(DateTimeOffset now)
     {
@@ -335,8 +457,12 @@ public sealed class SiteSearchService : ISiteSearchService
 }
 
 /// <summary>Розбір сторінок — як у звичайного парсера сайту, а адреси списку — з фільтрами пошуку.</summary>
-public sealed class FilteredSiteParser(IJobSiteParser inner, Func<int, string?> listPageUrl) : IJobSiteParser
+public class FilteredSiteParser(IJobSiteParser inner, Func<int, string?> listPageUrl) : IJobSiteParser
 {
+    /// <summary>Обгортка зберігає позначку <see cref="IBrowserOnlySite"/>: інакше Work.ua чи Robota.ua пішли б звичайним HTTP, а не браузером.</summary>
+    public static FilteredSiteParser For(IJobSiteParser inner, Func<int, string?> listPageUrl) =>
+        inner is IBrowserOnlySite ? new BrowserOnly(inner, listPageUrl) : new FilteredSiteParser(inner, listPageUrl);
+
     public string Name => inner.Name;
 
     public Uri Home => inner.Home;
@@ -346,4 +472,7 @@ public sealed class FilteredSiteParser(IJobSiteParser inner, Func<int, string?> 
     public List<RawVacancy> ParseListPage(string html) => inner.ParseListPage(html);
 
     public RawVacancy ParseJobPage(string html) => inner.ParseJobPage(html);
+
+    private sealed class BrowserOnly(IJobSiteParser inner, Func<int, string?> listPageUrl)
+        : FilteredSiteParser(inner, listPageUrl), IBrowserOnlySite;
 }

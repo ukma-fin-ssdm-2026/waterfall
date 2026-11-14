@@ -30,6 +30,7 @@ public sealed class SiteSearchServiceTests : IDisposable
 
     private readonly SqliteConnection _connection = new("DataSource=:memory:");
     private readonly SitesStub _sites = new();
+    private readonly BrowserStub _browser = new();
     private readonly ServiceProvider _services;
     private readonly SiteSearchService _search;
 
@@ -53,7 +54,8 @@ public sealed class SiteSearchServiceTests : IDisposable
             _sites,
             Options.Create(new IngestionOptions { RequestDelay = TimeSpan.Zero }),
             new Lifetime(),
-            NullLogger<SiteSearchService>.Instance);
+            NullLogger<SiteSearchService>.Instance,
+            _browser);
     }
 
     public void Dispose()
@@ -101,8 +103,154 @@ public sealed class SiteSearchServiceTests : IDisposable
         Assert.Equal("https://jobs.dou.ua/vacancies/feeds/", SiteSearchService.ListPageUrl(new SiteSearchRequest { Source = JobSource.Dou }, 1));
     }
 
+    [Fact]
+    public void WorkUaUrl_PutsCityCategoryAndQueryInPath_AndOtherFiltersInQuery()
+    {
+        SiteSearchRequest request = new()
+        {
+            Source = JobSource.WorkUa,
+            City = "kyiv",
+            Categories = ["it"],
+            Keywords = "Python  Developer",
+            Options = new Dictionary<string, string> { ["student"] = "1", ["employment"] = "74" },
+            Pages = 2
+        };
+
+        Assert.Equal("https://www.work.ua/jobs-kyiv-it-python+developer/?employment=74&student=1", SiteSearchService.ListPageUrl(request, 1));
+        Assert.Equal("https://www.work.ua/jobs-kyiv-it-python+developer/?employment=74&student=1&page=2", SiteSearchService.ListPageUrl(request, 2));
+    }
+
+    [Fact]
+    public void WorkUaUrl_RemoteIsACity_AndNoFiltersSearchesAllUkraine()
+    {
+        Assert.Equal("https://www.work.ua/jobs-remote-c%23/", SiteSearchService.ListPageUrl(new SiteSearchRequest { Source = JobSource.WorkUa, Remote = true, Keywords = "C#" }, 1));
+        Assert.Equal("https://www.work.ua/jobs/?ss=1&page=3", SiteSearchService.ListPageUrl(new SiteSearchRequest { Source = JobSource.WorkUa }, 3));
+    }
+
+    [Fact]
+    public void RobotaUaUrl_PutsQueryAndCityInPath_AndFiltersAfterParams()
+    {
+        SiteSearchRequest request = new()
+        {
+            Source = JobSource.RobotaUa,
+            City = "kyiv",
+            Keywords = "Python developer",
+            Remote = true,
+            Options = new Dictionary<string, string> { ["salary"] = "40000", ["experienceType"] = "true" }
+        };
+
+        Assert.Equal("https://robota.ua/zapros/python-developer/kyiv/params;experienceType=true;salary=40000;scheduleIds=3", SiteSearchService.ListPageUrl(request, 1));
+        Assert.Equal("https://robota.ua/zapros/ukraine", SiteSearchService.ListPageUrl(new SiteSearchRequest { Source = JobSource.RobotaUa }, 1));
+        Assert.Equal("https://robota.ua/zapros/ukraine/params;page=2", SiteSearchService.ListPageUrl(new SiteSearchRequest { Source = JobSource.RobotaUa }, 2));
+    }
+
+    [Fact]
+    public async Task WorkUaSearch_ReadsEachJobPageInBrowser_WithoutRobotsTxt()
+    {
+        SiteSearchRequest request = new() { Source = JobSource.WorkUa, City = "kyiv", Keywords = "python" };
+        _browser.Pages[SiteSearchService.ListPageUrl(request, 1)!] = WorkUaPageTests.ListPage(WorkUaPageTests.Card(101, "Python Developer"), WorkUaPageTests.Card(102, "Data Engineer"));
+        _browser.Pages["https://www.work.ua/jobs/101/"] = WorkUaPageTests.JobPage(["Python", "Django"]);
+        _browser.Pages["https://www.work.ua/jobs/102/"] = WorkUaPageTests.JobPage(["SQL"]);
+
+        SiteSearchStatusDto done = await WaitDoneAsync(_search.Start(request, User).Status!.Id);
+
+        Assert.Equal(["Python Developer", "Data Engineer"], done.Vacancies!.Select(v => v.Title));
+        VacancyDto python = done.Vacancies!.Single(v => v.Title == "Python Developer");
+        // Повний опис і навички зі сторінки вакансії, а не «Короткий опис» з картки списку
+        Assert.Contains("Досвід ручного тестування", python.Description, StringComparison.Ordinal);
+        Assert.DoesNotContain("Короткий опис", python.Description, StringComparison.Ordinal);
+        Assert.Contains("Django", python.Skills);
+        Assert.Equal(
+            [SiteSearchService.ListPageUrl(request, 1)!, "https://www.work.ua/jobs/101/", "https://www.work.ua/jobs/102/"],
+            _browser.Urls); // robots.txt не читаємо
+        Assert.Empty(_sites.Requested); // звичайним HTTP на Work.ua не ходимо
+    }
+
+    [Fact]
+    public async Task WorkUaListOnly_ReadsOnlyListPages_AndIsCachedApartFromFullSearch()
+    {
+        SiteSearchRequest quick = new() { Source = JobSource.WorkUa, Keywords = "python", ListOnly = true };
+        _browser.Pages[SiteSearchService.ListPageUrl(quick, 1)!] = WorkUaPageTests.ListPage(WorkUaPageTests.Card(101, "Python Developer"));
+        _browser.Pages["https://www.work.ua/jobs/101/"] = WorkUaPageTests.JobPage(["Python"]);
+
+        SiteSearchStatusDto done = await WaitDoneAsync(_search.Start(quick, User).Status!.Id);
+
+        Assert.Contains("Короткий опис", Assert.Single(done.Vacancies!).Description, StringComparison.Ordinal);
+        Assert.Equal([SiteSearchService.ListPageUrl(quick, 1)!], _browser.Urls); // сторінку вакансії не відкривали
+
+        // Той самий пошук з повними даними не береться зі швидкого кешу
+        SiteSearchStatusDto full = _search.Start(new SiteSearchRequest { Source = JobSource.WorkUa, Keywords = "python" }, User).Status!;
+        Assert.False(full.FromCache);
+        await WaitDoneAsync(full.Id);
+        Assert.Contains("https://www.work.ua/jobs/101/", _browser.Urls);
+    }
+
+    [Fact]
+    public async Task WorkUaListOnly_AfterFullSearch_DoesNotWipeStoredDetails()
+    {
+        SiteSearchRequest full = new() { Source = JobSource.WorkUa, Keywords = "python" };
+        SiteSearchRequest quick = new() { Source = JobSource.WorkUa, Keywords = "python", ListOnly = true };
+        _browser.Pages[SiteSearchService.ListPageUrl(full, 1)!] = WorkUaPageTests.ListPage(WorkUaPageTests.Card(101, "Python Developer"));
+        _browser.Pages["https://www.work.ua/jobs/101/"] = WorkUaPageTests.JobPage(["Python", "Django"]);
+        await WaitDoneAsync(_search.Start(full, User).Status!.Id);
+
+        // Швидкий пошук бачить ту саму вакансію лише в картці списку
+        _browser.Pages[SiteSearchService.ListPageUrl(quick, 1)!] = WorkUaPageTests.ListPage(WorkUaPageTests.Card(101, "Senior Python Developer"));
+        SiteSearchStatusDto done = await WaitDoneAsync(_search.Start(quick, User).Status!.Id);
+
+        VacancyDto vacancy = Assert.Single(done.Vacancies!);
+        Assert.Equal("Senior Python Developer", vacancy.Title); // те, що список дає повністю, оновлюється
+        Assert.Contains("Досвід ручного тестування", vacancy.Description, StringComparison.Ordinal);
+        Assert.Contains("Django", vacancy.Skills);
+        Assert.Contains("Повна зайнятість", vacancy.Schedule, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void ListOnly_IsRejectedForRobotaUa()
+    {
+        SiteSearchRequest request = new() { Source = JobSource.RobotaUa, ListOnly = true };
+
+        List<ValidationResult> results = [];
+        Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.Contains(results, r => r.ErrorMessage!.Contains("listOnly", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RobotaUaSearch_ReadsEachJobPageInBrowser_BecauseTheListHasNoDescription()
+    {
+        SiteSearchRequest request = new() { Source = JobSource.RobotaUa, Keywords = "qa" };
+        _browser.Pages[SiteSearchService.ListPageUrl(request, 1)!] = """<main><a href="/company1/vacancy42"><h2>QA Engineer</h2></a></main>""";
+        _browser.Pages["https://robota.ua/company1/vacancy42"] = """<main><h1>QA Engineer</h1><div itemprop="description">Тестування продукту</div></main>""";
+
+        SiteSearchStatusDto done = await WaitDoneAsync(_search.Start(request, User).Status!.Id);
+
+        VacancyDto vacancy = Assert.Single(done.Vacancies!);
+        Assert.Equal(("QA Engineer", JobSource.RobotaUa), (vacancy.Title, vacancy.Source));
+        Assert.Contains("Тестування продукту", vacancy.Description, StringComparison.Ordinal);
+        Assert.DoesNotContain(_browser.Urls, url => url.EndsWith("/robots.txt", StringComparison.Ordinal));
+    }
+
     [Theory]
-    [InlineData(JobSource.WorkUa, null, "Djinni і Dou")]
+    [InlineData(JobSource.WorkUa, "Київ", null, "коди з адреси")]
+    [InlineData(JobSource.RobotaUa, null, "a&b", "options")]
+    public void WorkUaAndRobotaUa_AcceptOnlySiteCodes(JobSource source, string? city, string? optionValue, string error)
+    {
+        SiteSearchRequest request = new()
+        {
+            Source = source,
+            City = city,
+            Options = optionValue is null ? null : new Dictionary<string, string> { ["salary"] = optionValue }
+        };
+
+        List<ValidationResult> results = [];
+        Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.Contains(results, r => r.ErrorMessage!.Contains(error, StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(JobSource.Unknown, null, "Djinni, Dou, WorkUa і RobotaUa")]
     [InlineData(JobSource.Djinni, "2 роки", "experience")]
     [InlineData(JobSource.Djinni, "2y&salary=9", "experience")]
     public void Request_RejectsUnsupportedSiteAndForeignExperienceCodes(JobSource source, string? experience, string error)
@@ -148,6 +296,37 @@ public sealed class SiteSearchServiceTests : IDisposable
         Assert.True(again.Status!.FromCache);
         Assert.Equal(SiteSearchStates.Completed, again.Status.State);
         Assert.Equal(requests, _sites.Requested.Count);
+    }
+
+    [Fact]
+    public async Task DouSearchByCategory_SavesThatCategory_BecauseTheFeedHasNone()
+    {
+        // RSS DOU не містить категорії, а стрічка з category=C++ — це лише вакансії розділу C++
+        SiteSearchRequest request = new() { Source = JobSource.Dou, Categories = ["C++"] };
+        _sites.Pages[SiteSearchService.ListPageUrl(request, 1)!] = DouPageTests.Feed(DouPageTests.Item(20), DouPageTests.Item(21));
+
+        SiteSearchStatusDto done = await WaitDoneAsync(_search.Start(request, User).Status!.Id);
+
+        Assert.Equal(2, done.Vacancies!.Count);
+        Assert.All(done.Vacancies!, v => Assert.Equal(("C++", "Software Development"), (v.Category, v.CategoryGroup)));
+    }
+
+    [Fact]
+    public void RequestedCategory_DoesNotReplaceTheSitesOwn()
+    {
+        SiteSearchRequest request = new() { Source = JobSource.Djinni, Categories = ["C++"] };
+        List<RawVacancy> raw = [new() { Id = "1", Category = "Embedded" }, new() { Id = "2" }];
+
+        Assert.Equal(["Embedded", "C++"], SiteSearchService.WithRequestedCategory(raw, request).Select(v => v.Category));
+    }
+
+    [Fact]
+    public void SeveralRequestedCategories_AreNotGuessed()
+    {
+        SiteSearchRequest request = new() { Source = JobSource.Djinni, Categories = ["MAUI", "Xamarin"] };
+        List<RawVacancy> raw = [new() { Id = "1" }];
+
+        Assert.Null(SiteSearchService.WithRequestedCategory(raw, request).Single().Category);
     }
 
     [Fact]
@@ -260,6 +439,35 @@ public sealed class SiteSearchServiceTests : IDisposable
             return Pages.TryGetValue(url, out string? body)
                 ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) }
                 : new HttpResponseMessage(HttpStatusCode.NotFound);
+        }
+    }
+
+    /// <summary>Підробка браузера автора: віддає підготовлену розмітку й запам'ятовує відкриті адреси.</summary>
+    private sealed class BrowserStub : IBrowserFetcher
+    {
+        private readonly List<string> _urls = [];
+
+        public Dictionary<string, string> Pages { get; } = [];
+
+        public IReadOnlyList<string> Urls
+        {
+            get
+            {
+                lock (_urls)
+                {
+                    return _urls.ToList();
+                }
+            }
+        }
+
+        public Task<string> GetPageAsync(string url, CancellationToken ct = default)
+        {
+            lock (_urls)
+            {
+                _urls.Add(url);
+            }
+
+            return Task.FromResult(Pages.TryGetValue(url, out string? html) ? html : string.Empty);
         }
     }
 

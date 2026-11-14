@@ -1395,7 +1395,7 @@ components:
           type: array
           items:
             type: string
-          description: 'Категорії: для Djinni — ключі категорій сайту (Python, .NET, QA Automation…), для DOU — одна категорія (Python, QA…).'
+          description: 'Категорії: для Djinni — ключі категорій сайту (Python, .NET, QA Automation…), для DOU — одна категорія (Python, QA…), для Work.ua — одна сфера з адреси сайту (it, sales…); Robota.ua категорій не має.'
           nullable: true
           example:
             - Python
@@ -1408,12 +1408,20 @@ components:
           maxLength: 50
           minLength: 0
           type: string
-          description: 'Місто: для Djinni — код (kyiv, lviv…), для DOU — назва (Київ, Львів…).'
+          description: 'Місто: для Djinni, Work.ua і Robota.ua — код з адреси сайту (kyiv, lviv…), для DOU — назва (Київ, Львів…).'
           nullable: true
           example: kyiv
         remote:
           type: boolean
           description: Лише віддалена робота.
+        options:
+          type: object
+          additionalProperties:
+            type: string
+          description: 'Інші фільтри сайту в його позначеннях: для Work.ua — параметри адреси (employment=74, student=1, salaryfrom=5…), для Robota.ua — параметри після «params;» (scheduleIds=1, experienceType=true, salary=40000).'
+          nullable: true
+          example:
+            employment: '74'
         employment:
           type: string
           description: 'Зайнятість на Djinni: remote, office або parttime (remote можна задати й через Waterfall.Services.Models.SiteSearch.SiteSearchRequest.Remote).'
@@ -1441,6 +1449,9 @@ components:
           description: 'Скільки сторінок списку читати: 1–5 (DOU завжди віддає одну стрічку з 25 найсвіжіших).'
           format: int32
           example: 2
+        listOnly:
+          type: boolean
+          description: 'Лише Work.ua: читати тільки сторінки списку, без сторінки кожної вакансії. Пошук займає секунди замість хвилини на сторінку, але опис — 1–2 рядки з картки, без навичок, досвіду й графіка.'
       additionalProperties: false
       description: "Запит «знайти вакансії на сайті за фільтрами»: сервер читає сайт, зберігає знайдене в базу й повертає результат.\r\nЗначення фільтрів — у позначеннях самого сайту, як їх подає застосунок."
     SiteSearchStatusDto:

@@ -1,4 +1,6 @@
 // AI: моделі пошуку на сайтах на запит користувача (issue #62); перевірено: тести SiteSearchServiceTests і SiteSearchesControllerTests, самоперевірка автора (§8)
+// AI: Work.ua і Robota.ua в пошуку на запит, додаткові фільтри сайту (options) (issue #62); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
+// AI: швидкий пошук Work.ua лише за сторінками списку (listOnly) (issue #62); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
@@ -14,13 +16,14 @@ public sealed partial class SiteSearchRequest : IValidatableObject
 {
     public const int MaxPages = 5;
     public const int MaxCategories = 10;
+    public const int MaxOptions = 20;
 
-    /// <summary>Сайт: Djinni або Dou.</summary>
+    /// <summary>Сайт: Djinni, Dou, WorkUa або RobotaUa.</summary>
     /// <example>Djinni</example>
     [Required(ErrorMessage = "Поле source є обов'язковим")]
     public JobSource? Source { get; init; }
 
-    /// <summary>Категорії: для Djinni — ключі категорій сайту (Python, .NET, QA Automation…), для DOU — одна категорія (Python, QA…).</summary>
+    /// <summary>Категорії: для Djinni — ключі категорій сайту (Python, .NET, QA Automation…), для DOU — одна категорія (Python, QA…), для Work.ua — одна сфера з адреси сайту (it, sales…); Robota.ua категорій не має.</summary>
     /// <example>["Python"]</example>
     public IReadOnlyList<string>? Categories { get; init; }
 
@@ -28,13 +31,17 @@ public sealed partial class SiteSearchRequest : IValidatableObject
     /// <example>2y</example>
     public string? Experience { get; init; }
 
-    /// <summary>Місто: для Djinni — код (kyiv, lviv…), для DOU — назва (Київ, Львів…).</summary>
+    /// <summary>Місто: для Djinni, Work.ua і Robota.ua — код з адреси сайту (kyiv, lviv…), для DOU — назва (Київ, Львів…).</summary>
     /// <example>kyiv</example>
     [StringLength(50, ErrorMessage = "Довжина city не може перевищувати 50 символів")]
     public string? City { get; init; }
 
     /// <summary>Лише віддалена робота.</summary>
     public bool Remote { get; init; }
+
+    /// <summary>Інші фільтри сайту в його позначеннях: для Work.ua — параметри адреси (employment=74, student=1, salaryfrom=5…), для Robota.ua — параметри після «params;» (scheduleIds=1, experienceType=true, salary=40000).</summary>
+    /// <example>{"employment":"74"}</example>
+    public IReadOnlyDictionary<string, string>? Options { get; init; }
 
     /// <summary>Зайнятість на Djinni: remote, office або parttime (remote можна задати й через <see cref="Remote"/>).</summary>
     /// <example>office</example>
@@ -55,11 +62,37 @@ public sealed partial class SiteSearchRequest : IValidatableObject
     [Range(1, MaxPages, ErrorMessage = "pages має бути від 1 до 5")]
     public int Pages { get; init; } = 1;
 
+    /// <summary>Лише Work.ua: читати тільки сторінки списку, без сторінки кожної вакансії. Пошук займає секунди замість хвилини на сторінку, але опис — 1–2 рядки з картки, без навичок, досвіду й графіка.</summary>
+    public bool ListOnly { get; init; }
+
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        if (Source is not (JobSource.Djinni or JobSource.Dou))
+        if (Source is not (JobSource.Djinni or JobSource.Dou or JobSource.WorkUa or JobSource.RobotaUa))
         {
-            yield return new ValidationResult("Пошук на сайтах поки підтримує лише Djinni і Dou", [nameof(Source)]);
+            yield return new ValidationResult("Пошук на сайтах підтримує Djinni, Dou, WorkUa і RobotaUa", [nameof(Source)]);
+        }
+
+        // На Work.ua і Robota.ua місто й сфера стають частиною шляху адреси, тож це лише коди сайту
+        if (Source is JobSource.WorkUa or JobSource.RobotaUa
+            && (City is { Length: > 0 } && !PathCode().IsMatch(City) || Categories?.Any(category => !PathCode().IsMatch(category)) == true))
+        {
+            yield return new ValidationResult("Для Work.ua і Robota.ua city та categories — коди з адреси сайту (kyiv, it…)", [nameof(City), nameof(Categories)]);
+        }
+
+        // У списку Robota.ua лише назва й посилання: без сторінок вакансій зберігати нічого
+        if (ListOnly && Source == JobSource.RobotaUa)
+        {
+            yield return new ValidationResult("listOnly недоступний для Robota.ua: у списку сайту немає нічого, крім назви", [nameof(ListOnly)]);
+        }
+
+        if (Options is { Count: > MaxOptions })
+        {
+            yield return new ValidationResult($"Не більше {MaxOptions} додаткових фільтрів", [nameof(Options)]);
+        }
+
+        if (Options?.Any(option => !OptionName().IsMatch(option.Key) || !OptionValue().IsMatch(option.Value ?? string.Empty)) == true)
+        {
+            yield return new ValidationResult("options — пари «назва=значення» з латинських літер, цифр, «_», «-», «.» і «,»", [nameof(Options)]);
         }
 
         if (Categories is { Count: > MaxCategories })
@@ -85,6 +118,15 @@ public sealed partial class SiteSearchRequest : IValidatableObject
 
     [GeneratedRegex("^[a-z0-9_-]{1,10}$", RegexOptions.None, 1000)]
     private static partial Regex ExperienceCode();
+
+    [GeneratedRegex("^[a-z0-9_-]{1,40}$", RegexOptions.None, 1000)]
+    private static partial Regex PathCode();
+
+    [GeneratedRegex("^[A-Za-z_]{1,30}$", RegexOptions.None, 1000)]
+    private static partial Regex OptionName();
+
+    [GeneratedRegex("^[A-Za-z0-9_.,-]{1,30}$", RegexOptions.None, 1000)]
+    private static partial Regex OptionValue();
 }
 
 /// <summary>Стан пошуку на сайті: прогрес для шкали і, коли завершено, знайдені вакансії.</summary>
