@@ -1418,7 +1418,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: 'Інші фільтри сайту в його позначеннях: для Work.ua — параметри адреси (employment=74, student=1, salaryfrom=5…), для Robota.ua — параметри після «params;» (scheduleIds=1, experienceType=true, salary=40000).'
+          description: 'Інші фільтри сайту в його позначеннях: для Work.ua — параметри адреси (employment=74, student=1, salaryfrom=5…; кілька значень через кому: category=1,9 стає category=1+9), для Robota.ua — параметри після «params;» (scheduleIds=1, experienceType=true, salary=40000).'
           nullable: true
           example:
             employment: '74'
@@ -1447,6 +1447,13 @@ components:
           minimum: 1
           type: integer
           description: 'Скільки сторінок списку читати: 1–5 (DOU завжди віддає одну стрічку з 25 найсвіжіших).'
+          format: int32
+          example: 2
+        fromPage:
+          maximum: 50
+          minimum: 1
+          type: integer
+          description: 'З якої сторінки списку почати (1–50): так можна дочитати наступні сторінки, не перечитуючи першу. Читаються сторінки fromPage … fromPage + pages − 1.'
           format: int32
           example: 2
         listOnly:
@@ -1760,6 +1767,9 @@ components:
         isSaved:
           type: boolean
           description: "Ознака збереження вакансії поточним користувачем у закладки.\r\nОбчислюється динамічно за таблицею збережених вакансій."
+        isViewed:
+          type: boolean
+          description: Поточний користувач уже переглядав вакансію (розгортав подробиці чи відкривав на сайті); заповнює пошук на сайтах.
       additionalProperties: false
       description: 'DTO представлення вакансії для клієнтів API (Web API, .NET MAUI).'
     VacancyDtoPagedResult:

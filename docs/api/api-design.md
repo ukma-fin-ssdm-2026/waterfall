@@ -82,8 +82,8 @@
 ### 2.6. Ресурс SiteSearches (Пошук на сайтах на запит)
 - **Кінцева точка (URI):** `/api/v1/site-searches`
 - **Опис:** Користувач обирає сайт (Djinni, DOU, Work.ua чи Robota.ua) і фільтри — сервер читає сторінки списку з цими фільтрами (Djinni — сторінка пошуку, DOU — офіційна RSS-стрічка, 25 найсвіжіших; Work.ua і Robota.ua — браузером разом зі сторінкою кожної вакансії; для Work.ua `listOnly: true` — швидко, лише картки списку), зберігає вакансії і повертає їх. Поки йде обхід, клієнт опитує стан і показує шкалу прогресу.
-- **Запит (`SiteSearchRequest`):** `source` (`Djinni` | `Dou` | `WorkUa` | `RobotaUa`), `categories`, `experience`, `city`, `remote`, `employment`, `salaryFrom`, `keywords`, `options` (інші фільтри Work.ua чи Robota.ua як пари «назва=значення») — у позначеннях сайту; `pages` 1–5 (DOU — завжди 1).
-- **Стан (`SiteSearchStatusDto`):** `id`, `state` (`queued` | `running` | `completed` | `failed`), `pagesDone`, `pagesTotal`, `found`, `fromCache`, `message`, `vacancies` (лише коли `completed`).
+- **Запит (`SiteSearchRequest`):** `source` (`Djinni` | `Dou` | `WorkUa` | `RobotaUa`), `categories`, `experience`, `city`, `remote`, `employment`, `salaryFrom`, `keywords`, `options` (інші фільтри Work.ua чи Robota.ua як пари «назва=значення»; кілька значень через кому, `category=1,9` на Work.ua стає `category=1+9`) — у позначеннях сайту; `pages` 1–5 (DOU — завжди 1); `fromPage` 1–50 — з якої сторінки почати (читаються `fromPage` … `fromPage + pages − 1`; для DOU лише 1); `listOnly` (лише Work.ua).
+- **Стан (`SiteSearchStatusDto`):** `id`, `state` (`queued` | `running` | `completed` | `failed`), `pagesDone`, `pagesTotal`, `found`, `fromCache`, `message`, `vacancies` (лише коли `completed`; кожна з `isSaved` і `isViewed` — чи користувач уже переглядав вакансію).
 - **Обмеження:** потрібен JWT; один активний пошук на користувача й до 20 пошуків на годину (`429 SITE_SEARCH_LIMIT`); до одного сайту одночасно йде один обхід (решта — `queued`); такий самий пошук протягом 3 годин віддається з бази без звернення до сайту (`fromCache = true`). Стан пошуків зберігається в пам'яті API.
 
 ---

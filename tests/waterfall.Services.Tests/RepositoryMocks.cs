@@ -340,6 +340,12 @@ public sealed class FakeVacancyViewRepository : IVacancyViewRepository
             .ToList();
         return Task.FromResult(items);
     }
+
+    public Task<HashSet<Guid>> GetViewedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, Guid userId, CancellationToken ct = default)
+    {
+        HashSet<Guid> wanted = [.. vacancyIds];
+        return Task.FromResult(Views.Where(v => v.UserId == userId && wanted.Contains(v.VacancyId)).Select(v => v.VacancyId).ToHashSet());
+    }
 }
 
 public sealed class FakeUserRepository : IUserRepository

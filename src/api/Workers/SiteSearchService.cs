@@ -1,4 +1,6 @@
 // AI: пошук на сайтах на запит користувача: адреси з фільтрами, черга за сайтами, прогрес, кеш і ліміти (issue #62); перевірено: юніт-тести SiteSearchServiceTests і SiteSearchUrlsTests, ручний запуск проти djinni.co і jobs.dou.ua, самоперевірка автора (§8)
+// AI: позначка «переглянуто» для знайдених на сайтах вакансій (issue #62, на прохання Дениса); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
+// AI: стартова сторінка fromPage, кілька значень фільтра Work.ua через «+» (issue #62, на прохання Дениса); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 // AI: Work.ua і Robota.ua через браузер автора (IBrowserFetcher) без robots.txt, адреси з фільтрами звірено в браузері 10.11.2026 (issue #62); перевірено: юніт-тести з підробленим браузером, самоперевірка автора (§8)
 
 using System.Collections.Concurrent;
@@ -216,7 +218,10 @@ public sealed class SiteSearchService : ISiteSearchService
         }
 
         string url = path.Count == 0 ? "https://www.work.ua/jobs/" : $"https://www.work.ua/jobs-{string.Join('-', path)}/";
-        return query.Count == 0 ? url : url + "?" + string.Join("&", query.Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value)}"));
+        // Кілька значень одного фільтра Work.ua пише через «+» (category=1+9, language=1+41)
+        return query.Count == 0
+            ? url
+            : url + "?" + string.Join("&", query.Select(p => $"{Uri.EscapeDataString(p.Key)}={string.Join('+', p.Value.Split(',').Select(Uri.EscapeDataString))}"));
     }
 
     /// <summary>
@@ -264,7 +269,8 @@ public sealed class SiteSearchService : ISiteSearchService
             {
                 job.Run(PagesFor(request));
                 SiteCrawler crawler = new(
-                    FilteredSiteParser.For(ParserFor(job.Source), page => ListPageUrl(request, page)),
+                    // Обхід рахує сторінки з 1, а читати треба з fromPage
+                    FilteredSiteParser.For(ParserFor(job.Source), page => ListPageUrl(request, page + request.FromPage - 1)),
                     PagesFor(request),
                     _options.RequestDelay,
                     _httpClientFactory,
@@ -310,12 +316,15 @@ public sealed class SiteSearchService : ISiteSearchService
         IReadOnlyList<VacancyDB> found = await scope.ServiceProvider.GetRequiredService<IVacancyRepository>().GetBySourceIdsAsync(source.ToString(), ids, ct);
         HashSet<Guid> saved = await scope.ServiceProvider.GetRequiredService<ISavedVacancyRepository>()
             .GetSavedVacancyIdsAsync(found.Select(v => v.Id).ToList(), userId, ct);
+        // Перегляди — для фільтра «Приховати переглянуті» в застосунку
+        HashSet<Guid> viewed = await scope.ServiceProvider.GetRequiredService<IVacancyViewRepository>()
+            .GetViewedVacancyIdsAsync(found.Select(v => v.Id).ToList(), userId, ct);
 
         // Порядок сайту: найновіші першими. Вакансії, які нормалізація відкинула, у базі відсутні й просто випадають
         Dictionary<string, int> order = ids.Select((id, index) => (id, index)).ToDictionary(p => p.id, p => p.index, StringComparer.Ordinal);
         return found
             .OrderBy(v => order.GetValueOrDefault(v.ExternalId ?? string.Empty, int.MaxValue))
-            .Select(v => VacancyService.MapToDto(v, saved.Contains(v.Id)))
+            .Select(v => VacancyService.MapToDto(v, saved.Contains(v.Id)) with { IsViewed = viewed.Contains(v.Id) })
             .ToList();
     }
 
@@ -365,6 +374,7 @@ public sealed class SiteSearchService : ISiteSearchService
         request.Keywords?.Trim().ToLowerInvariant(),
         string.Join(',', SortedOptions(request).Select(option => $"{option.Key}={option.Value}")),
         PagesFor(request),
+        request.FromPage,
         // Швидкий результат без описів не має підміняти повний (і навпаки)
         ReadsJobPages(request));
 

@@ -10,6 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Waterfall.Api.Workers;
 using Waterfall.Repository.Data;
+using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Repository.Repositories;
 using Waterfall.Services;
@@ -42,6 +43,7 @@ public sealed class SiteSearchServiceTests : IDisposable
             .AddDbContext<WaterfallDbContext>(options => options.UseSqlite(_connection))
             .AddScoped<IVacancyRepository, EfVacancyRepository>()
             .AddScoped<ISavedVacancyRepository, EfSavedVacancyRepository>()
+            .AddScoped<IVacancyViewRepository, EfVacancyViewRepository>()
             .AddScoped<IVacancyIngestionService, VacancyIngestionService>()
             .BuildServiceProvider();
         using (IServiceScope scope = _services.CreateScope())
@@ -203,6 +205,65 @@ public sealed class SiteSearchServiceTests : IDisposable
         Assert.Contains("Досвід ручного тестування", vacancy.Description, StringComparison.Ordinal);
         Assert.Contains("Django", vacancy.Skills);
         Assert.Contains("Повна зайнятість", vacancy.Schedule, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WorkUaSeveralCodes_AreJoinedWithPlus_AndFromPageShiftsThePage()
+    {
+        SiteSearchRequest request = new()
+        {
+            Source = JobSource.WorkUa,
+            City = "kyiv",
+            Options = new Dictionary<string, string> { ["category"] = "1,9", ["language"] = "1,41", ["student"] = "1" }
+        };
+
+        Assert.Equal("https://www.work.ua/jobs-kyiv/?category=1+9&language=1+41&student=1", SiteSearchService.ListPageUrl(request, 1));
+        Assert.Equal("https://www.work.ua/jobs-kyiv/?category=1+9&language=1+41&student=1&page=3", SiteSearchService.ListPageUrl(request, 3));
+    }
+
+    [Fact]
+    public async Task FromPage_StartsTheCrawlFromThatPage()
+    {
+        SiteSearchRequest request = new() { Source = JobSource.WorkUa, Keywords = "python", FromPage = 3, Pages = 1, ListOnly = true };
+        _browser.Pages[SiteSearchService.ListPageUrl(request, 3)!] = WorkUaPageTests.ListPage(WorkUaPageTests.Card(301, "Page three job"));
+
+        SiteSearchStatusDto done = await WaitDoneAsync(_search.Start(request, User).Status!.Id);
+
+        Assert.Equal(["Page three job"], done.Vacancies!.Select(v => v.Title));
+        Assert.Equal([SiteSearchService.ListPageUrl(request, 3)!], _browser.Urls); // першу сторінку не читали
+    }
+
+    [Fact]
+    public void FromPage_IsRejectedForDou()
+    {
+        SiteSearchRequest request = new() { Source = JobSource.Dou, FromPage = 2 };
+
+        List<ValidationResult> results = [];
+        Validator.TryValidateObject(request, new ValidationContext(request), results, validateAllProperties: true);
+
+        Assert.Contains(results, r => r.ErrorMessage!.Contains("fromPage", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FoundVacancies_AreMarkedViewed_WhenTheUserViewedThem()
+    {
+        SiteSearchRequest request = new() { Source = JobSource.WorkUa, Keywords = "qa", ListOnly = true };
+        _browser.Pages[SiteSearchService.ListPageUrl(request, 1)!] = WorkUaPageTests.ListPage(WorkUaPageTests.Card(401, "Seen"), WorkUaPageTests.Card(402, "Unseen"));
+        List<VacancyDto> first = (await WaitDoneAsync(_search.Start(request, User).Status!.Id)).Vacancies!.ToList();
+        Assert.DoesNotContain(first, v => v.IsViewed);
+
+        using (IServiceScope scope = _services.CreateScope())
+        {
+            WaterfallDbContext db = scope.ServiceProvider.GetRequiredService<WaterfallDbContext>();
+            db.Users.Add(new UserDB { Id = User, Email = "viewer@example.com", PasswordHash = "hash" });
+            await db.SaveChangesAsync();
+            await scope.ServiceProvider.GetRequiredService<IVacancyViewRepository>()
+                .AddAsync(new VacancyViewDB { UserId = User, VacancyId = first.Single(v => v.Title == "Seen").Id, ViewedAt = DateTimeOffset.UtcNow });
+        }
+
+        // Повторний пошук береться з кешу, але позначки читаються з бази заново
+        SiteSearchStatusDto again = (await _search.GetAsync(_search.Start(request, User).Status!.Id, User))!;
+        Assert.Equal([("Seen", true), ("Unseen", false)], again.Vacancies!.Select(v => (v.Title, v.IsViewed)));
     }
 
     [Fact]

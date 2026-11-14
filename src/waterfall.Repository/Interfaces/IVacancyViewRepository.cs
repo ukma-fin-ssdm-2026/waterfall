@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: позначка «переглянуто» для знайдених на сайтах вакансій (issue #62, на прохання Дениса); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 
 using Waterfall.Repository.Entities;
 
@@ -17,4 +18,7 @@ public interface IVacancyViewRepository
 
     /// <summary>Перегляди користувача з вакансіями — джерело агрегації частоти технологій/категорій.</summary>
     Task<IReadOnlyList<VacancyViewDB>> GetForUserAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>Які з <paramref name="vacancyIds"/> користувач уже переглядав (будь-коли) — для фільтра «Приховати переглянуті».</summary>
+    Task<HashSet<Guid>> GetViewedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, Guid userId, CancellationToken ct = default);
 }

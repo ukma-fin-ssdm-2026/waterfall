@@ -1,6 +1,7 @@
 // AI: моделі пошуку на сайтах на запит користувача (issue #62); перевірено: тести SiteSearchServiceTests і SiteSearchesControllerTests, самоперевірка автора (§8)
 // AI: Work.ua і Robota.ua в пошуку на запит, додаткові фільтри сайту (options) (issue #62); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 // AI: швидкий пошук Work.ua лише за сторінками списку (listOnly) (issue #62); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
+// AI: стартова сторінка fromPage і кілька значень фільтра через кому (issue #62, на прохання Дениса); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 
 using System.ComponentModel.DataAnnotations;
 using System.Text.RegularExpressions;
@@ -17,6 +18,7 @@ public sealed partial class SiteSearchRequest : IValidatableObject
     public const int MaxPages = 5;
     public const int MaxCategories = 10;
     public const int MaxOptions = 20;
+    public const int MaxFromPage = 50;
 
     /// <summary>Сайт: Djinni, Dou, WorkUa або RobotaUa.</summary>
     /// <example>Djinni</example>
@@ -39,7 +41,7 @@ public sealed partial class SiteSearchRequest : IValidatableObject
     /// <summary>Лише віддалена робота.</summary>
     public bool Remote { get; init; }
 
-    /// <summary>Інші фільтри сайту в його позначеннях: для Work.ua — параметри адреси (employment=74, student=1, salaryfrom=5…), для Robota.ua — параметри після «params;» (scheduleIds=1, experienceType=true, salary=40000).</summary>
+    /// <summary>Інші фільтри сайту в його позначеннях: для Work.ua — параметри адреси (employment=74, student=1, salaryfrom=5…; кілька значень через кому: category=1,9 стає category=1+9), для Robota.ua — параметри після «params;» (scheduleIds=1, experienceType=true, salary=40000).</summary>
     /// <example>{"employment":"74"}</example>
     public IReadOnlyDictionary<string, string>? Options { get; init; }
 
@@ -62,6 +64,11 @@ public sealed partial class SiteSearchRequest : IValidatableObject
     [Range(1, MaxPages, ErrorMessage = "pages має бути від 1 до 5")]
     public int Pages { get; init; } = 1;
 
+    /// <summary>З якої сторінки списку почати (1–50): так можна дочитати наступні сторінки, не перечитуючи першу. Читаються сторінки fromPage … fromPage + pages − 1.</summary>
+    /// <example>2</example>
+    [Range(1, MaxFromPage, ErrorMessage = "fromPage має бути від 1 до 50")]
+    public int FromPage { get; init; } = 1;
+
     /// <summary>Лише Work.ua: читати тільки сторінки списку, без сторінки кожної вакансії. Пошук займає секунди замість хвилини на сторінку, але опис — 1–2 рядки з картки, без навичок, досвіду й графіка.</summary>
     public bool ListOnly { get; init; }
 
@@ -77,6 +84,12 @@ public sealed partial class SiteSearchRequest : IValidatableObject
             && (City is { Length: > 0 } && !PathCode().IsMatch(City) || Categories?.Any(category => !PathCode().IsMatch(category)) == true))
         {
             yield return new ValidationResult("Для Work.ua і Robota.ua city та categories — коди з адреси сайту (kyiv, it…)", [nameof(City), nameof(Categories)]);
+        }
+
+        // Стрічка DOU одна, наступних сторінок у неї немає
+        if (FromPage > 1 && Source == JobSource.Dou)
+        {
+            yield return new ValidationResult("fromPage недоступний для DOU: у стрічки лише одна сторінка", [nameof(FromPage)]);
         }
 
         // У списку Robota.ua лише назва й посилання: без сторінок вакансій зберігати нічого
@@ -125,7 +138,7 @@ public sealed partial class SiteSearchRequest : IValidatableObject
     [GeneratedRegex("^[A-Za-z_]{1,30}$", RegexOptions.None, 1000)]
     private static partial Regex OptionName();
 
-    [GeneratedRegex("^[A-Za-z0-9_.,-]{1,30}$", RegexOptions.None, 1000)]
+    [GeneratedRegex("^[A-Za-z0-9_.,-]{1,200}$", RegexOptions.None, 1000)]
     private static partial Regex OptionValue();
 }
 
