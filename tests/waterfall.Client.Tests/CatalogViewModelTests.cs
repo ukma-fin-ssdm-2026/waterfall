@@ -263,6 +263,19 @@ public class CatalogViewModelTests
     }
 
     [Fact]
+    public async Task SourceFilter_CanKeepOnlyRobotaUa()
+    {
+        VacancyDto[] items = Vacancies("From Robota", "From Djinni");
+        await SearchSiteAsync(_vm, items[0] with { Source = JobSource.RobotaUa }, items[1] with { Source = JobSource.Djinni });
+
+        _vm.SelectedSourceFilter = "Robota.ua";
+        await _vm.FilterExistingCommand.ExecuteAsync(null);
+
+        Assert.Contains("Robota.ua", _vm.SourceFilterOptions);
+        Assert.Equal(["From Robota"], _vm.Vacancies.Select(v => v.Title));
+    }
+
+    [Fact]
     public async Task WhiteListMatchAll_RequiresEveryWord()
     {
         await SearchSiteAsync(_vm, "Python Django Developer", "Python Developer", "Django Developer");

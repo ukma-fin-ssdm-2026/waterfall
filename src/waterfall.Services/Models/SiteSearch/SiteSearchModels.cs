@@ -41,7 +41,7 @@ public sealed partial class SiteSearchRequest : IValidatableObject
     /// <summary>Лише віддалена робота.</summary>
     public bool Remote { get; init; }
 
-    /// <summary>Інші фільтри сайту в його позначеннях: для Work.ua — параметри адреси (employment=74, student=1, salaryfrom=5…; кілька значень через кому: category=1,9 стає category=1+9), для Robota.ua — параметри після «params;» (scheduleIds=1, experienceType=true, salary=40000).</summary>
+    /// <summary>Інші фільтри сайту в його позначеннях: для Djinni — параметри адреси (english_level=no_english, company_type=product, domain=fintech, region=UKR, country=POL), для Work.ua — параметри адреси (employment=74, student=1, salaryfrom=5…; кілька значень через кому: category=1,9 стає category=1+9), для Robota.ua — параметри після «params;» (scheduleIds=1, experienceType=true, salary=40000).</summary>
     /// <example>{"employment":"74"}</example>
     public IReadOnlyDictionary<string, string>? Options { get; init; }
 

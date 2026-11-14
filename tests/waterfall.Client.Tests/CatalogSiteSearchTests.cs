@@ -42,6 +42,23 @@ public class CatalogSiteSearchTests
     }
 
     [Fact]
+    public async Task DjinniExtraFilters_GoToSiteAsUrlParams()
+    {
+        _vm.SelectedPlatform = "Djinni";
+        _vm.DjinniSelectedEnglish = "Upper-Intermediate (english_level=upper)";
+        _vm.DjinniSelectedCompanyType = "Продуктова (company_type=product)";
+        _vm.DjinniSelectedDomain = "FinTech (domain=fintech)";
+        _vm.DjinniSelectedRegion = "Країни ЄС (region=eu)";
+        _vm.DjinniSelectedCountry = "Польща (country=POL)";
+
+        await RunSearchAsync();
+
+        Assert.Equal(
+            new Dictionary<string, string> { ["english_level"] = "upper", ["company_type"] = "product", ["domain"] = "fintech", ["region"] = "eu", ["country"] = "POL" },
+            Assert.Single(_gateway.SiteSearchRequests).Options);
+    }
+
+    [Fact]
     public async Task DjinniPanelDefaults_SendNoFilters()
     {
         _vm.SelectedPlatform = "Djinni";
@@ -51,6 +68,7 @@ public class CatalogSiteSearchTests
         SiteSearchRequest request = Assert.Single(_gateway.SiteSearchRequests);
         Assert.Null(request.Categories);
         Assert.Equal((null, null, null, null, (string?)null), (request.Experience, request.City, request.Employment, request.SalaryFrom, request.Keywords));
+        Assert.Null(request.Options);
     }
 
     [Theory]

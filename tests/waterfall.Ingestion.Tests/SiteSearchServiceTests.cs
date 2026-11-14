@@ -88,6 +88,18 @@ public sealed class SiteSearchServiceTests : IDisposable
     }
 
     [Fact]
+    public void DjinniUrl_CarriesExtraFiltersFromOptions()
+    {
+        SiteSearchRequest request = new()
+        {
+            Source = JobSource.Djinni,
+            Options = new Dictionary<string, string> { ["region"] = "eu", ["english_level"] = "upper", ["company_type"] = "product" }
+        };
+
+        Assert.Equal("https://djinni.co/jobs/?company_type=product&english_level=upper&region=eu", SiteSearchService.ListPageUrl(request, 1));
+    }
+
+    [Fact]
     public void DouUrl_IsTheRssFeedWithFilters_AndHasNoSecondPage()
     {
         SiteSearchRequest request = new() { Source = JobSource.Dou, Categories = ["Python"], Experience = "1-3", City = "Київ", Remote = true, Keywords = "Django" };

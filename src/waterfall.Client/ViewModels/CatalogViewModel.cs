@@ -6,6 +6,7 @@
 // AI: перемикач «відкривати кожну вакансію» Work.ua з попередженням про тривалість (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
 // AI: кнопка Robota.ua у рядку «Парсинг:» (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
 // AI: «Від N грн» на Robota.ua приховує вакансії без зарплати (salaryType=false, звірено з сайтом 14.11.2026) (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
+// AI: Djinni — англійська, тип компанії, домен, регіон і країна в запиті (коди звірено з djinni.co 15.11.2026); без неробочих «Рівень освіти» Work.ua і сторінок DOU; Robota.ua у фільтрі джерела (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
 // AI: на прохання Дениса — мультивибір сфер, мов і зайнятості Work.ua (коди звірено з сайтом 15.11.2026), «Для студентів», «Включно без ЗП», режим вайт-листа «Усі / Будь-яке», «Приховати переглянуті», стартова сторінка пошуку (issue #62); перевірено: CatalogViewModelTests і CatalogSiteSearchTests, самоперевірка автора (§8)
 
 using System.Collections.ObjectModel;
@@ -248,7 +249,8 @@ public partial class CatalogViewModel : ObservableObject
 
     public string FilterToggleText => IsFilterPanelVisible ? "Сховати фільтри ▲" : "Фільтри платформ ⚙";
 
-    public string DouButtonText => $"🔵 DOU ({DouPagesToParse} стор.) {(IsDouPanelVisible ? "▲" : "▼")}";
+    // Стрічка DOU одна (25 найсвіжіших), тож кількості сторінок у неї немає
+    public string DouButtonText => $"🔵 DOU (25 найсвіжіших) {(IsDouPanelVisible ? "▲" : "▼")}";
     public string WorkUaButtonText => $"🟠 Work.ua ({WorkUaPagesToParse} стор.) {(IsWorkUaPanelVisible ? "▲" : "▼")}";
     public string DjinniButtonText => $"🟣 Djinni ({DjinniPagesToParse} стор.) {(IsDjinniPanelVisible ? "▲" : "▼")}";
     public string RobotaUaButtonText => $"🔴 Robota.ua ({RobotaUaPagesToParse} стор.) {(IsRobotaUaPanelVisible ? "▲" : "▼")}";
@@ -522,9 +524,6 @@ public partial class CatalogViewModel : ObservableObject
     public partial string WorkUaSelectedExperience { get; set; } = "Будь-який досвід";
 
     [ObservableProperty]
-    public partial string WorkUaSelectedEducation { get; set; } = "Будь-яка освіта";
-
-    [ObservableProperty]
     public partial string WorkUaSelectedDays { get; set; } = "За 30 днів (за замовчуванням)";
 
     [ObservableProperty]
@@ -632,15 +631,6 @@ public partial class CatalogViewModel : ObservableObject
     [
         "Будь-який досвід",
         "Без досвіду (experience=1)"
-    ];
-
-    public IReadOnlyList<string> WorkUaEducationOptions { get; } =
-    [
-        "Будь-яка освіта",
-        "Вища (education=66)",
-        "Незакінчена вища (education=67)",
-        "Середня спеціальна (education=68)",
-        "Середня (education=69)"
     ];
 
     public IReadOnlyList<string> WorkUaDaysOptions { get; } =
@@ -855,72 +845,72 @@ public partial class CatalogViewModel : ObservableObject
     public IReadOnlyList<string> DjinniEnglishOptions { get; } =
     [
         "Будь-який рівень",
-        "Без англійської (no_english)",
-        "Basic (A1)",
-        "Pre-Intermediate (A2)",
-        "Intermediate (B1)",
-        "Upper-Intermediate (B2)",
-        "Advanced / Fluent (C1)",
-        "Proficient (C2)",
-        "Native speaker"
+        "Без англійської (english_level=no_english)",
+        "Beginner / Elementary (english_level=basic)",
+        "Pre-Intermediate (english_level=pre)",
+        "Intermediate (english_level=intermediate)",
+        "Upper-Intermediate (english_level=upper)",
+        "Advanced / Fluent (english_level=fluent)",
+        "Proficient (english_level=proficient)",
+        "Native speaker (english_level=native)"
     ];
 
     public IReadOnlyList<string> DjinniCompanyTypeOptions { get; } =
     [
         "Усі типи компаній",
-        "Product (Продуктова)",
-        "Outsource (Аутсорс)",
-        "Outstaff (Аутстаф)",
-        "Startup (Стартап)",
-        "In-house IT",
-        "Agency (Агенція)",
-        "Mixed",
-        "Government (Державна)"
+        "Продуктова (company_type=product)",
+        "Сервісна / аутсорс (company_type=outsource)",
+        "Аутстаф (company_type=outstaff)",
+        "Стартап (company_type=startup)",
+        "Змішана (company_type=mixed)",
+        "Не ІТ-компанія, ІТ-відділ (company_type=inhouse_it)",
+        "Агенція (company_type=agency)",
+        "Державна / громадська (company_type=government)"
     ];
 
     public IReadOnlyList<string> DjinniDomainOptions { get; } =
     [
         "Усі домени",
-        "FinTech (fintech)",
-        "E-commerce (ecommerce)",
-        "SaaS (saas)",
-        "MilTech / DefTech (miltech)",
-        "ML / AI (ml)",
-        "GameDev (gamedev)",
-        "Healthcare (healthcare)",
-        "EdTech (edutech)",
-        "Crypto / Web3 (crypto)",
-        "Cybersecurity (security)",
-        "Mobile (mobile)",
-        "Automotive (automotive)",
-        "Telecom (telecom)",
-        "Logistics (logistics)",
-        "Media (media)",
-        "Advertising / AdTech (advertising)",
-        "GovTech (govtech)",
-        "LegalTech (legaltech)",
-        "PropTech (proptech)",
-        "HRTech (hrtech)",
-        "Travel (travel)",
-        "Energy (energy)",
-        "Agriculture (agriculture)",
-        "Hardware (hardware)",
-        "Gambling (gambling)",
-        "Dating (dating)",
-        "Adult (adult)",
-        "Sports & Fitness (sports_fitness)",
-        "Manufacturing (manufacturing)",
-        "Entertainment (entertainment)",
-        "Other (other)"
+        "FinTech (domain=fintech)",
+        "E-commerce / Marketplace (domain=ecommerce)",
+        "SaaS (domain=saas)",
+        "DefTech (domain=miltech)",
+        "Machine Learning / Big Data (domain=ml)",
+        "GameDev (domain=gamedev)",
+        "Healthcare / MedTech (domain=healthcare)",
+        "Education (domain=edutech)",
+        "Blockchain / Crypto (domain=crypto)",
+        "Security (domain=security)",
+        "Mobile (domain=mobile)",
+        "Automotive (domain=automotive)",
+        "Telecom (domain=telecom)",
+        "Logistics (domain=logistics)",
+        "Media (domain=media)",
+        "Advertising / Marketing (domain=advertising)",
+        "GovTech (domain=govtech)",
+        "LegalTech (domain=legaltech)",
+        "PropTech (domain=proptech)",
+        "HRTech (domain=hrtech)",
+        "Travel / Tourism (domain=travel)",
+        "Energy / Utilities (domain=energy)",
+        "Agriculture / Food Tech (domain=agriculture)",
+        "Hardware / IoT (domain=hardware)",
+        "Gambling (domain=gambling)",
+        "Dating (domain=dating)",
+        "Adult (domain=adult)",
+        "Sports and Fitness (domain=sports_fitness)",
+        "Manufacturing (domain=manufacturing)",
+        "Entertainment / Streaming (domain=entertainment)",
+        "Other (domain=other)"
     ];
 
     public IReadOnlyList<string> DjinniRegionOptions { get; } =
     [
         "Усі регіони",
-        "Весь світ (worldwide)",
-        "Україна (UKR)",
-        "Євросоюз (eu)",
-        "Інші країни (other)"
+        "Весь світ (region=worldwide)",
+        "Україна (region=UKR)",
+        "Країни ЄС (region=eu)",
+        "Інші країни (region=other)"
     ];
 
     public IReadOnlyList<string> DjinniCityOptions { get; } =
@@ -953,22 +943,22 @@ public partial class CatalogViewModel : ObservableObject
     public IReadOnlyList<string> DjinniCountryOptions { get; } =
     [
         "Усі країни",
-        "Україна (UKR)",
-        "Польща (POL)",
-        "Кіпр (CYP)",
-        "Румунія (ROU)",
-        "Іспанія (ESP)",
-        "Чехія (CZE)",
-        "Словаччина (SVK)",
-        "Грузія (GEO)",
-        "Вірменія (ARM)",
-        "Португалія (PRT)",
-        "Молдова (MDA)",
-        "США (USA)",
-        "Німеччина (DEU)",
-        "Болгарія (BGR)",
-        "Литва (LTU)",
-        "Канада (CAN)"
+        "Україна (country=UKR)",
+        "Польща (country=POL)",
+        "Кіпр (country=CYP)",
+        "Румунія (country=ROU)",
+        "Іспанія (country=ESP)",
+        "Чехія (country=CZE)",
+        "Словаччина (country=SVK)",
+        "Грузія (country=GEO)",
+        "Вірменія (country=ARM)",
+        "Португалія (country=PRT)",
+        "Молдова (country=MDA)",
+        "США (country=USA)",
+        "Німеччина (country=DEU)",
+        "Болгарія (country=BGR)",
+        "Литва (country=LTU)",
+        "Канада (country=CAN)"
     ];
 
     // ==================== 4. ВАЙТ-ЛИСТ СЛІВ, БАН-СЛОВА ТА СОРТУВАННЯ ПО БД ====================
@@ -1005,7 +995,7 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     public partial string SelectedSortOption { get; set; } = "За датою (спочатку нові)";
 
-    public IReadOnlyList<string> SourceFilterOptions { get; } = ["Усі платформи", "DOU", "Work.ua", "Djinni"];
+    public IReadOnlyList<string> SourceFilterOptions { get; } = ["Усі платформи", "DOU", "Work.ua", "Djinni", "Robota.ua"];
 
     [ObservableProperty]
     public partial string SelectedSourceFilter { get; set; } = "Усі платформи";
@@ -1601,6 +1591,8 @@ public partial class CatalogViewModel : ObservableObject
                 ? custom
                 : DigitsOf(DjinniSelectedSalary),
             Keywords = KeywordsOr(DjinniAllKeywords),
+            // Англійська, тип компанії, домен, регіон і країна — параметри адреси djinni.co (звірено 15.11.2026)
+            Options = OptionsOf(DjinniSelectedEnglish, DjinniSelectedCompanyType, DjinniSelectedDomain, DjinniSelectedRegion, DjinniSelectedCountry),
             Pages = PagesOf(DjinniPagesToParse)
         },
         "WorkUa" => new SiteSearchRequest
@@ -1649,7 +1641,7 @@ public partial class CatalogViewModel : ObservableObject
     /// <summary>Фільтри Work.ua, які сайт бере з параметрів адреси, а не зі шляху.</summary>
     private Dictionary<string, string>? WorkUaOptions()
     {
-        Dictionary<string, string> options = OptionsOf(WorkUaSelectedExperience, WorkUaSelectedEducation, WorkUaSelectedDays) ?? [];
+        Dictionary<string, string> options = OptionsOf(WorkUaSelectedExperience, WorkUaSelectedDays) ?? [];
         foreach (IGrouping<string, SelectableOption> chosen in WorkUaCategoryChoices.Concat(WorkUaEmploymentChoices).Concat(WorkUaLanguageChoices)
             .Where(choice => choice.IsSelected)
             .GroupBy(choice => choice.Key))
@@ -2004,7 +1996,6 @@ public partial class CatalogViewModel : ObservableObject
         WorkUaSalaryTo = string.Empty;
         WorkUaIncludeNoSalary = false;
         WorkUaSelectedExperience = WorkUaExperienceOptions[0];
-        WorkUaSelectedEducation = WorkUaEducationOptions[0];
         WorkUaSelectedDays = WorkUaDaysOptions[0];
         WorkUaAgeFrom = string.Empty;
         WorkUaAgeTo = string.Empty;
@@ -2264,6 +2255,11 @@ public partial class CatalogViewModel : ObservableObject
         }
 
         if (SelectedSourceFilter == "Djinni" && v.Source != JobSource.Djinni)
+        {
+            return false;
+        }
+
+        if (SelectedSourceFilter == "Robota.ua" && v.Source != JobSource.RobotaUa)
         {
             return false;
         }

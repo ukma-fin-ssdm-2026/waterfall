@@ -1,6 +1,7 @@
 // AI: пошук на сайтах на запит користувача: адреси з фільтрами, черга за сайтами, прогрес, кеш і ліміти (issue #62); перевірено: юніт-тести SiteSearchServiceTests і SiteSearchUrlsTests, ручний запуск проти djinni.co і jobs.dou.ua, самоперевірка автора (§8)
 // AI: позначка «переглянуто» для знайдених на сайтах вакансій (issue #62, на прохання Дениса); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 // AI: стартова сторінка fromPage, кілька значень фільтра Work.ua через «+» (issue #62, на прохання Дениса); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
+// AI: додаткові фільтри Djinni (english_level, company_type, domain, region, country) в адресі (issue #62); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 // AI: Work.ua і Robota.ua через браузер автора (IBrowserFetcher) без robots.txt, адреси з фільтрами звірено в браузері 10.11.2026 (issue #62); перевірено: юніт-тести з підробленим браузером, самоперевірка автора (§8)
 
 using System.Collections.Concurrent;
@@ -167,6 +168,12 @@ public sealed class SiteSearchService : ISiteSearchService
             Add("employment", request.Remote ? "remote" : request.Employment);
             Add("salary", request.SalaryFrom is > 0 ? request.SalaryFrom.Value.ToString(CultureInfo.InvariantCulture) : null);
             Add("all_keywords", request.Keywords);
+            // Англійська, тип компанії, домен, регіон, країна (english_level=no_english, company_type=product…)
+            foreach (KeyValuePair<string, string> option in SortedOptions(request))
+            {
+                Add(option.Key, option.Value);
+            }
+
             Add("page", page > 1 ? page.ToString(CultureInfo.InvariantCulture) : null);
             url = "https://djinni.co/jobs/";
         }

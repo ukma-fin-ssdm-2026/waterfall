@@ -391,10 +391,15 @@
                                         </Border.Triggers>
                                         <Entry Style="{StaticResource CompactEntry}" Text="{Binding SiteFromPage}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
                                     </Border>
-                                    <Label Text="Сторінок:" FontSize="11" TextColor="{StaticResource Accent}" VerticalOptions="Center" />
-                                    <Border IsVisible="{Binding IsDouSelected}" Style="{StaticResource CompactFieldBorder}" Stroke="{StaticResource Accent}" WidthRequest="56">
-                                        <Entry Style="{StaticResource CompactEntry}" Text="{Binding DouPagesToParse}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
-                                    </Border>
+                                    <Label Text="Сторінок:" FontSize="11" TextColor="{StaticResource Accent}" VerticalOptions="Center">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label" Binding="{Binding IsDouSelected}" Value="True">
+                                                <Setter Property="IsVisible" Value="False" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
+                                    <!-- DOU віддає одну стрічку з 25 найсвіжіших: кількості сторінок у неї немає -->
+                                    <Label IsVisible="{Binding IsDouSelected}" Text="DOU: одна стрічка, 25 найсвіжіших" FontSize="11" TextColor="{StaticResource TextSecondary}" VerticalOptions="Center" />
                                     <Border IsVisible="{Binding IsWorkUaSelected}" Style="{StaticResource CompactFieldBorder}" Stroke="{StaticResource Accent}" WidthRequest="56">
                                         <Entry Style="{StaticResource CompactEntry}" Text="{Binding WorkUaPagesToParse}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
                                     </Border>
@@ -467,13 +472,7 @@
                                             <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaExperienceOptions}" SelectedItem="{Binding WorkUaSelectedExperience}" />
                                         </Border>
                                     </VerticalStackLayout>
-                                    <VerticalStackLayout Grid.Column="2">
-                                        <Label Text="Рівень освіти" Style="{StaticResource CompactFieldLabel}" />
-                                        <Border Style="{StaticResource CompactFieldBorder}">
-                                            <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaEducationOptions}" SelectedItem="{Binding WorkUaSelectedEducation}" />
-                                        </Border>
-                                    </VerticalStackLayout>
-                                    <VerticalStackLayout Grid.Column="3">
+                                    <VerticalStackLayout Grid.Column="2" Grid.ColumnSpan="2">
                                         <Label Text="Період публікації" Style="{StaticResource CompactFieldLabel}" />
                                         <Border Style="{StaticResource CompactFieldBorder}">
                                             <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaDaysOptions}" SelectedItem="{Binding WorkUaSelectedDays}" />
