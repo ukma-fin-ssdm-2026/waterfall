@@ -140,12 +140,12 @@ public class CatalogSiteSearchTests
     public async Task WorkUaPanel_BecomesPathCodesAndUrlFilters()
     {
         _vm.SelectedPlatform = "WorkUa";
-        _vm.WorkUaSelectedCategory = "IT, комп'ютери, інтернет";
+        Choose(_vm.WorkUaCategoryChoices, "IT, комп'ютери, інтернет");
         _vm.WorkUaSelectedCity = "Чернівці";
-        _vm.WorkUaSelectedEmployment = "Повна зайнятість (employment=74)";
+        Choose(_vm.WorkUaEmploymentChoices, "Повна зайнятість");
         _vm.WorkUaSelectedExperience = "Без досвіду (experience=1)";
         _vm.WorkUaSelectedDays = "За 7 днів (days=123)";
-        _vm.WorkUaSelectedLanguage = "Англійська (language=1)";
+        Choose(_vm.WorkUaLanguageChoices, "Англійська");
         _vm.WorkUaForStudents = true;
         _vm.WorkUaSalaryFrom = "25000";
         _vm.SiteKeywords = " Python ";
@@ -154,11 +154,78 @@ public class CatalogSiteSearchTests
         await RunSearchAsync();
 
         SiteSearchRequest request = Assert.Single(_gateway.SiteSearchRequests);
-        Assert.Equal((JobSource.WorkUa, "it", "chernivtsi_cv", "Python", false, 2),
-            (request.Source, request.Categories!.Single(), request.City, request.Keywords, request.Remote, request.Pages));
+        Assert.Equal((JobSource.WorkUa, (List<string>?)null, "chernivtsi_cv", "Python", false, 2),
+            (request.Source, request.Categories, request.City, request.Keywords, request.Remote, request.Pages));
         Assert.Equal(
-            new Dictionary<string, string> { ["employment"] = "74", ["experience"] = "1", ["days"] = "123", ["language"] = "1", ["student"] = "1", ["salaryfrom"] = "4" },
+            new Dictionary<string, string> { ["category"] = "1", ["employment"] = "74", ["experience"] = "1", ["days"] = "123", ["language"] = "1", ["student"] = "1", ["salaryfrom"] = "4" },
             request.Options);
+    }
+
+    [Fact]
+    public async Task WorkUaMultiSelect_SendsSeveralCodesPerFilter_AndSelectAllClearWork()
+    {
+        _vm.SelectedPlatform = "WorkUa";
+        Choose(_vm.WorkUaCategoryChoices, "IT, комп'ютери, інтернет", "Маркетинг, реклама, PR");
+        Choose(_vm.WorkUaLanguageChoices, "Англійська", "Українська");
+        _vm.SelectAllChoicesCommand.Execute(_vm.WorkUaEmploymentChoices);
+
+        await RunSearchAsync();
+
+        Dictionary<string, string> options = Assert.Single(_gateway.SiteSearchRequests).Options!;
+        Assert.Equal(("1,9", "1,41", "74,75", "1"), (options["category"], options["language"], options["employment"], options["hybrid"]));
+
+        _vm.ClearChoicesCommand.Execute(_vm.WorkUaCategoryChoices);
+        Assert.DoesNotContain(_vm.WorkUaCategoryChoices, choice => choice.IsSelected);
+        await _vm.ResetFiltersCommand.ExecuteAsync(null);
+        Assert.DoesNotContain(_vm.WorkUaLanguageChoices.Concat(_vm.WorkUaEmploymentChoices), choice => choice.IsSelected);
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, "1")]
+    public async Task WorkUaSalary_IncludeNoSalary_AddsNosalary(bool include, string? expected)
+    {
+        _vm.SelectedPlatform = "WorkUa";
+        _vm.WorkUaSalaryFrom = "20000";
+        _vm.WorkUaIncludeNoSalary = include;
+
+        await RunSearchAsync();
+
+        Assert.Equal(expected, Assert.Single(_gateway.SiteSearchRequests).Options!.GetValueOrDefault("nosalary"));
+    }
+
+    [Fact]
+    public async Task RobotaUaIncludeNoSalary_KeepsVacanciesWithoutSalary()
+    {
+        _vm.SelectedPlatform = "RobotaUa";
+        _vm.RobotaUaSelectedSalary = "Від 20 000 грн (salary=20000)";
+        _vm.RobotaUaIncludeNoSalary = true;
+
+        await RunSearchAsync();
+
+        Assert.Equal(new Dictionary<string, string> { ["salary"] = "20000" }, Assert.Single(_gateway.SiteSearchRequests).Options);
+    }
+
+    [Theory]
+    [InlineData("WorkUa", "3", 3)]
+    [InlineData("Djinni", "70", 50)]
+    [InlineData("DOU", "4", 1)]
+    public async Task FromPage_IsSentForPagedSites_ButNotDou(string platform, string fromPage, int expected)
+    {
+        _vm.SelectedPlatform = platform;
+        _vm.SiteFromPage = fromPage;
+
+        await RunSearchAsync();
+
+        Assert.Equal(expected, Assert.Single(_gateway.SiteSearchRequests).FromPage);
+    }
+
+    private static void Choose(IEnumerable<SelectableOption> choices, params string[] labels)
+    {
+        foreach (SelectableOption choice in choices.Where(choice => labels.Contains(choice.Label)))
+        {
+            choice.ToggleCommand.Execute(null);
+        }
     }
 
     [Fact]
@@ -196,15 +263,15 @@ public class CatalogSiteSearchTests
     }
 
     [Fact]
-    public async Task WorkUaRemoteEmployment_IsSentAsRemote_WithoutCity()
+    public async Task WorkUaRemoteCity_IsSentAsRemoteCityCode()
     {
         _vm.SelectedPlatform = "WorkUa";
-        _vm.WorkUaSelectedEmployment = "Дистанційна робота";
+        _vm.WorkUaSelectedCity = "Дистанційно";
 
         await RunSearchAsync();
 
         SiteSearchRequest request = Assert.Single(_gateway.SiteSearchRequests);
-        Assert.Equal((true, (string?)null, (List<string>?)null, (Dictionary<string, string>?)null), (request.Remote, request.City, request.Categories, request.Options));
+        Assert.Equal(("remote", (List<string>?)null, (Dictionary<string, string>?)null), (request.City, request.Categories, request.Options));
     }
 
     [Fact]

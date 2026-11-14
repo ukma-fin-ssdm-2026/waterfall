@@ -56,6 +56,25 @@
                 <Setter Property="WidthRequest" Value="22" />
                 <Setter Property="VerticalOptions" Value="Center" />
             </Style>
+            <!-- Чіп мультивибору (сфери, мови, зайнятість Work.ua): натискання вмикає чи вимикає варіант -->
+            <DataTemplate x:Key="ChoiceChip" x:DataType="vm:SelectableOption">
+                <Border StrokeShape="RoundRectangle 6"
+                        Stroke="{StaticResource Secondary}"
+                        BackgroundColor="{StaticResource DarkBg1}"
+                        Padding="8,3"
+                        Margin="0,0,6,6">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Command="{Binding ToggleCommand}" />
+                    </Border.GestureRecognizers>
+                    <Border.Triggers>
+                        <DataTrigger TargetType="Border" Binding="{Binding IsSelected}" Value="True">
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="Stroke" Value="{StaticResource Accent}" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                    <Label Text="{Binding Label}" FontSize="11" TextColor="{StaticResource White}" />
+                </Border>
+            </DataTemplate>
         </ResourceDictionary>
     </ContentPage.Resources>
 
@@ -356,7 +375,23 @@
 
                                 <!-- Кількість сторінок для обраної платформи -->
                                 <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
-                                    <Label Text="📄 Сторінок:" FontSize="11" TextColor="{StaticResource Accent}" VerticalOptions="Center" />
+                                    <!-- Стартова сторінка: щоб дочитати наступні сторінки без повторного обходу першої (DOU — одна стрічка) -->
+                                    <Label Text="📄 З стор.:" FontSize="11" TextColor="{StaticResource Accent}" VerticalOptions="Center">
+                                        <Label.Triggers>
+                                            <DataTrigger TargetType="Label" Binding="{Binding IsDouSelected}" Value="True">
+                                                <Setter Property="IsVisible" Value="False" />
+                                            </DataTrigger>
+                                        </Label.Triggers>
+                                    </Label>
+                                    <Border Style="{StaticResource CompactFieldBorder}" Stroke="{StaticResource Accent}" WidthRequest="56">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding IsDouSelected}" Value="True">
+                                                <Setter Property="IsVisible" Value="False" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <Entry Style="{StaticResource CompactEntry}" Text="{Binding SiteFromPage}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
+                                    </Border>
+                                    <Label Text="Сторінок:" FontSize="11" TextColor="{StaticResource Accent}" VerticalOptions="Center" />
                                     <Border IsVisible="{Binding IsDouSelected}" Style="{StaticResource CompactFieldBorder}" Stroke="{StaticResource Accent}" WidthRequest="56">
                                         <Entry Style="{StaticResource CompactEntry}" Text="{Binding DouPagesToParse}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
                                     </Border>
@@ -417,60 +452,85 @@
                                 </VerticalStackLayout>
                             </Grid>
 
-                            <!-- Параметри сайту Work.ua (2 компактні рядки) -->
-                            <Grid IsVisible="{Binding IsWorkUaSelected}" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
-                                <VerticalStackLayout Grid.Row="0" Grid.Column="0">
-                                    <Label Text="Сфера Work.ua" Style="{StaticResource CompactFieldLabel}" />
-                                    <Border Style="{StaticResource CompactFieldBorder}">
-                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaCategoryOptions}" SelectedItem="{Binding WorkUaSelectedCategory}" />
+                            <!-- Параметри сайту Work.ua: списки з одним вибором, далі чіпи мультивибору -->
+                            <VerticalStackLayout IsVisible="{Binding IsWorkUaSelected}" Spacing="4">
+                                <Grid ColumnDefinitions="*,*,*,*" ColumnSpacing="6">
+                                    <VerticalStackLayout Grid.Column="0">
+                                        <Label Text="Місто / Регіон" Style="{StaticResource CompactFieldLabel}" />
+                                        <Border Style="{StaticResource CompactFieldBorder}">
+                                            <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaCityOptions}" SelectedItem="{Binding WorkUaSelectedCity}" />
+                                        </Border>
+                                    </VerticalStackLayout>
+                                    <VerticalStackLayout Grid.Column="1">
+                                        <Label Text="Досвід роботи" Style="{StaticResource CompactFieldLabel}" />
+                                        <Border Style="{StaticResource CompactFieldBorder}">
+                                            <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaExperienceOptions}" SelectedItem="{Binding WorkUaSelectedExperience}" />
+                                        </Border>
+                                    </VerticalStackLayout>
+                                    <VerticalStackLayout Grid.Column="2">
+                                        <Label Text="Рівень освіти" Style="{StaticResource CompactFieldLabel}" />
+                                        <Border Style="{StaticResource CompactFieldBorder}">
+                                            <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaEducationOptions}" SelectedItem="{Binding WorkUaSelectedEducation}" />
+                                        </Border>
+                                    </VerticalStackLayout>
+                                    <VerticalStackLayout Grid.Column="3">
+                                        <Label Text="Період публікації" Style="{StaticResource CompactFieldLabel}" />
+                                        <Border Style="{StaticResource CompactFieldBorder}">
+                                            <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaDaysOptions}" SelectedItem="{Binding WorkUaSelectedDays}" />
+                                        </Border>
+                                    </VerticalStackLayout>
+                                </Grid>
+
+                                <!-- Зарплата (грн) і прапорці -->
+                                <HorizontalStackLayout Spacing="8">
+                                    <Label Text="Зарплата від" Style="{StaticResource CompactFieldLabel}" VerticalOptions="Center" />
+                                    <Border Style="{StaticResource CompactFieldBorder}" WidthRequest="90">
+                                        <Entry Style="{StaticResource CompactEntry}" Text="{Binding WorkUaSalaryFrom}" Keyboard="Numeric" Placeholder="грн" />
                                     </Border>
-                                </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Row="0" Grid.Column="1">
-                                    <Label Text="Місто / Регіон" Style="{StaticResource CompactFieldLabel}" />
-                                    <Border Style="{StaticResource CompactFieldBorder}">
-                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaCityOptions}" SelectedItem="{Binding WorkUaSelectedCity}" />
+                                    <Label Text="до" Style="{StaticResource CompactFieldLabel}" VerticalOptions="Center" />
+                                    <Border Style="{StaticResource CompactFieldBorder}" WidthRequest="90">
+                                        <Entry Style="{StaticResource CompactEntry}" Text="{Binding WorkUaSalaryTo}" Keyboard="Numeric" Placeholder="грн" />
                                     </Border>
-                                </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Row="0" Grid.Column="2">
-                                    <Label Text="Вид зайнятості" Style="{StaticResource CompactFieldLabel}" />
-                                    <Border Style="{StaticResource CompactFieldBorder}">
-                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaEmploymentOptions}" SelectedItem="{Binding WorkUaSelectedEmployment}" />
-                                    </Border>
-                                </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Row="0" Grid.Column="3">
-                                    <Label Text="Досвід роботи" Style="{StaticResource CompactFieldLabel}" />
-                                    <Border Style="{StaticResource CompactFieldBorder}">
-                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaExperienceOptions}" SelectedItem="{Binding WorkUaSelectedExperience}" />
-                                    </Border>
-                                </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Row="1" Grid.Column="0">
-                                    <Label Text="Рівень освіти" Style="{StaticResource CompactFieldLabel}" />
-                                    <Border Style="{StaticResource CompactFieldBorder}">
-                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaEducationOptions}" SelectedItem="{Binding WorkUaSelectedEducation}" />
-                                    </Border>
-                                </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Row="1" Grid.Column="1">
-                                    <Label Text="Знання мов" Style="{StaticResource CompactFieldLabel}" />
-                                    <Border Style="{StaticResource CompactFieldBorder}">
-                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaLanguageOptions}" SelectedItem="{Binding WorkUaSelectedLanguage}" />
-                                    </Border>
-                                </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Row="1" Grid.Column="2" Grid.ColumnSpan="2">
-                                    <Label Text="Період публікації" Style="{StaticResource CompactFieldLabel}" />
-                                    <Border Style="{StaticResource CompactFieldBorder}">
-                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaDaysOptions}" SelectedItem="{Binding WorkUaSelectedDays}" />
-                                    </Border>
-                                </VerticalStackLayout>
+                                    <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding WorkUaIncludeNoSalary}" />
+                                    <Label Text="Включно без ЗП" FontSize="12" TextColor="{StaticResource White}" VerticalOptions="Center" />
+                                    <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding WorkUaForStudents}" />
+                                    <Label Text="🎓 Для студентів" FontSize="12" TextColor="{StaticResource White}" VerticalOptions="Center" />
+                                </HorizontalStackLayout>
+
+                                <!-- Вид зайнятості (кілька) -->
+                                <Grid ColumnDefinitions="110,*,Auto,Auto" ColumnSpacing="6">
+                                    <Label Text="Вид зайнятості" Style="{StaticResource CompactFieldLabel}" VerticalOptions="Center" />
+                                    <FlexLayout Grid.Column="1" Wrap="Wrap" BindableLayout.ItemsSource="{Binding WorkUaEmploymentChoices}" BindableLayout.ItemTemplate="{StaticResource ChoiceChip}" />
+                                    <Button Grid.Column="2" Text="Обрати всі" Command="{Binding SelectAllChoicesCommand}" CommandParameter="{Binding WorkUaEmploymentChoices}" Style="{StaticResource CardAction}" FontSize="10" Padding="6,2" MinimumHeightRequest="26" VerticalOptions="Start" />
+                                    <Button Grid.Column="3" Text="Очистити" Command="{Binding ClearChoicesCommand}" CommandParameter="{Binding WorkUaEmploymentChoices}" Style="{StaticResource CardAction}" FontSize="10" Padding="6,2" MinimumHeightRequest="26" VerticalOptions="Start" />
+                                </Grid>
+
+                                <!-- Знання мов (кілька) -->
+                                <Grid ColumnDefinitions="110,*,Auto,Auto" ColumnSpacing="6">
+                                    <Label Text="Знання мов" Style="{StaticResource CompactFieldLabel}" VerticalOptions="Center" />
+                                    <FlexLayout Grid.Column="1" Wrap="Wrap" BindableLayout.ItemsSource="{Binding WorkUaLanguageChoices}" BindableLayout.ItemTemplate="{StaticResource ChoiceChip}" />
+                                    <Button Grid.Column="2" Text="Обрати всі" Command="{Binding SelectAllChoicesCommand}" CommandParameter="{Binding WorkUaLanguageChoices}" Style="{StaticResource CardAction}" FontSize="10" Padding="6,2" MinimumHeightRequest="26" VerticalOptions="Start" />
+                                    <Button Grid.Column="3" Text="Очистити" Command="{Binding ClearChoicesCommand}" CommandParameter="{Binding WorkUaLanguageChoices}" Style="{StaticResource CardAction}" FontSize="10" Padding="6,2" MinimumHeightRequest="26" VerticalOptions="Start" />
+                                </Grid>
+
+                                <!-- Сфери (кілька) -->
+                                <Grid ColumnDefinitions="110,*,Auto,Auto" ColumnSpacing="6">
+                                    <Label Text="Сфери Work.ua" Style="{StaticResource CompactFieldLabel}" VerticalOptions="Start" Margin="2,4,0,0" />
+                                    <FlexLayout Grid.Column="1" Wrap="Wrap" BindableLayout.ItemsSource="{Binding WorkUaCategoryChoices}" BindableLayout.ItemTemplate="{StaticResource ChoiceChip}" />
+                                    <Button Grid.Column="2" Text="Обрати всі" Command="{Binding SelectAllChoicesCommand}" CommandParameter="{Binding WorkUaCategoryChoices}" Style="{StaticResource CardAction}" FontSize="10" Padding="6,2" MinimumHeightRequest="26" VerticalOptions="Start" />
+                                    <Button Grid.Column="3" Text="Очистити" Command="{Binding ClearChoicesCommand}" CommandParameter="{Binding WorkUaCategoryChoices}" Style="{StaticResource CardAction}" FontSize="10" Padding="6,2" MinimumHeightRequest="26" VerticalOptions="Start" />
+                                </Grid>
+
                                 <!-- Сторінка кожної вакансії: повні дані, але довго; вимкнено — лише картки списку -->
-                                <Grid Grid.Row="2" Grid.ColumnSpan="4" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
+                                <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
                                     <CheckBox Grid.Column="0" Style="{StaticResource CompactCheckBox}" IsChecked="{Binding WorkUaOpenJobPages}" />
                                     <Label Grid.Column="1" Text="Відкривати кожну вакансію" FontSize="12" TextColor="{StaticResource White}" VerticalOptions="Center" />
                                     <Label Grid.Column="2" Text="{Binding WorkUaJobPagesHint}" FontSize="11" TextColor="{StaticResource TextSecondary}" VerticalOptions="Center" LineBreakMode="WordWrap" />
                                 </Grid>
-                            </Grid>
+                            </VerticalStackLayout>
 
                             <!-- Параметри сайту Robota.ua (1 компактний рядок) -->
-                            <Grid IsVisible="{Binding IsRobotaUaSelected}" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                            <Grid IsVisible="{Binding IsRobotaUaSelected}" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
                                 <VerticalStackLayout Grid.Row="0" Grid.Column="0">
                                     <Label Text="Місто" Style="{StaticResource CompactFieldLabel}" />
                                     <Border Style="{StaticResource CompactFieldBorder}">
@@ -495,8 +555,13 @@
                                         <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding RobotaUaExperienceOptions}" SelectedItem="{Binding RobotaUaSelectedExperience}" />
                                     </Border>
                                 </VerticalStackLayout>
+                                <!-- «Зарплата від» на Robota.ua за замовчуванням приховує вакансії без зарплати -->
+                                <HorizontalStackLayout Grid.Row="1" Grid.ColumnSpan="4" Spacing="6">
+                                    <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding RobotaUaIncludeNoSalary}" />
+                                    <Label Text="Включно без ЗП (із «Зарплата від» сайт інакше їх приховує)" FontSize="12" TextColor="{StaticResource White}" VerticalOptions="Center" />
+                                </HorizontalStackLayout>
                                 <!-- У списку Robota.ua лише назви: кожну вакансію сервер відкриває окремо -->
-                                <Label Grid.Row="1" Grid.ColumnSpan="4" Text="⏱ У списку Robota.ua лише назви, тож кожну вакансію відкриваємо окремо: близько 1–2 хв на сторінку списку." FontSize="11" TextColor="{StaticResource TextSecondary}" LineBreakMode="WordWrap" />
+                                <Label Grid.Row="2" Grid.ColumnSpan="4" Text="⏱ У списку Robota.ua лише назви, тож кожну вакансію відкриваємо окремо: близько 1–2 хв на сторінку списку." FontSize="11" TextColor="{StaticResource TextSecondary}" LineBreakMode="WordWrap" />
                             </Grid>
 
                             <!-- Параметри сайту Djinni (2 компактні рядки) -->
@@ -567,7 +632,7 @@
                     <VerticalStackLayout Spacing="6">
                             <!-- Шапка уніфікованого фільтра + швидкі прапорці + кнопки дій -->
                             <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
-                                <Label Text="⚡ 2. Уніфікований фільтр вакансій у БД (спільний для всіх карток)"
+                                <Label Text="⚡ 2. Фільтр знайдених вакансій (без нового пошуку)"
                                        FontFamily="OpenSansSemibold"
                                        FontSize="12"
                                        TextColor="{StaticResource Accent}"
@@ -617,6 +682,52 @@
                                                 <Label Text="✓" FontSize="11" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" HorizontalOptions="Center" VerticalOptions="Center" HorizontalTextAlignment="Center" VerticalTextAlignment="Center" IsVisible="{Binding UnifiedOnlyActive}" />
                                             </Border>
                                             <Label Text="👁️ Активні" VerticalOptions="Center" FontSize="11" />
+                                        </HorizontalStackLayout>
+                                    </Border>
+
+                                    <!-- Чіп 3: Сховати переглянуті -->
+                                    <Border StrokeShape="RoundRectangle 6" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg1}" Padding="8,5">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding ToggleUnifiedHideViewedCommand}" />
+                                        </Border.GestureRecognizers>
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding UnifiedHideViewed}" Value="True">
+                                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
+                                            <Border WidthRequest="16" HeightRequest="16" StrokeShape="RoundRectangle 4" Stroke="{StaticResource Primary}" StrokeThickness="1.5" BackgroundColor="Transparent" Padding="0" VerticalOptions="Center">
+                                                <Border.Triggers>
+                                                    <DataTrigger TargetType="Border" Binding="{Binding UnifiedHideViewed}" Value="True">
+                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                    </DataTrigger>
+                                                </Border.Triggers>
+                                                <Label Text="✓" FontSize="11" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" HorizontalOptions="Center" VerticalOptions="Center" HorizontalTextAlignment="Center" VerticalTextAlignment="Center" IsVisible="{Binding UnifiedHideViewed}" />
+                                            </Border>
+                                            <Label Text="🙈 Без переглянутих" VerticalOptions="Center" FontSize="11" />
+                                        </HorizontalStackLayout>
+                                    </Border>
+
+                                    <!-- Чіп 4: межі зарплати лишають і вакансії без неї -->
+                                    <Border StrokeShape="RoundRectangle 6" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg1}" Padding="8,5">
+                                        <Border.GestureRecognizers>
+                                            <TapGestureRecognizer Command="{Binding ToggleUnifiedIncludeNoSalaryCommand}" />
+                                        </Border.GestureRecognizers>
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding UnifiedIncludeNoSalary}" Value="True">
+                                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
+                                            </DataTrigger>
+                                        </Border.Triggers>
+                                        <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
+                                            <Border WidthRequest="16" HeightRequest="16" StrokeShape="RoundRectangle 4" Stroke="{StaticResource Primary}" StrokeThickness="1.5" BackgroundColor="Transparent" Padding="0" VerticalOptions="Center">
+                                                <Border.Triggers>
+                                                    <DataTrigger TargetType="Border" Binding="{Binding UnifiedIncludeNoSalary}" Value="True">
+                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                    </DataTrigger>
+                                                </Border.Triggers>
+                                                <Label Text="✓" FontSize="11" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" HorizontalOptions="Center" VerticalOptions="Center" HorizontalTextAlignment="Center" VerticalTextAlignment="Center" IsVisible="{Binding UnifiedIncludeNoSalary}" />
+                                            </Border>
+                                            <Label Text="➕ Включно без ЗП" VerticalOptions="Center" FontSize="11" />
                                         </HorizontalStackLayout>
                                     </Border>
                                 </HorizontalStackLayout>
@@ -716,12 +827,22 @@
                                         BackgroundColor="{StaticResource DarkBg1}"
                                         Padding="8,6">
                                     <VerticalStackLayout Spacing="4">
-                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                                        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
                                             <Label Text="✅ Вайт-лист:"
                                                    FontFamily="OpenSansSemibold"
                                                    FontSize="11"
                                                    TextColor="{StaticResource Accent}"
                                                    VerticalOptions="Center" />
+                                            <!-- «Будь-яке слово» — досить одного слова зі списку, «Усі слова» — потрібні всі -->
+                                            <Button Grid.Column="4"
+                                                    Text="{Binding WhiteListMatchText}"
+                                                    Command="{Binding ToggleWhiteListMatchAllCommand}"
+                                                    Style="{StaticResource CardAction}"
+                                                    FontSize="11"
+                                                    Padding="8,4"
+                                                    MinimumHeightRequest="34"
+                                                    VerticalOptions="Center"
+                                                    SemanticProperties.Hint="Перемикає: вакансія має містити будь-яке слово чи всі слова вайт-листа" />
                                             <Border Grid.Column="1" Style="{StaticResource CompactFieldBorder}" BackgroundColor="{StaticResource DarkBg2}">
                                                 <Entry Style="{StaticResource CompactEntry}"
                                                        Text="{Binding NewWhiteListWord}"
@@ -800,7 +921,7 @@
                                                 <Entry Style="{StaticResource CompactEntry}"
                                                        Text="{Binding NewBanListWord}"
                                                        ReturnCommand="{Binding AddBanListWordCommand}"
-                                                       Placeholder="Виключити слова через кому (Gambling, PHP)..." />
+                                                       Placeholder="Мінус-слова через кому (Gambling, PHP)..." />
                                             </Border>
                                             <Button Grid.Column="2"
                                                     Text="+ Додати"

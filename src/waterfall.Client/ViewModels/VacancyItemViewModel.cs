@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: картка повідомляє каталог про перегляд (VacancyViewedMessage) для фільтра «Приховати переглянуті» (issue #62, на прохання Дениса); перевірено: тести CatalogViewModelTests, самоперевірка автора (§8)
 // AI: VisibleSkills / MoreSkillsText через TDD (Lab 06); перевірено: VacancyItemSkillsTests (RED перед кожним GREEN), запуск застосунку.
 
 using System.Globalization;
@@ -346,6 +347,7 @@ public partial class VacancyItemViewModel : ObservableObject
         if (IsDetailsExpanded)
         {
             _ = _gateway.RecordVacancyViewAsync(Id);
+            _messenger.Send(new VacancyViewedMessage(Id));
         }
     }
 
@@ -353,6 +355,7 @@ public partial class VacancyItemViewModel : ObservableObject
     private async Task OpenSourceAsync()
     {
         _ = _gateway.RecordVacancyViewAsync(Id);
+        _messenger.Send(new VacancyViewedMessage(Id));
         if (HasSourceUrl && Uri.TryCreate(SourceUrl, UriKind.Absolute, out Uri? uri))
         {
             try

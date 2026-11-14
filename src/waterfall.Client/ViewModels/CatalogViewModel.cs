@@ -6,6 +6,7 @@
 // AI: перемикач «відкривати кожну вакансію» Work.ua з попередженням про тривалість (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
 // AI: кнопка Robota.ua у рядку «Парсинг:» (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
 // AI: «Від N грн» на Robota.ua приховує вакансії без зарплати (salaryType=false, звірено з сайтом 14.11.2026) (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
+// AI: на прохання Дениса — мультивибір сфер, мов і зайнятості Work.ua (коди звірено з сайтом 15.11.2026), «Для студентів», «Включно без ЗП», режим вайт-листа «Усі / Будь-яке», «Приховати переглянуті», стартова сторінка пошуку (issue #62); перевірено: CatalogViewModelTests і CatalogSiteSearchTests, самоперевірка автора (§8)
 
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -50,6 +51,9 @@ public partial class CatalogViewModel : ObservableObject
 
     // Результат останнього пошуку на сайті без локальних фільтрів; список на екрані — його відфільтрована частина
     private readonly List<VacancyDto> _loadedDtos = [];
+
+    // Вакансії, переглянуті в цьому сеансі (сервер позначає IsViewed лише на момент пошуку)
+    private readonly HashSet<Guid> _viewedIds = [];
     private bool _isLocalFilterActive;
     private bool _isSyncingSort;
     private readonly IUrlLauncher? _urlLauncher;
@@ -80,6 +84,9 @@ public partial class CatalogViewModel : ObservableObject
                 item.IsSaved = message.IsSaved;
             }
         });
+
+        // Перегляд вакансії в картці: запам'ятовуємо для фільтра «Приховати переглянуті» (сам список одразу не змінюємо)
+        messenger.Register<CatalogViewModel, VacancyViewedMessage>(this, static (vm, message) => vm._viewedIds.Add(message.VacancyId));
 
         // Зміна стану авторизації користувача
         messenger.Register<CatalogViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
@@ -290,6 +297,10 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     public partial string RobotaUaSelectedExperience { get; set; } = "Будь-який досвід";
 
+    /// <summary>Лишати вакансії без зарплати, коли обрано «Зарплата від» (інакше сайту передаємо salaryType=false).</summary>
+    [ObservableProperty]
+    public partial bool RobotaUaIncludeNoSalary { get; set; }
+
     public IReadOnlyList<string> RobotaUaCityOptions { get; } = ["Вся Україна", .. RobotaUaCities.Select(city => city.Name)];
 
     public IReadOnlyList<string> RobotaUaEmploymentOptions { get; } =
@@ -495,9 +506,6 @@ public partial class CatalogViewModel : ObservableObject
     public partial bool WorkUaTitleOnly { get; set; }
 
     [ObservableProperty]
-    public partial string WorkUaSelectedCategory { get; set; } = "Усі категорії";
-
-    [ObservableProperty]
     public partial string WorkUaSelectedCity { get; set; } = "Вся Україна";
 
     [ObservableProperty]
@@ -506,20 +514,15 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     public partial string WorkUaSalaryTo { get; set; } = string.Empty;
 
+    /// <summary>З межею зарплати Work.ua прибирає вакансії без неї; увімкнено — сайт лишає й їх (nosalary=1).</summary>
     [ObservableProperty]
-    public partial bool WorkUaIncludeNoSalary { get; set; } = true;
-
-    [ObservableProperty]
-    public partial string WorkUaSelectedEmployment { get; set; } = "Будь-яка зайнятість";
+    public partial bool WorkUaIncludeNoSalary { get; set; }
 
     [ObservableProperty]
     public partial string WorkUaSelectedExperience { get; set; } = "Будь-який досвід";
 
     [ObservableProperty]
     public partial string WorkUaSelectedEducation { get; set; } = "Будь-яка освіта";
-
-    [ObservableProperty]
-    public partial string WorkUaSelectedLanguage { get; set; } = "Не має значення";
 
     [ObservableProperty]
     public partial string WorkUaSelectedDays { get; set; } = "За 30 днів (за замовчуванням)";
@@ -558,38 +561,44 @@ public partial class CatalogViewModel : ObservableObject
         "Без синонімів (nosynonym=1)"
     ];
 
-    public IReadOnlyList<string> WorkUaCategoryOptions { get; } =
+    // Сфери, мови й вид зайнятості Work.ua можна обирати разом: сайт приймає кілька кодів через «+»
+    // (category=1+9, language=1+41, employment=74+75). Коди звірено з сайтом 15.11.2026.
+    public IReadOnlyList<SelectableOption> WorkUaCategoryChoices { get; } = [.. WorkUaCategoryCodes.Select(c => new SelectableOption(c.Name, "category", c.Code))];
+
+    public IReadOnlyList<SelectableOption> WorkUaEmploymentChoices { get; } =
     [
-        "Усі категорії",
-        "IT, комп'ютери, інтернет",
-        "Адміністрація, керівництво середньої ланки",
-        "Будівництво, архітектура",
-        "Бухгалтерія, аудит",
-        "Готельно-ресторанний бізнес, туризм",
-        "Дизайн, творчість",
-        "ЗМІ, видавництво, поліграфія",
-        "Краса, фітнес, спорт",
-        "Культура, музика, шоу-бізнес",
-        "Логістика, склад, ЗЕД",
-        "Маркетинг, реклама, PR",
-        "Медицина, фармацевтика",
-        "Нерухомість",
-        "Освіта, наука",
-        "Охорона, безпека",
-        "Продаж, закупівля",
-        "Робочі спеціальності, виробництво",
-        "Роздрібна торгівля",
-        "Секретаріат, діловодство, АГВ",
-        "Сільське господарство, агробізнес",
-        "Страхування",
-        "Сфера обслуговування",
-        "Телекомунікації та зв'язок",
-        "Топменеджмент, керівництво вищої ланки",
-        "Транспорт, автобізнес",
-        "Управління персоналом, HR",
-        "Фінанси, банк",
-        "Юриспруденція"
+        new("Повна зайнятість", "employment", "74"),
+        new("Неповна зайнятість", "employment", "75"),
+        new("Гібридний формат", "hybrid", "1")
     ];
+
+    public IReadOnlyList<SelectableOption> WorkUaLanguageChoices { get; } =
+    [
+        new("Англійська", "language", "1"),
+        new("Українська", "language", "41"),
+        new("Німецька", "language", "2"),
+        new("Польська", "language", "3"),
+        new("Іспанська", "language", "4"),
+        new("Французька", "language", "5")
+    ];
+
+    [RelayCommand]
+    private void SelectAllChoices(IEnumerable<SelectableOption>? choices)
+    {
+        foreach (SelectableOption choice in choices ?? [])
+        {
+            choice.IsSelected = true;
+        }
+    }
+
+    [RelayCommand]
+    private void ClearChoices(IEnumerable<SelectableOption>? choices)
+    {
+        foreach (SelectableOption choice in choices ?? [])
+        {
+            choice.IsSelected = false;
+        }
+    }
 
     public IReadOnlyList<string> WorkUaCityOptions { get; } =
     [
@@ -619,16 +628,6 @@ public partial class CatalogViewModel : ObservableObject
         "Інші країни"
     ];
 
-    // Коди фільтрів Work.ua звірено з сайтом 10.11.2026: «досвід від N років» і «позмінна робота» сайт уже не пропонує
-    public IReadOnlyList<string> WorkUaEmploymentOptions { get; } =
-    [
-        "Будь-яка зайнятість",
-        "Повна зайнятість (employment=74)",
-        "Неповна зайнятість (employment=75)",
-        "Гібридний формат (hybrid=1)",
-        "Дистанційна робота"
-    ];
-
     public IReadOnlyList<string> WorkUaExperienceOptions { get; } =
     [
         "Будь-який досвід",
@@ -642,17 +641,6 @@ public partial class CatalogViewModel : ObservableObject
         "Незакінчена вища (education=67)",
         "Середня спеціальна (education=68)",
         "Середня (education=69)"
-    ];
-
-    public IReadOnlyList<string> WorkUaLanguageOptions { get; } =
-    [
-        "Не має значення",
-        "Англійська (language=1)",
-        "Українська (language=41)",
-        "Німецька (language=2)",
-        "Польська (language=3)",
-        "Іспанська (language=4)",
-        "Французька (language=5)"
     ];
 
     public IReadOnlyList<string> WorkUaDaysOptions { get; } =
@@ -1039,6 +1027,21 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     public partial bool UnifiedOnlyActive { get; set; }
 
+    /// <summary>Сховати вакансії, які користувач уже переглядав (розгортав чи відкривав на сайті).</summary>
+    [ObservableProperty]
+    public partial bool UnifiedHideViewed { get; set; }
+
+    /// <summary>Із межами «Зарплата від/до» лишати й вакансії без вказаної зарплати.</summary>
+    [ObservableProperty]
+    public partial bool UnifiedIncludeNoSalary { get; set; }
+
+    /// <summary>Вайт-лист: true — вакансія має містити всі слова, false — хоча б одне.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WhiteListMatchText))]
+    public partial bool WhiteListMatchAll { get; set; }
+
+    public string WhiteListMatchText => WhiteListMatchAll ? "Усі слова" : "Будь-яке слово";
+
     [ObservableProperty]
     public partial bool UnifiedIsRemote { get; set; }
 
@@ -1387,6 +1390,36 @@ public partial class CatalogViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void ToggleUnifiedHideViewed()
+    {
+        UnifiedHideViewed = !UnifiedHideViewed;
+        if (HasLoaded)
+        {
+            _ = ExecuteLocalFilterAndSortAsync(updateBanner: true);
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleUnifiedIncludeNoSalary()
+    {
+        UnifiedIncludeNoSalary = !UnifiedIncludeNoSalary;
+        if (HasLoaded)
+        {
+            _ = ExecuteLocalFilterAndSortAsync(updateBanner: true);
+        }
+    }
+
+    [RelayCommand]
+    private void ToggleWhiteListMatchAll()
+    {
+        WhiteListMatchAll = !WhiteListMatchAll;
+        if (HasLoaded && WhiteListWords.Count > 0)
+        {
+            _ = ExecuteLocalFilterAndSortAsync(updateBanner: true);
+        }
+    }
+
+    [RelayCommand]
     private void ToggleUnifiedTitleOnly()
     {
         UnifiedTitleOnly = !UnifiedTitleOnly;
@@ -1541,8 +1574,21 @@ public partial class CatalogViewModel : ObservableObject
             : $"🌐 {site}: знайдено {found.Count} вакансій{cache}{shown}. Фільтри нижче уточнюють список без нового пошуку.";
     }
 
+    /// <summary>З якої сторінки списку почати пошук на сайті (спільне для всіх сайтів, крім DOU з однією стрічкою).</summary>
+    [ObservableProperty]
+    public partial string SiteFromPage { get; set; } = "1";
+
     /// <summary>Запит до сервера з фільтрів обраної панелі; null — для цього сайту пошук ще не підключено.</summary>
-    internal SiteSearchRequest? BuildSiteSearchRequest() => SelectedPlatform switch
+    internal SiteSearchRequest? BuildSiteSearchRequest() => BuildPlatformRequest() is { } request && request.Source != JobSource.Dou
+        ? request with { FromPage = FromPageOf(SiteFromPage) }
+        : BuildPlatformRequest();
+
+    private static int FromPageOf(string page) =>
+        Math.Clamp(int.TryParse(page, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : 1, 1, MaxSiteFromPage);
+
+    public const int MaxSiteFromPage = 50;
+
+    private SiteSearchRequest? BuildPlatformRequest() => SelectedPlatform switch
     {
         "Djinni" => new SiteSearchRequest
         {
@@ -1560,10 +1606,8 @@ public partial class CatalogViewModel : ObservableObject
         "WorkUa" => new SiteSearchRequest
         {
             Source = JobSource.WorkUa,
-            Categories = WorkUaCategorySlugs.TryGetValue(WorkUaSelectedCategory, out string? category) ? [category] : null,
+            // Місто «Дистанційно» на Work.ua — окреме «місто» remote; сфери йдуть кодами в options (category=1,9)
             City = WorkUaCitySlugs.GetValueOrDefault(WorkUaSelectedCity),
-            // «Дистанційна робота» на Work.ua — це окреме «місто» remote, тож лише коли місто не обрано
-            Remote = WorkUaSelectedEmployment == "Дистанційна робота",
             Keywords = KeywordsOr(WorkUaSearchQuery),
             Options = WorkUaOptions(),
             Pages = PagesOf(WorkUaPagesToParse),
@@ -1605,15 +1649,30 @@ public partial class CatalogViewModel : ObservableObject
     /// <summary>Фільтри Work.ua, які сайт бере з параметрів адреси, а не зі шляху.</summary>
     private Dictionary<string, string>? WorkUaOptions()
     {
-        Dictionary<string, string> options = OptionsOf(WorkUaSelectedEmployment, WorkUaSelectedExperience, WorkUaSelectedEducation, WorkUaSelectedLanguage, WorkUaSelectedDays) ?? [];
-        if (WorkUaSalaryCode(WorkUaSalaryFrom, roundUp: false) is { } from)
+        Dictionary<string, string> options = OptionsOf(WorkUaSelectedExperience, WorkUaSelectedEducation, WorkUaSelectedDays) ?? [];
+        foreach (IGrouping<string, SelectableOption> chosen in WorkUaCategoryChoices.Concat(WorkUaEmploymentChoices).Concat(WorkUaLanguageChoices)
+            .Where(choice => choice.IsSelected)
+            .GroupBy(choice => choice.Key))
         {
-            options["salaryfrom"] = from;
+            options[chosen.Key] = string.Join(',', chosen.Select(choice => choice.Value));
         }
 
-        if (WorkUaSalaryCode(WorkUaSalaryTo, roundUp: true) is { } to)
+        string? salaryFrom = WorkUaSalaryCode(WorkUaSalaryFrom, roundUp: false);
+        string? salaryTo = WorkUaSalaryCode(WorkUaSalaryTo, roundUp: true);
+        if (salaryFrom is not null)
         {
-            options["salaryto"] = to;
+            options["salaryfrom"] = salaryFrom;
+        }
+
+        if (salaryTo is not null)
+        {
+            options["salaryto"] = salaryTo;
+        }
+
+        // З межею зарплати сайт прибирає вакансії без неї; «Включно без ЗП» повертає їх
+        if ((salaryFrom ?? salaryTo) is not null && WorkUaIncludeNoSalary)
+        {
+            options["nosalary"] = "1";
         }
 
         if (WorkUaSelectedWordMatch.Contains("anyword=1", StringComparison.Ordinal))
@@ -1660,12 +1719,13 @@ public partial class CatalogViewModel : ObservableObject
     /// <summary>Варіанти з кодом «(назва=значення)» наприкінці → фільтри сайту; варіанти без коду пропускаються.</summary>
     /// <summary>
     /// Фільтри Robota.ua. Сам сайт за «Від N грн» показує й вакансії без зарплати; користувач, що обрав зарплату,
-    /// чекає лише вакансій з нею, тож додаємо опцію сайту «Приховати вакансії без зарплати» (salaryType=false).
+    /// чекає лише вакансій з нею, тож додаємо опцію сайту «Приховати вакансії без зарплати» (salaryType=false),
+    /// якщо не увімкнено «Включно без ЗП».
     /// </summary>
     private Dictionary<string, string>? RobotaUaOptions()
     {
         Dictionary<string, string>? options = OptionsOf(RobotaUaSelectedEmployment, RobotaUaSelectedSalary, RobotaUaSelectedExperience);
-        if (options?.ContainsKey("salary") == true)
+        if (options?.ContainsKey("salary") == true && !RobotaUaIncludeNoSalary)
         {
             options["salaryType"] = "false";
         }
@@ -1689,38 +1749,38 @@ public partial class CatalogViewModel : ObservableObject
         return options.Count == 0 ? null : options;
     }
 
-    /// <summary>Сфери в панелі Work.ua → частина адреси сайту (/jobs-it/, /jobs-sales/…).</summary>
-    private static readonly Dictionary<string, string> WorkUaCategorySlugs = new(StringComparer.Ordinal)
-    {
-        ["IT, комп'ютери, інтернет"] = "it",
-        ["Адміністрація, керівництво середньої ланки"] = "administration",
-        ["Будівництво, архітектура"] = "construction-architecture",
-        ["Бухгалтерія, аудит"] = "accounting",
-        ["Готельно-ресторанний бізнес, туризм"] = "hotel-restaurant-tourism",
-        ["Дизайн, творчість"] = "design-art",
-        ["ЗМІ, видавництво, поліграфія"] = "publishing-media",
-        ["Краса, фітнес, спорт"] = "beauty-sports",
-        ["Культура, музика, шоу-бізнес"] = "culture-music-showbiz",
-        ["Логістика, склад, ЗЕД"] = "logistic-supply-chain",
-        ["Маркетинг, реклама, PR"] = "marketing-advertising-pr",
-        ["Медицина, фармацевтика"] = "healthcare",
-        ["Нерухомість"] = "real-estate",
-        ["Освіта, наука"] = "education-scientific",
-        ["Охорона, безпека"] = "security",
-        ["Продаж, закупівля"] = "sales",
-        ["Робочі спеціальності, виробництво"] = "production-engineering",
-        ["Роздрібна торгівля"] = "retail",
-        ["Секретаріат, діловодство, АГВ"] = "office-secretarial",
-        ["Сільське господарство, агробізнес"] = "agriculture",
-        ["Страхування"] = "insurance",
-        ["Сфера обслуговування"] = "customer-service",
-        ["Телекомунікації та зв'язок"] = "telecommunications",
-        ["Топменеджмент, керівництво вищої ланки"] = "management-executive",
-        ["Транспорт, автобізнес"] = "auto-transport",
-        ["Управління персоналом, HR"] = "hr-recruitment",
-        ["Фінанси, банк"] = "banking-finance",
-        ["Юриспруденція"] = "legal"
-    };
+    /// <summary>Сфери Work.ua та їхні коди в параметрі category (звірено з сайтом 15.11.2026).</summary>
+    private static readonly (string Name, string Code)[] WorkUaCategoryCodes =
+    [
+        ("IT, комп'ютери, інтернет", "1"),
+        ("Адміністрація, керівництво середньої ланки", "2"),
+        ("Будівництво, архітектура", "19"),
+        ("Бухгалтерія, аудит", "3"),
+        ("Готельно-ресторанний бізнес, туризм", "4"),
+        ("Дизайн, творчість", "5"),
+        ("ЗМІ, видавництво, поліграфія", "17"),
+        ("Краса, фітнес, спорт", "6"),
+        ("Культура, музика, шоу-бізнес", "7"),
+        ("Логістика, склад, ЗЕД", "8"),
+        ("Маркетинг, реклама, PR", "9"),
+        ("Медицина, фармацевтика", "10"),
+        ("Нерухомість", "11"),
+        ("Освіта, наука", "12"),
+        ("Охорона, безпека", "13"),
+        ("Продаж, закупівля", "22"),
+        ("Робочі спеціальності, виробництво", "14"),
+        ("Роздрібна торгівля", "23"),
+        ("Секретаріат, діловодство, АГВ", "15"),
+        ("Страхування", "18"),
+        ("Сфера обслуговування", "20"),
+        ("Сільське господарство, агробізнес", "30"),
+        ("Телекомунікації та зв'язок", "6792"),
+        ("Топменеджмент, керівництво вищої ланки", "21"),
+        ("Транспорт, автобізнес", "24"),
+        ("Управління персоналом, HR", "25"),
+        ("Фінанси, банк", "26"),
+        ("Юриспруденція", "27")
+    ];
 
     /// <summary>Міста в панелі Work.ua → частина адреси сайту; «Дистанційно» на Work.ua — теж «місто».</summary>
     private static readonly Dictionary<string, string> WorkUaCitySlugs = new(StringComparer.Ordinal)
@@ -1910,6 +1970,10 @@ public partial class CatalogViewModel : ObservableObject
         UnifiedOnlyWithSalary = false;
         UnifiedOnlyActive = false;
         UnifiedIsRemote = false;
+        UnifiedHideViewed = false;
+        UnifiedIncludeNoSalary = false;
+        WhiteListMatchAll = false;
+        SiteFromPage = "1";
 
         // Скидання фільтрів DOU
         DouPagesToParse = "1";
@@ -1932,15 +1996,15 @@ public partial class CatalogViewModel : ObservableObject
         WorkUaSearchQuery = string.Empty;
         WorkUaSelectedWordMatch = WorkUaWordMatchOptions[0];
         WorkUaTitleOnly = false;
-        WorkUaSelectedCategory = WorkUaCategoryOptions[0];
+        ClearChoices(WorkUaCategoryChoices);
+        ClearChoices(WorkUaEmploymentChoices);
+        ClearChoices(WorkUaLanguageChoices);
         WorkUaSelectedCity = WorkUaCityOptions[0];
         WorkUaSalaryFrom = string.Empty;
         WorkUaSalaryTo = string.Empty;
-        WorkUaIncludeNoSalary = true;
-        WorkUaSelectedEmployment = WorkUaEmploymentOptions[0];
+        WorkUaIncludeNoSalary = false;
         WorkUaSelectedExperience = WorkUaExperienceOptions[0];
         WorkUaSelectedEducation = WorkUaEducationOptions[0];
-        WorkUaSelectedLanguage = WorkUaLanguageOptions[0];
         WorkUaSelectedDays = WorkUaDaysOptions[0];
         WorkUaAgeFrom = string.Empty;
         WorkUaAgeTo = string.Empty;
@@ -1981,6 +2045,7 @@ public partial class CatalogViewModel : ObservableObject
         RobotaUaSelectedCity = RobotaUaCityOptions[0];
         RobotaUaSelectedEmployment = RobotaUaEmploymentOptions[0];
         RobotaUaSelectedSalary = RobotaUaSalaryOptions[0];
+        RobotaUaIncludeNoSalary = false;
         RobotaUaSelectedExperience = RobotaUaExperienceOptions[0];
 
         // Знайдені вакансії лишаються: скидаються лише фільтри, тож список знову показує весь результат пошуку
@@ -2158,7 +2223,8 @@ public partial class CatalogViewModel : ObservableObject
             || !string.IsNullOrWhiteSpace(MinSalaryFilter)
             || !string.IsNullOrWhiteSpace(MaxSalaryFilter)
             || UnifiedOnlyWithSalary
-            || UnifiedOnlyActive;
+            || UnifiedOnlyActive
+            || UnifiedHideViewed;
     }
 
     private void ApplyLocalFilterAndSort()
@@ -2242,7 +2308,10 @@ public partial class CatalogViewModel : ObservableObject
         // 2. Вайт-лист слів: назва, навички, компанія, категорія й опис (з «лише в назві» — тільки назва)
         if (WhiteListWords.Count > 0)
         {
-            if (!WhiteListWords.Any(word => ContainsKeyword(v, word, titleOnly)))
+            bool matches = WhiteListMatchAll
+                ? WhiteListWords.All(word => ContainsKeyword(v, word, titleOnly))
+                : WhiteListWords.Any(word => ContainsKeyword(v, word, titleOnly));
+            if (!matches)
             {
                 return false;
             }
@@ -2281,8 +2350,9 @@ public partial class CatalogViewModel : ObservableObject
         bool isUsdFilter = SelectedSalaryCurrency.Contains('$') || SelectedSalaryCurrency.Contains("USD", StringComparison.OrdinalIgnoreCase);
         if (decimal.TryParse(MinSalaryFilter, out decimal unifiedMin) && unifiedMin > 0)
         {
+            // Без зарплати вакансія проходить межу «від» лише з «Включно без ЗП»
             decimal vacSal = isUsdFilter ? GetSalaryInUsd(v) : GetSalaryInUah(v);
-            if (!hasSalary || vacSal < unifiedMin)
+            if (hasSalary ? vacSal < unifiedMin : !UnifiedIncludeNoSalary)
             {
                 return false;
             }
@@ -2299,6 +2369,12 @@ public partial class CatalogViewModel : ObservableObject
 
         // 7. Тільки активні вакансії (властивість IsActive)
         if (UnifiedOnlyActive && !v.IsActive)
+        {
+            return false;
+        }
+
+        // 8. Переглянуті: позначка сервера на момент пошуку або перегляд у цьому сеансі
+        if (UnifiedHideViewed && (v.IsViewed || _viewedIds.Contains(v.Id)))
         {
             return false;
         }

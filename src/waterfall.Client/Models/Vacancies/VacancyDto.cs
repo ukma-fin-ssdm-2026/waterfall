@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: позначка «переглянуто» для знайдених на сайтах вакансій (issue #62, на прохання Дениса); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 
 namespace Waterfall.Client.Models.Vacancies;
 
@@ -41,4 +42,7 @@ public record VacancyDto
     /// Чи збережена вакансія у «Обране».
     /// </summary>
     public bool IsSaved { get; init; }
+
+    /// <summary>Користувач уже переглядав вакансію; приходить із результатом пошуку на сайтах.</summary>
+    public bool IsViewed { get; init; }
 }

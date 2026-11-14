@@ -18,6 +18,9 @@ public sealed record SiteSearchRequest
     public string? Keywords { get; init; }
     public int Pages { get; init; } = 1;
 
+    /// <summary>З якої сторінки списку почати (1–50); читаються сторінки fromPage … fromPage + pages − 1.</summary>
+    public int FromPage { get; init; } = 1;
+
     /// <summary>Інші фільтри Work.ua (параметри адреси) чи Robota.ua (після «params;») у позначеннях сайту.</summary>
     public Dictionary<string, string>? Options { get; init; }
 

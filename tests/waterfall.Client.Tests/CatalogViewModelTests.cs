@@ -263,6 +263,56 @@ public class CatalogViewModelTests
     }
 
     [Fact]
+    public async Task WhiteListMatchAll_RequiresEveryWord()
+    {
+        await SearchSiteAsync(_vm, "Python Django Developer", "Python Developer", "Django Developer");
+        _vm.NewWhiteListWord = "Python, Django";
+        await _vm.AddWhiteListWordCommand.ExecuteAsync(null);
+        Assert.Equal(3, _vm.Vacancies.Count);
+        Assert.Equal("Будь-яке слово", _vm.WhiteListMatchText);
+
+        _vm.ToggleWhiteListMatchAllCommand.Execute(null);
+        await _vm.FilterExistingCommand.ExecuteAsync(null);
+
+        Assert.Equal("Усі слова", _vm.WhiteListMatchText);
+        Assert.Equal(["Python Django Developer"], _vm.Vacancies.Select(v => v.Title));
+    }
+
+    [Fact]
+    public async Task HideViewed_HidesServerMarkedAndSessionViewedVacancies()
+    {
+        VacancyDto[] items = Vacancies("Seen before", "Opened now", "Fresh");
+        await SearchSiteAsync(_vm, items[0] with { IsViewed = true }, items[1], items[2]);
+
+        // Розгорнута картка — перегляд цього сеансу; список одразу не змінюється
+        _vm.Vacancies.Single(v => v.Title == "Opened now").ToggleDetailsCommand.Execute(null);
+        Assert.Equal(3, _vm.Vacancies.Count);
+
+        _vm.ToggleUnifiedHideViewedCommand.Execute(null);
+        await _vm.FilterExistingCommand.ExecuteAsync(null);
+
+        Assert.Equal(["Fresh"], _vm.Vacancies.Select(v => v.Title));
+    }
+
+    [Fact]
+    public async Task IncludeNoSalary_KeepsVacanciesWithoutSalary_UnderMinSalary()
+    {
+        VacancyDto[] items = Vacancies("Paid", "Unpaid", "Low");
+        await SearchSiteAsync(_vm,
+            items[0] with { SalaryMin = 3000, Currency = "USD" },
+            items[1],
+            items[2] with { SalaryMin = 500, Currency = "USD" });
+
+        _vm.MinSalaryFilter = "1000";
+        await _vm.FilterExistingCommand.ExecuteAsync(null);
+        Assert.Equal(["Paid"], _vm.Vacancies.Select(v => v.Title));
+
+        _vm.ToggleUnifiedIncludeNoSalaryCommand.Execute(null);
+        await _vm.FilterExistingCommand.ExecuteAsync(null);
+        Assert.Equal(["Paid", "Unpaid"], _vm.Vacancies.Select(v => v.Title).Order());
+    }
+
+    [Fact]
     public async Task SelectedSortOption_SortsFoundVacanciesByTitleAndSalary()
     {
         VacancyDto[] items = Vacancies("B Developer", "C Engineer", "A Architect");
