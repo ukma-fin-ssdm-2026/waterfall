@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!-- Картка вакансії: спільна для «Каталогу», «Обраного» та рекомендацій. BindingContext — VacancyItemViewModel. -->
+<!-- AI: натискання на картку розгортає подробиці, сайт відкриває окрема кнопка «джерело ↗» (зі згоди Дениса); перевірено: ручний запуск застосунку, самоперевірка автора (§8) -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
@@ -7,9 +8,9 @@
              x:DataType="vm:VacancyItemViewModel">
 
     <Border Style="{StaticResource VacancyCard}">
-        <!-- Натискання на вільне місце картки відкриває посилання у браузері -->
+        <!-- Натискання на вільне місце картки розгортає чи згортає подробиці; сайт відкриває кнопка «джерело ↗» -->
         <Border.GestureRecognizers>
-            <TapGestureRecognizer Command="{Binding OpenSourceCommand}" />
+            <TapGestureRecognizer Command="{Binding ToggleDetailsCommand}" />
         </Border.GestureRecognizers>
 
         <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto"
@@ -176,23 +177,31 @@
                 </Label.Triggers>
             </Label>
 
-            <!-- Джерело та індикатор переходу за посиланням ↗ -->
-            <HorizontalStackLayout Grid.Row="3"
-                                   Grid.Column="1"
-                                   Spacing="4"
-                                   HorizontalOptions="End"
-                                   VerticalOptions="Center">
+            <!-- Джерело: кнопка «Djinni ↗» відкриває вакансію на сайті; без посилання — лише назва сайту -->
+            <Grid Grid.Row="3"
+                  Grid.Column="1"
+                  HorizontalOptions="End"
+                  VerticalOptions="Center">
+                <Button Text="{Binding SourceText, StringFormat='{0} ↗'}"
+                        Command="{Binding OpenSourceCommand}"
+                        IsVisible="{Binding HasSourceUrl}"
+                        Style="{StaticResource CardAction}"
+                        FontSize="11"
+                        Padding="8,4"
+                        HeightRequest="30"
+                        MinimumHeightRequest="30"
+                        SemanticProperties.Hint="Відкрити вакансію на сайті-джерелі у браузері" />
                 <Label Text="{Binding SourceText}"
-                       VerticalOptions="Center"
                        Style="{StaticResource MutedLabel}"
-                       FontSize="11" />
-                <Label Text="↗"
-                       IsVisible="{Binding HasSourceUrl}"
-                       TextColor="{StaticResource Primary}"
-                       FontSize="12"
-                       FontFamily="OpenSansSemibold"
-                       VerticalOptions="Center" />
-            </HorizontalStackLayout>
+                       FontSize="11"
+                       VerticalOptions="Center">
+                    <Label.Triggers>
+                        <DataTrigger TargetType="Label" Binding="{Binding HasSourceUrl}" Value="True">
+                            <Setter Property="IsVisible" Value="False" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </Grid>
 
             <!-- Короткий опис (до 2 рядків) -->
             <Label Grid.Row="4"

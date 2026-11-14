@@ -182,6 +182,20 @@ public class CatalogSiteSearchTests
     }
 
     [Fact]
+    public void RobotaUaTopButton_ShowsPagesAndTogglesItsPanel()
+    {
+        _vm.RobotaUaPagesToParse = "2";
+        Assert.Equal("🔴 Robota.ua (2 стор.) ▼", _vm.RobotaUaButtonText);
+
+        _vm.SelectRobotaUaFilterCommand.Execute(null);
+        Assert.True(_vm.IsRobotaUaPanelVisible);
+        Assert.EndsWith("▲", _vm.RobotaUaButtonText, StringComparison.Ordinal);
+
+        _vm.SelectRobotaUaFilterCommand.Execute(null);
+        Assert.False(_vm.IsRobotaUaPanelVisible);
+    }
+
+    [Fact]
     public async Task WorkUaRemoteEmployment_IsSentAsRemote_WithoutCity()
     {
         _vm.SelectedPlatform = "WorkUa";
@@ -208,7 +222,19 @@ public class CatalogSiteSearchTests
 
         SiteSearchRequest request = Assert.Single(_gateway.SiteSearchRequests);
         Assert.Equal((JobSource.RobotaUa, "odessa", "QA", 5), (request.Source, request.City, request.Keywords, request.Pages));
-        Assert.Equal(new Dictionary<string, string> { ["scheduleIds"] = "3", ["salary"] = "40000", ["experienceType"] = "true" }, request.Options);
+        // Зарплата обрана — вакансії без неї сайт має приховати
+        Assert.Equal(new Dictionary<string, string> { ["scheduleIds"] = "3", ["salary"] = "40000", ["salaryType"] = "false", ["experienceType"] = "true" }, request.Options);
+    }
+
+    [Fact]
+    public async Task RobotaUaWithoutSalary_DoesNotHideVacanciesWithoutSalary()
+    {
+        _vm.SelectedPlatform = "RobotaUa";
+        _vm.RobotaUaSelectedEmployment = "Віддалена робота (scheduleIds=3)";
+
+        await RunSearchAsync();
+
+        Assert.Equal(new Dictionary<string, string> { ["scheduleIds"] = "3" }, Assert.Single(_gateway.SiteSearchRequests).Options);
     }
 
     [Fact]

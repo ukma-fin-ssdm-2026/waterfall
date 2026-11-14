@@ -166,6 +166,19 @@
                             </DataTrigger>
                         </Button.Triggers>
                     </Button>
+
+                    <Button Text="{Binding RobotaUaButtonText}"
+                            Command="{Binding SelectRobotaUaFilterCommand}"
+                            Style="{StaticResource CardAction}"
+                            FontSize="11"
+                            Padding="10,4"
+                            MinimumHeightRequest="32">
+                        <Button.Triggers>
+                            <DataTrigger TargetType="Button" Binding="{Binding IsRobotaUaPanelVisible}" Value="True">
+                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            </DataTrigger>
+                        </Button.Triggers>
+                    </Button>
                 </HorizontalStackLayout>
 
                 <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
@@ -910,7 +923,7 @@
                                    HorizontalOptions="Center"
                                    HorizontalTextAlignment="Center"
                                    Style="{StaticResource CardTitle}" />
-                            <Label Text="Вакансії з'являться тут після пошуку на сайті. Пошук працює для DOU і Djinni та потребує входу в обліковий запис."
+                            <Label Text="Вакансії з'являться тут після пошуку на сайті: DOU, Djinni, Work.ua чи Robota.ua. Пошук потребує входу в обліковий запис."
                                    HorizontalOptions="Center"
                                    HorizontalTextAlignment="Center"
                                    Style="{StaticResource MutedLabel}" />

@@ -4,6 +4,8 @@
 // AI: каталог без базового списку з БД — лише результати «Знайти», рядок пошуку й фільтри працюють локально (рішення команди 10.11.2026, зі згоди Дениса); перевірено: CatalogViewModelTests, самоперевірка автора (§8)
 // AI: вайт-, бан-лист і рядок пошуку шукають слова також в описі вакансії (issue #62); перевірено: CatalogViewModelTests, самоперевірка автора (§8)
 // AI: перемикач «відкривати кожну вакансію» Work.ua з попередженням про тривалість (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
+// AI: кнопка Robota.ua у рядку «Парсинг:» (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
+// AI: «Від N грн» на Robota.ua приховує вакансії без зарплати (salaryType=false, звірено з сайтом 14.11.2026) (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
 
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -200,9 +202,11 @@ public partial class CatalogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsDouPanelVisible))]
     [NotifyPropertyChangedFor(nameof(IsWorkUaPanelVisible))]
     [NotifyPropertyChangedFor(nameof(IsDjinniPanelVisible))]
+    [NotifyPropertyChangedFor(nameof(IsRobotaUaPanelVisible))]
     [NotifyPropertyChangedFor(nameof(DouButtonText))]
     [NotifyPropertyChangedFor(nameof(WorkUaButtonText))]
     [NotifyPropertyChangedFor(nameof(DjinniButtonText))]
+    [NotifyPropertyChangedFor(nameof(RobotaUaButtonText))]
     public partial bool IsFilterPanelVisible { get; set; }
 
     /// <summary>
@@ -216,11 +220,13 @@ public partial class CatalogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsDouPanelVisible))]
     [NotifyPropertyChangedFor(nameof(IsWorkUaPanelVisible))]
     [NotifyPropertyChangedFor(nameof(IsDjinniPanelVisible))]
+    [NotifyPropertyChangedFor(nameof(IsRobotaUaPanelVisible))]
     [NotifyPropertyChangedFor(nameof(ActivePlatformTitle))]
     [NotifyPropertyChangedFor(nameof(ActivePlatformSubtitle))]
     [NotifyPropertyChangedFor(nameof(DouButtonText))]
     [NotifyPropertyChangedFor(nameof(WorkUaButtonText))]
     [NotifyPropertyChangedFor(nameof(DjinniButtonText))]
+    [NotifyPropertyChangedFor(nameof(RobotaUaButtonText))]
     public partial string SelectedPlatform { get; set; } = "DOU";
 
     public bool IsDouSelected => SelectedPlatform == "DOU";
@@ -231,12 +237,14 @@ public partial class CatalogViewModel : ObservableObject
     public bool IsDouPanelVisible => IsFilterPanelVisible && IsDouSelected;
     public bool IsWorkUaPanelVisible => IsFilterPanelVisible && IsWorkUaSelected;
     public bool IsDjinniPanelVisible => IsFilterPanelVisible && IsDjinniSelected;
+    public bool IsRobotaUaPanelVisible => IsFilterPanelVisible && IsRobotaUaSelected;
 
     public string FilterToggleText => IsFilterPanelVisible ? "Сховати фільтри ▲" : "Фільтри платформ ⚙";
 
     public string DouButtonText => $"🔵 DOU ({DouPagesToParse} стор.) {(IsDouPanelVisible ? "▲" : "▼")}";
     public string WorkUaButtonText => $"🟠 Work.ua ({WorkUaPagesToParse} стор.) {(IsWorkUaPanelVisible ? "▲" : "▼")}";
     public string DjinniButtonText => $"🟣 Djinni ({DjinniPagesToParse} стор.) {(IsDjinniPanelVisible ? "▲" : "▼")}";
+    public string RobotaUaButtonText => $"🔴 Robota.ua ({RobotaUaPagesToParse} стор.) {(IsRobotaUaPanelVisible ? "▲" : "▼")}";
 
     public string ActivePlatformTitle => SelectedPlatform switch
     {
@@ -267,6 +275,7 @@ public partial class CatalogViewModel : ObservableObject
 
     /// <summary>Сторінок списку Robota.ua: кожну вакансію сервер відкриває окремо, тож одна сторінка — близько хвилини.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RobotaUaButtonText))]
     public partial string RobotaUaPagesToParse { get; set; } = "1";
 
     [ObservableProperty]
@@ -1561,7 +1570,7 @@ public partial class CatalogViewModel : ObservableObject
             Source = JobSource.RobotaUa,
             City = RobotaUaCities.FirstOrDefault(city => city.Name == RobotaUaSelectedCity).Slug,
             Keywords = KeywordsOr(null),
-            Options = OptionsOf(RobotaUaSelectedEmployment, RobotaUaSelectedSalary, RobotaUaSelectedExperience),
+            Options = RobotaUaOptions(),
             Pages = PagesOf(RobotaUaPagesToParse)
         },
         "DOU" => new SiteSearchRequest
@@ -1645,6 +1654,21 @@ public partial class CatalogViewModel : ObservableObject
     }
 
     /// <summary>Варіанти з кодом «(назва=значення)» наприкінці → фільтри сайту; варіанти без коду пропускаються.</summary>
+    /// <summary>
+    /// Фільтри Robota.ua. Сам сайт за «Від N грн» показує й вакансії без зарплати; користувач, що обрав зарплату,
+    /// чекає лише вакансій з нею, тож додаємо опцію сайту «Приховати вакансії без зарплати» (salaryType=false).
+    /// </summary>
+    private Dictionary<string, string>? RobotaUaOptions()
+    {
+        Dictionary<string, string>? options = OptionsOf(RobotaUaSelectedEmployment, RobotaUaSelectedSalary, RobotaUaSelectedExperience);
+        if (options?.ContainsKey("salary") == true)
+        {
+            options["salaryType"] = "false";
+        }
+
+        return options;
+    }
+
     private static Dictionary<string, string>? OptionsOf(params string[] selected)
     {
         Dictionary<string, string> options = new(StringComparer.Ordinal);
