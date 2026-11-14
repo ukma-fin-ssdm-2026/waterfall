@@ -106,7 +106,8 @@ public sealed class SiteSearchService : ISiteSearchService
 
         SearchJob job = new(userId, source, key, request.Pages, now);
         _jobs[job.Id] = job;
-        _ = Task.Run(() => RunAsync(job, request));
+        // Скасування при зупинці сервера RunAsync обробляє сам через _stopping: так завдання встигне позначити пошук як невдалий
+        _ = Task.Run(() => RunAsync(job, request), CancellationToken.None);
         return new SiteSearchStart(job.Snapshot(), null);
     }
 
@@ -175,7 +176,7 @@ public sealed class SiteSearchService : ISiteSearchService
                 return null;
             }
 
-            Add("category", request.Categories?.FirstOrDefault());
+            Add("category", FirstCategory(request));
             Add("exp", request.Experience);
             Add("city", request.City);
             Add("remote", request.Remote ? "1" : null);
@@ -183,10 +184,16 @@ public sealed class SiteSearchService : ISiteSearchService
             url = "https://jobs.dou.ua/vacancies/feeds/";
         }
 
-        return query.Count == 0
-            ? url
-            : url + "?" + string.Join("&", query.Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value)}"));
+        return WithQuery(url, query);
     }
+
+    /// <summary>Адреса з параметрами запиту; без параметрів — сама адреса.</summary>
+    private static string WithQuery(string url, List<KeyValuePair<string, string>> query) => query.Count == 0
+        ? url
+        : url + "?" + string.Join("&", query.Select(p => $"{Uri.EscapeDataString(p.Key)}={Uri.EscapeDataString(p.Value)}"));
+
+    private static string? FirstCategory(SiteSearchRequest request) =>
+        request.Categories is { Count: > 0 } categories ? categories[0] : null;
 
     /// <summary>
     /// Work.ua: місто, сфера й запит — у шляху (/jobs-kyiv-it-python/, слова запиту через «+»), решта фільтрів — параметри.
@@ -195,7 +202,7 @@ public sealed class SiteSearchService : ISiteSearchService
     private static string WorkUaListPageUrl(SiteSearchRequest request, int page)
     {
         string? city = !string.IsNullOrWhiteSpace(request.City) ? request.City.Trim() : request.Remote ? "remote" : null;
-        List<string> path = new[] { city, request.Categories?.FirstOrDefault()?.Trim(), SlugOf(request.Keywords, "+") }
+        List<string> path = new[] { city, FirstCategory(request)?.Trim(), SlugOf(request.Keywords, "+") }
             .OfType<string>()
             .Where(part => part.Length > 0)
             .ToList();
@@ -275,7 +282,10 @@ public sealed class SiteSearchService : ISiteSearchService
                 List<string> ids = raw.Select(item => item.Id?.Trim()).OfType<string>().Where(id => id.Length > 0).Distinct().ToList();
                 job.Complete(ids, ids.Count);
                 _cache[job.Key] = (_time.GetUtcNow(), ids);
-                _logger.LogInformation("Пошук на {Source}: знайдено {Count} вакансій.", job.Source, ids.Count);
+                if (_logger.IsEnabled(LogLevel.Information))
+                {
+                    _logger.LogInformation("Пошук на {Source}: знайдено {Count} вакансій.", job.Source, ids.Count);
+                }
             }
             finally
             {

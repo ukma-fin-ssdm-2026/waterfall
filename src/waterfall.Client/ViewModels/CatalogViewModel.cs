@@ -1431,7 +1431,11 @@ public partial class CatalogViewModel : ObservableObject
             return;
         }
 
-        _siteSearchCts?.Cancel();
+        if (_siteSearchCts is not null)
+        {
+            await _siteSearchCts.CancelAsync();
+        }
+
         CancellationTokenSource cts = new();
         _siteSearchCts = cts;
         string site = request.Source switch

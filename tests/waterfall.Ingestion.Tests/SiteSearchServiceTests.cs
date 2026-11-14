@@ -401,7 +401,7 @@ public sealed class SiteSearchServiceTests : IDisposable
 
         public Dictionary<string, string> Pages { get; } = [];
 
-        public IReadOnlyList<string> Requested
+        public List<string> Requested
         {
             get
             {
