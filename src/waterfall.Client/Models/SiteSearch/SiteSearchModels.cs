@@ -17,6 +17,12 @@ public sealed record SiteSearchRequest
     public int? SalaryFrom { get; init; }
     public string? Keywords { get; init; }
     public int Pages { get; init; } = 1;
+
+    /// <summary>Інші фільтри Work.ua (параметри адреси) чи Robota.ua (після «params;») у позначеннях сайту.</summary>
+    public Dictionary<string, string>? Options { get; init; }
+
+    /// <summary>Лише Work.ua: тільки сторінки списку, без сторінки кожної вакансії (швидко, але опис скорочений).</summary>
+    public bool ListOnly { get; init; }
 }
 
 /// <summary>Стан пошуку на сайті: прогрес і, коли завершено, знайдені вакансії.</summary>

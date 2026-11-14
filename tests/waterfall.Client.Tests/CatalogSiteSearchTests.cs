@@ -137,15 +137,111 @@ public class CatalogSiteSearchTests
     }
 
     [Fact]
-    public async Task WorkUa_IsNotSentToServer()
+    public async Task WorkUaPanel_BecomesPathCodesAndUrlFilters()
     {
         _vm.SelectedPlatform = "WorkUa";
+        _vm.WorkUaSelectedCategory = "IT, комп'ютери, інтернет";
+        _vm.WorkUaSelectedCity = "Чернівці";
+        _vm.WorkUaSelectedEmployment = "Повна зайнятість (employment=74)";
+        _vm.WorkUaSelectedExperience = "Без досвіду (experience=1)";
+        _vm.WorkUaSelectedDays = "За 7 днів (days=123)";
+        _vm.WorkUaSelectedLanguage = "Англійська (language=1)";
+        _vm.WorkUaForStudents = true;
+        _vm.WorkUaSalaryFrom = "25000";
+        _vm.SiteKeywords = " Python ";
+        _vm.WorkUaPagesToParse = "2";
+
+        await RunSearchAsync();
+
+        SiteSearchRequest request = Assert.Single(_gateway.SiteSearchRequests);
+        Assert.Equal((JobSource.WorkUa, "it", "chernivtsi_cv", "Python", false, 2),
+            (request.Source, request.Categories!.Single(), request.City, request.Keywords, request.Remote, request.Pages));
+        Assert.Equal(
+            new Dictionary<string, string> { ["employment"] = "74", ["experience"] = "1", ["days"] = "123", ["language"] = "1", ["student"] = "1", ["salaryfrom"] = "4" },
+            request.Options);
+    }
+
+    [Fact]
+    public async Task WorkUaJobPages_OnByDefault_SwitchOffSendsListOnly_AndHintWarns()
+    {
+        _vm.SelectedPlatform = "WorkUa";
+        _vm.WorkUaPagesToParse = "2";
+        Assert.True(_vm.WorkUaOpenJobPages);
+        Assert.Contains("близько 2 хв", _vm.WorkUaJobPagesHint, StringComparison.Ordinal);
+
+        await RunSearchAsync();
+        Assert.False(_gateway.SiteSearchRequests[^1].ListOnly);
+
+        _vm.WorkUaOpenJobPages = false;
+        Assert.Contains("1–2 рядки", _vm.WorkUaJobPagesHint, StringComparison.Ordinal);
+        await RunSearchAsync();
+        Assert.True(_gateway.SiteSearchRequests[^1].ListOnly);
+
+        await _vm.ResetFiltersCommand.ExecuteAsync(null);
+        Assert.True(_vm.WorkUaOpenJobPages);
+    }
+
+    [Fact]
+    public async Task WorkUaRemoteEmployment_IsSentAsRemote_WithoutCity()
+    {
+        _vm.SelectedPlatform = "WorkUa";
+        _vm.WorkUaSelectedEmployment = "Дистанційна робота";
+
+        await RunSearchAsync();
+
+        SiteSearchRequest request = Assert.Single(_gateway.SiteSearchRequests);
+        Assert.Equal((true, (string?)null, (List<string>?)null, (Dictionary<string, string>?)null), (request.Remote, request.City, request.Categories, request.Options));
+    }
+
+    [Fact]
+    public async Task RobotaUaPanel_BecomesCityCodeAndParams()
+    {
+        _vm.SelectedPlatform = "RobotaUa";
+        _vm.RobotaUaSelectedCity = "Одеса";
+        _vm.RobotaUaSelectedEmployment = "Віддалена робота (scheduleIds=3)";
+        _vm.RobotaUaSelectedSalary = "Від 40 000 грн (salary=40000)";
+        _vm.RobotaUaSelectedExperience = "Без досвіду (experienceType=true)";
+        _vm.SiteKeywords = "QA";
+        _vm.RobotaUaPagesToParse = "9";
+
+        await RunSearchAsync();
+
+        SiteSearchRequest request = Assert.Single(_gateway.SiteSearchRequests);
+        Assert.Equal((JobSource.RobotaUa, "odessa", "QA", 5), (request.Source, request.City, request.Keywords, request.Pages));
+        Assert.Equal(new Dictionary<string, string> { ["scheduleIds"] = "3", ["salary"] = "40000", ["experienceType"] = "true" }, request.Options);
+    }
+
+    [Fact]
+    public async Task SharedKeywords_WinOverPlatformField()
+    {
+        _vm.SelectedPlatform = "Djinni";
+        _vm.DjinniAllKeywords = "Blazor";
+        _vm.SiteKeywords = "Rust";
+
+        await RunSearchAsync();
+
+        Assert.Equal("Rust", Assert.Single(_gateway.SiteSearchRequests).Keywords);
+    }
+
+    [Fact]
+    public async Task UnknownPlatform_IsNotSentToServer()
+    {
+        _vm.SelectedPlatform = "Other";
 
         await RunSearchAsync();
 
         Assert.Empty(_gateway.SiteSearchRequests);
-        Assert.Contains("Djinni і DOU", _vm.StaleCacheText, StringComparison.Ordinal);
+        Assert.Contains("Оберіть сайт", _vm.StaleCacheText, StringComparison.Ordinal);
     }
+
+    [Theory]
+    [InlineData("25000", false, "4")]  // від 25 000 → межа 20 000, щоб не загубити вакансій
+    [InlineData("25000", true, "5")]   // до 25 000 → межа 30 000
+    [InlineData("150000", true, "8")]  // понад найбільшу межу — «100 000 і більше»
+    [InlineData("5000", false, null)]  // менше найменшої межі — без фільтра
+    [InlineData("abc", false, null)]
+    public void WorkUaSalary_BecomesSiteStepCode(string uah, bool roundUp, string? expected) =>
+        Assert.Equal(expected, CatalogViewModel.WorkUaSalaryCode(uah, roundUp));
 
     [Theory]
     [InlineData("1 рік (1y)", "1y")]

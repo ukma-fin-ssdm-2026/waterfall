@@ -75,7 +75,7 @@
                     Padding="4,0">
                 <SearchBar Text="{Binding SearchText}"
                            SearchCommand="{Binding FilterExistingCommand}"
-                           Placeholder="Пошук за ключовими словами у завантажених вакансіях..."
+                           Placeholder="Пошук за ключовими словами у знайдених вакансіях..."
                            FontSize="12"
                            MinimumHeightRequest="34"
                            HeightRequest="36"
@@ -327,6 +327,18 @@
                                             </DataTrigger>
                                         </Button.Triggers>
                                     </Button>
+                                    <Button Text="🔴 Robota.ua"
+                                            Command="{Binding SelectRobotaUaFilterCommand}"
+                                            Style="{StaticResource CardAction}"
+                                            FontSize="11"
+                                            Padding="10,4"
+                                            MinimumHeightRequest="30">
+                                        <Button.Triggers>
+                                            <DataTrigger TargetType="Button" Binding="{Binding IsRobotaUaSelected}" Value="True">
+                                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                            </DataTrigger>
+                                        </Button.Triggers>
+                                    </Button>
                                 </HorizontalStackLayout>
 
                                 <!-- Кількість сторінок для обраної платформи -->
@@ -341,6 +353,9 @@
                                     <Border IsVisible="{Binding IsDjinniSelected}" Style="{StaticResource CompactFieldBorder}" Stroke="{StaticResource Accent}" WidthRequest="56">
                                         <Entry Style="{StaticResource CompactEntry}" Text="{Binding DjinniPagesToParse}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
                                     </Border>
+                                    <Border IsVisible="{Binding IsRobotaUaSelected}" Style="{StaticResource CompactFieldBorder}" Stroke="{StaticResource Accent}" WidthRequest="56">
+                                        <Entry Style="{StaticResource CompactEntry}" Text="{Binding RobotaUaPagesToParse}" Keyboard="Numeric" HorizontalTextAlignment="Center" />
+                                    </Border>
                                 </HorizontalStackLayout>
 
                                 <Button Grid.Column="2"
@@ -352,6 +367,14 @@
                                         MinimumHeightRequest="32"
                                         VerticalOptions="Center" />
                             </Grid>
+
+                            <!-- Ключові слова для пошуку на будь-якому сайті -->
+                            <Border Style="{StaticResource CompactFieldBorder}">
+                                <Entry Style="{StaticResource CompactEntry}"
+                                       Text="{Binding SiteKeywords}"
+                                       Placeholder="Ключові слова для пошуку на сайті (python, бухгалтер, водій…)"
+                                       ReturnCommand="{Binding FetchFromSitesCommand}" />
+                            </Border>
 
                             <!-- Пошук на сайті: шкала прочитаних сторінок, поки сервер читає сайт -->
                             <VerticalStackLayout IsVisible="{Binding IsSiteSearchRunning}" Spacing="4">
@@ -382,7 +405,7 @@
                             </Grid>
 
                             <!-- Параметри сайту Work.ua (2 компактні рядки) -->
-                            <Grid IsVisible="{Binding IsWorkUaSelected}" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                            <Grid IsVisible="{Binding IsWorkUaSelected}" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
                                 <VerticalStackLayout Grid.Row="0" Grid.Column="0">
                                     <Label Text="Сфера Work.ua" Style="{StaticResource CompactFieldLabel}" />
                                     <Border Style="{StaticResource CompactFieldBorder}">
@@ -425,6 +448,42 @@
                                         <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding WorkUaDaysOptions}" SelectedItem="{Binding WorkUaSelectedDays}" />
                                     </Border>
                                 </VerticalStackLayout>
+                                <!-- Сторінка кожної вакансії: повні дані, але довго; вимкнено — лише картки списку -->
+                                <Grid Grid.Row="2" Grid.ColumnSpan="4" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="6">
+                                    <CheckBox Grid.Column="0" Style="{StaticResource CompactCheckBox}" IsChecked="{Binding WorkUaOpenJobPages}" />
+                                    <Label Grid.Column="1" Text="Відкривати кожну вакансію" FontSize="12" TextColor="{StaticResource White}" VerticalOptions="Center" />
+                                    <Label Grid.Column="2" Text="{Binding WorkUaJobPagesHint}" FontSize="11" TextColor="{StaticResource TextSecondary}" VerticalOptions="Center" LineBreakMode="WordWrap" />
+                                </Grid>
+                            </Grid>
+
+                            <!-- Параметри сайту Robota.ua (1 компактний рядок) -->
+                            <Grid IsVisible="{Binding IsRobotaUaSelected}" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="0">
+                                    <Label Text="Місто" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding RobotaUaCityOptions}" SelectedItem="{Binding RobotaUaSelectedCity}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="1">
+                                    <Label Text="Тип зайнятості" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding RobotaUaEmploymentOptions}" SelectedItem="{Binding RobotaUaSelectedEmployment}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="2">
+                                    <Label Text="Зарплата від" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding RobotaUaSalaryOptions}" SelectedItem="{Binding RobotaUaSelectedSalary}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="3">
+                                    <Label Text="Досвід роботи" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding RobotaUaExperienceOptions}" SelectedItem="{Binding RobotaUaSelectedExperience}" />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <!-- У списку Robota.ua лише назви: кожну вакансію сервер відкриває окремо -->
+                                <Label Grid.Row="1" Grid.ColumnSpan="4" Text="⏱ У списку Robota.ua лише назви, тож кожну вакансію відкриваємо окремо: близько 1–2 хв на сторінку списку." FontSize="11" TextColor="{StaticResource TextSecondary}" LineBreakMode="WordWrap" />
                             </Grid>
 
                             <!-- Параметри сайту Djinni (2 компактні рядки) -->
@@ -802,7 +861,7 @@
                    TextColor="{StaticResource Accent}" />
         </Border>
 
-        <!-- Рядок 5: Банер помилки сервера/мережі -->
+        <!-- Рядок 5: Банер помилки (наприклад, невдале додавання в «Обране») -->
         <Border Grid.Row="5"
                 IsVisible="{Binding HasError}"
                 Style="{StaticResource ErrorBanner}">
@@ -811,33 +870,26 @@
                        VerticalOptions="Center"
                        Style="{StaticResource ErrorLabel}" />
                 <Button Grid.Column="1"
-                        Text="Повторити"
-                        Command="{Binding RetryCommand}"
+                        Text="Закрити"
+                        Command="{Binding DismissErrorCommand}"
                         Style="{StaticResource CardActionPrimary}" />
             </Grid>
         </Border>
 
-        <!-- Рядок 6: Підсумок і спіннер -->
-        <Grid Grid.Row="6" Padding="16,6" ColumnDefinitions="*,Auto">
+        <!-- Рядок 6: Підсумок -->
+        <Grid Grid.Row="6" Padding="16,6">
             <Label Text="{Binding TotalText}"
                    IsVisible="{Binding ShowTotal}"
                    Style="{StaticResource MutedLabel}"
                    VerticalOptions="Center" />
-            <ActivityIndicator Grid.Column="1"
-                               IsRunning="{Binding IsLoading}"
-                               IsVisible="{Binding IsLoading}"
-                               HeightRequest="20"
-                               WidthRequest="20" />
         </Grid>
 
-        <!-- Рядок 7: Список вакансій із бази даних (пагінація та pull-to-refresh) -->
+        <!-- Рядок 7: Знайдені на сайті вакансії (базового каталогу з БД немає) -->
         <RefreshView Grid.Row="7"
                      IsRefreshing="{Binding IsRefreshing}"
                      Command="{Binding RefreshCommand}">
             <CollectionView ItemsSource="{Binding Vacancies}"
-                            SelectionMode="None"
-                            RemainingItemsThreshold="5"
-                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
+                            SelectionMode="None">
 
                 <CollectionView.ItemTemplate>
                     <DataTemplate x:DataType="vm:VacancyItemViewModel">
@@ -845,35 +897,48 @@
                     </DataTemplate>
                 </CollectionView.ItemTemplate>
 
-                <!-- Порожній стан за критеріями US-002 AC-2, Test-07 -->
                 <CollectionView.EmptyView>
-                    <VerticalStackLayout Padding="32"
-                                         Spacing="10"
-                                         IsVisible="{Binding IsEmpty}">
-                        <Label Text="🔍"
-                               FontSize="36"
-                               HorizontalOptions="Center" />
-                        <Label Text="У базі даних за обраними критеріями вакансій не знайдено"
-                               HorizontalOptions="Center"
-                               HorizontalTextAlignment="Center"
-                               Style="{StaticResource CardTitle}" />
-                        <Label Text="Спробуйте змінити параметри пошуку або скиньте активні фільтри платформ"
-                               HorizontalOptions="Center"
-                               HorizontalTextAlignment="Center"
-                               Style="{StaticResource MutedLabel}" />
-                        <Button Text="Скинути фільтри"
-                                Command="{Binding ResetFiltersCommand}"
-                                HorizontalOptions="Center"
-                                Margin="0,8,0,0"
-                                Style="{StaticResource CardActionPrimary}" />
-                    </VerticalStackLayout>
-                </CollectionView.EmptyView>
+                    <Grid>
+                        <!-- До першого пошуку: каталог порожній, вакансії дає лише «Знайти» -->
+                        <VerticalStackLayout Padding="32"
+                                             Spacing="10"
+                                             IsVisible="{Binding IsBeforeFirstSearch}">
+                            <Label Text="🌐"
+                                   FontSize="36"
+                                   HorizontalOptions="Center" />
+                            <Label Text="Оберіть сайт і фільтри, потім натисніть «Знайти»"
+                                   HorizontalOptions="Center"
+                                   HorizontalTextAlignment="Center"
+                                   Style="{StaticResource CardTitle}" />
+                            <Label Text="Вакансії з'являться тут після пошуку на сайті. Пошук працює для DOU і Djinni та потребує входу в обліковий запис."
+                                   HorizontalOptions="Center"
+                                   HorizontalTextAlignment="Center"
+                                   Style="{StaticResource MutedLabel}" />
+                        </VerticalStackLayout>
 
-                <CollectionView.Footer>
-                    <ActivityIndicator IsRunning="{Binding IsLoadingMore}"
-                                       IsVisible="{Binding IsLoadingMore}"
-                                       Margin="0,8,0,16" />
-                </CollectionView.Footer>
+                        <!-- Порожній результат за критеріями US-002 AC-2, Test-07 -->
+                        <VerticalStackLayout Padding="32"
+                                             Spacing="10"
+                                             IsVisible="{Binding IsEmpty}">
+                            <Label Text="🔍"
+                                   FontSize="36"
+                                   HorizontalOptions="Center" />
+                            <Label Text="Вакансій за обраними критеріями не знайдено"
+                                   HorizontalOptions="Center"
+                                   HorizontalTextAlignment="Center"
+                                   Style="{StaticResource CardTitle}" />
+                            <Label Text="Змініть фільтри сайту й натисніть «Знайти» ще раз або скиньте фільтри списку"
+                                   HorizontalOptions="Center"
+                                   HorizontalTextAlignment="Center"
+                                   Style="{StaticResource MutedLabel}" />
+                            <Button Text="Скинути фільтри"
+                                    Command="{Binding ResetFiltersCommand}"
+                                    HorizontalOptions="Center"
+                                    Margin="0,8,0,0"
+                                    Style="{StaticResource CardActionPrimary}" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </CollectionView.EmptyView>
             </CollectionView>
         </RefreshView>
     </Grid>

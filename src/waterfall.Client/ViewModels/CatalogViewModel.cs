@@ -1,5 +1,9 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: пошук на сайтах за фільтрами панелі зі шкалою прогресу (issue #62, зі згоди Дениса); перевірено: тести CatalogSiteSearchTests, самоперевірка автора (§8)
+// AI: пошук на Work.ua і Robota.ua з панелей (коди адрес звірено з сайтами 10.11.2026), спільні ключові слова блоку 1 (issue #62, зі згоди Дениса); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
+// AI: каталог без базового списку з БД — лише результати «Знайти», рядок пошуку й фільтри працюють локально (рішення команди 10.11.2026, зі згоди Дениса); перевірено: CatalogViewModelTests, самоперевірка автора (§8)
+// AI: вайт-, бан-лист і рядок пошуку шукають слова також в описі вакансії (issue #62); перевірено: CatalogViewModelTests, самоперевірка автора (§8)
+// AI: перемикач «відкривати кожну вакансію» Work.ua з попередженням про тривалість (issue #62); перевірено: CatalogSiteSearchTests, самоперевірка автора (§8)
 
 using System.Collections.ObjectModel;
 using System.Globalization;
@@ -15,16 +19,15 @@ using Waterfall.Client.Models.Vacancies;
 namespace Waterfall.Client.ViewModels;
 
 /// <summary>
-/// Вкладка «Каталог»: пошук із затримкою (debounce), пагінація «завантажити ще», стани завантаження / порожньо / помилка.
+/// Вкладка «Каталог». Базового списку з БД немає: поки користувач не натиснув «Знайти» (пошук на сайті),
+/// список порожній і показує підказку. Знайдені вакансії далі уточнюють рядок пошуку (із затримкою debounce),
+/// сортування й фільтри блоку 2 — локально, без запитів до сервера.
 /// </summary>
 /// <remarks>
-/// Кожне завантаження першої сторінки (старт, пошук, оновлення, повтор) скасовує попереднє разом
-/// із його «завантажити ще», тож застарілі відповіді ніколи не змішуються з новим запитом.
 /// Команди викликаються з UI-потоку, а await повертається на нього ж — колекцію змінюємо без маршалінгу.
 /// </remarks>
 public partial class CatalogViewModel : ObservableObject
 {
-    public const int PageSize = 20;
     public static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(400);
 
     /// <summary>Як часто питати сервер про прогрес пошуку на сайті.</summary>
@@ -37,12 +40,13 @@ public partial class CatalogViewModel : ObservableObject
     private readonly IMessenger _messenger;
     private readonly TimeProvider _time;
 
-    private CancellationTokenSource? _loadCts;
     private CancellationTokenSource? _debounceCts;
     private CancellationTokenSource? _siteSearchCts;
-    private string? _loadedQuery;
-    private int _page;
-    private bool _hasNextPage;
+
+    // Останній застосований текст рядка пошуку: той самий запит (наприклад, з доданим пробілом) не записуємо в історію двічі
+    private string? _appliedQuery;
+
+    // Результат останнього пошуку на сайті без локальних фільтрів; список на екрані — його відфільтрована частина
     private readonly List<VacancyDto> _loadedDtos = [];
     private bool _isLocalFilterActive;
     private bool _isSyncingSort;
@@ -99,26 +103,16 @@ public partial class CatalogViewModel : ObservableObject
     public ObservableCollection<VacancyItemViewModel> Vacancies { get; } = [];
 
     /// <summary>
-    /// Текст пошукового рядка; зміна запускає пошук після паузи <see cref="SearchDebounce"/>.
+    /// Текст пошукового рядка; після паузи <see cref="SearchDebounce"/> звужує знайдені вакансії.
     /// </summary>
     [ObservableProperty]
     public partial string SearchText { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Завантажується перша сторінка (старт / пошук / повтор).
-    /// </summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsEmpty))]
-    public partial bool IsLoading { get; set; }
 
     /// <summary>
     /// Прив'язка до RefreshView («потягнути, щоб оновити»).
     /// </summary>
     [ObservableProperty]
     public partial bool IsRefreshing { get; set; }
-
-    [ObservableProperty]
-    public partial bool IsLoadingMore { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasError))]
@@ -212,12 +206,13 @@ public partial class CatalogViewModel : ObservableObject
     public partial bool IsFilterPanelVisible { get; set; }
 
     /// <summary>
-    /// Обрана платформа у панелі фільтрів: "DOU", "WorkUa" або "Djinni".
+    /// Обрана платформа у панелі фільтрів: "DOU", "WorkUa", "Djinni" або "RobotaUa".
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsDouSelected))]
     [NotifyPropertyChangedFor(nameof(IsWorkUaSelected))]
     [NotifyPropertyChangedFor(nameof(IsDjinniSelected))]
+    [NotifyPropertyChangedFor(nameof(IsRobotaUaSelected))]
     [NotifyPropertyChangedFor(nameof(IsDouPanelVisible))]
     [NotifyPropertyChangedFor(nameof(IsWorkUaPanelVisible))]
     [NotifyPropertyChangedFor(nameof(IsDjinniPanelVisible))]
@@ -231,6 +226,7 @@ public partial class CatalogViewModel : ObservableObject
     public bool IsDouSelected => SelectedPlatform == "DOU";
     public bool IsWorkUaSelected => SelectedPlatform == "WorkUa";
     public bool IsDjinniSelected => SelectedPlatform == "Djinni";
+    public bool IsRobotaUaSelected => SelectedPlatform == "RobotaUa";
 
     public bool IsDouPanelVisible => IsFilterPanelVisible && IsDouSelected;
     public bool IsWorkUaPanelVisible => IsFilterPanelVisible && IsWorkUaSelected;
@@ -247,6 +243,7 @@ public partial class CatalogViewModel : ObservableObject
         "DOU" => "🔵 Фільтри платформи DOU (jobs.dou.ua)",
         "WorkUa" => "🟠 Фільтри платформи Work.ua (work.ua)",
         "Djinni" => "🟣 Фільтри платформи Djinni (djinni.co)",
+        "RobotaUa" => "🔴 Фільтри платформи Robota.ua (robota.ua)",
         _ => "Фільтри платформи"
     };
 
@@ -255,8 +252,63 @@ public partial class CatalogViewModel : ObservableObject
         "DOU" => "Усі автентичні параметри пошуку jobs.dou.ua/vacancies та налаштування глибини парсингу",
         "WorkUa" => "Усі автентичні параметри пошуку work.ua/jobs та налаштування глибини парсингу",
         "Djinni" => "Усі автентичні параметри пошуку djinni.co/jobs та налаштування глибини парсингу",
+        "RobotaUa" => "Параметри пошуку robota.ua/zapros та налаштування глибини парсингу",
         _ => string.Empty
     };
+
+    /// <summary>
+    /// Ключові слова для пошуку на будь-якому сайті блоку 1 (python, бухгалтер…). Якщо порожньо, береться поле
+    /// ключових слів самої платформи, якщо воно є.
+    /// </summary>
+    [ObservableProperty]
+    public partial string SiteKeywords { get; set; } = string.Empty;
+
+    // ==================== 4. ФІЛЬТРИ ROBOTA.UA (robota.ua) ====================
+
+    /// <summary>Сторінок списку Robota.ua: кожну вакансію сервер відкриває окремо, тож одна сторінка — близько хвилини.</summary>
+    [ObservableProperty]
+    public partial string RobotaUaPagesToParse { get; set; } = "1";
+
+    [ObservableProperty]
+    public partial string RobotaUaSelectedCity { get; set; } = "Вся Україна";
+
+    [ObservableProperty]
+    public partial string RobotaUaSelectedEmployment { get; set; } = "Будь-яка зайнятість";
+
+    [ObservableProperty]
+    public partial string RobotaUaSelectedSalary { get; set; } = "Будь-яка зарплата";
+
+    [ObservableProperty]
+    public partial string RobotaUaSelectedExperience { get; set; } = "Будь-який досвід";
+
+    public IReadOnlyList<string> RobotaUaCityOptions { get; } = ["Вся Україна", .. RobotaUaCities.Select(city => city.Name)];
+
+    public IReadOnlyList<string> RobotaUaEmploymentOptions { get; } =
+    [
+        "Будь-яка зайнятість",
+        "Повна зайнятість (scheduleIds=1)",
+        "Неповна зайнятість (scheduleIds=2)",
+        "Віддалена робота (scheduleIds=3)"
+    ];
+
+    public IReadOnlyList<string> RobotaUaSalaryOptions { get; } =
+    [
+        "Будь-яка зарплата",
+        "Від 10 000 грн (salary=10000)",
+        "Від 20 000 грн (salary=20000)",
+        "Від 30 000 грн (salary=30000)",
+        "Від 40 000 грн (salary=40000)",
+        "Від 60 000 грн (salary=60000)",
+        "Від 80 000 грн (salary=80000)",
+        "Від 100 000 грн (salary=100000)",
+        "Від 120 000 грн (salary=120000)"
+    ];
+
+    public IReadOnlyList<string> RobotaUaExperienceOptions { get; } =
+    [
+        "Будь-який досвід",
+        "Без досвіду (experienceType=true)"
+    ];
 
     // ==================== 1. ФІЛЬТРИ DOU (jobs.dou.ua) ====================
 
@@ -408,7 +460,21 @@ public partial class CatalogViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WorkUaButtonText))]
+    [NotifyPropertyChangedFor(nameof(WorkUaJobPagesHint))]
     public partial string WorkUaPagesToParse { get; set; } = "3";
+
+    /// <summary>
+    /// Відкривати сторінку кожної вакансії Work.ua: повний опис, навички, досвід і графік, але близько хвилини
+    /// на сторінку списку. Вимкнено — лише картки списку (секунди, опис 1–2 рядки).
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(WorkUaJobPagesHint))]
+    public partial bool WorkUaOpenJobPages { get; set; } = true;
+
+    /// <summary>Попередження під перемикачем: скільки чекати і що втрачаємо без сторінок вакансій.</summary>
+    public string WorkUaJobPagesHint => WorkUaOpenJobPages
+        ? $"⏱ Повний опис і навички, але пошук довгий: близько {PagesOf(WorkUaPagesToParse)} хв (≈1 хв на сторінку з 14 вакансій)."
+        : "⚡ Швидко, за секунди, але опис — 1–2 рядки з картки, без навичок, досвіду й графіка: вайт- і бан-лист бачать менше.";
 
     [ObservableProperty]
     public partial string WorkUaSearchQuery { get; set; } = string.Empty;
@@ -544,23 +610,20 @@ public partial class CatalogViewModel : ObservableObject
         "Інші країни"
     ];
 
+    // Коди фільтрів Work.ua звірено з сайтом 10.11.2026: «досвід від N років» і «позмінна робота» сайт уже не пропонує
     public IReadOnlyList<string> WorkUaEmploymentOptions { get; } =
     [
         "Будь-яка зайнятість",
         "Повна зайнятість (employment=74)",
         "Неповна зайнятість (employment=75)",
-        "Позмінна робота (employment=76)",
+        "Гібридний формат (hybrid=1)",
         "Дистанційна робота"
     ];
 
     public IReadOnlyList<string> WorkUaExperienceOptions { get; } =
     [
         "Будь-який досвід",
-        "Без досвіду (experience=0)",
-        "До 1 року (experience=1)",
-        "Від 1 року (experience=164)",
-        "Від 2 років (experience=165)",
-        "Від 5 років (experience=166)"
+        "Без досвіду (experience=1)"
     ];
 
     public IReadOnlyList<string> WorkUaEducationOptions { get; } =
@@ -575,21 +638,20 @@ public partial class CatalogViewModel : ObservableObject
     public IReadOnlyList<string> WorkUaLanguageOptions { get; } =
     [
         "Не має значення",
-        "Англійська — Початковий",
-        "Англійська — Середній",
-        "Англійська — Вище середнього",
-        "Англійська — Вільно",
-        "Німецька",
-        "Польська"
+        "Англійська (language=1)",
+        "Українська (language=41)",
+        "Німецька (language=2)",
+        "Польська (language=3)",
+        "Іспанська (language=4)",
+        "Французька (language=5)"
     ];
 
     public IReadOnlyList<string> WorkUaDaysOptions { get; } =
     [
         "За 30 днів (за замовчуванням)",
-        "За 1 день (days=122)",
-        "За 3 дні (days=123)",
-        "За 7 днів (days=124)",
-        "За 14 днів (days=125)"
+        "За 14 днів (days=124)",
+        "За 7 днів (days=123)",
+        "За 1 день (days=122)"
     ];
 
     public IReadOnlyList<string> WorkUaSortOptions { get; } =
@@ -1025,19 +1087,25 @@ public partial class CatalogViewModel : ObservableObject
     public partial string? SiteSearchStatusText { get; set; }
 
     /// <summary>
-    /// Хоча б один запит каталогу завершився успішно.
+    /// Хоча б один пошук на сайті завершився успішно: до того каталог порожній.
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
     [NotifyPropertyChangedFor(nameof(ShowTotal))]
+    [NotifyPropertyChangedFor(nameof(IsBeforeFirstSearch))]
     public partial bool HasLoaded { get; private set; }
 
     public bool HasError => ErrorMessage is not null;
 
     /// <summary>
-    /// Запит виконано успішно, але вакансій немає.
+    /// Пошуку ще не було: замість списку — підказка обрати сайт і фільтри та натиснути «Знайти».
     /// </summary>
-    public bool IsEmpty => HasLoaded && !IsLoading && ErrorMessage is null && Vacancies.Count == 0;
+    public bool IsBeforeFirstSearch => !HasLoaded;
+
+    /// <summary>
+    /// Пошук відбувся, але на екрані вакансій немає: сайт нічого не знайшов або все відсіяли фільтри.
+    /// </summary>
+    public bool IsEmpty => HasLoaded && ErrorMessage is null && Vacancies.Count == 0;
 
     public string TotalText => $"Знайдено вакансій: {TotalCount}";
 
@@ -1076,6 +1144,9 @@ public partial class CatalogViewModel : ObservableObject
 
     [RelayCommand]
     private void SelectDjinniFilter() => SelectPlatform("Djinni");
+
+    [RelayCommand]
+    private void SelectRobotaUaFilter() => SelectPlatform("RobotaUa");
 
     [RelayCommand]
     private void SetDouPages(string? pages)
@@ -1347,14 +1418,22 @@ public partial class CatalogViewModel : ObservableObject
         SiteSearchRequest? request = BuildSiteSearchRequest();
         if (request is null)
         {
-            StaleCacheText = "🌐 Пошук на сайті поки працює для Djinni і DOU.";
+            StaleCacheText = "🌐 Оберіть сайт: DOU, Work.ua, Djinni або Robota.ua.";
             return;
         }
 
         _siteSearchCts?.Cancel();
         CancellationTokenSource cts = new();
         _siteSearchCts = cts;
-        string site = request.Source == JobSource.Djinni ? "Djinni" : "DOU";
+        string site = request.Source switch
+        {
+            JobSource.Djinni => "Djinni",
+            JobSource.WorkUa => "Work.ua",
+            JobSource.RobotaUa => "Robota.ua",
+            _ => "DOU"
+        };
+        // Сервер відкриває кожну вакансію: Robota.ua завжди, Work.ua — якщо користувач не обрав швидкий пошук
+        bool slow = request.Source == JobSource.RobotaUa || request.Source == JobSource.WorkUa && !request.ListOnly;
         IsSiteSearchRunning = true;
         SiteSearchProgress = 0;
         SiteSearchStatusText = $"🌐 {site}: надсилаємо запит…";
@@ -1364,7 +1443,7 @@ public partial class CatalogViewModel : ObservableObject
             SiteSearchStatusDto status = await _gateway.StartSiteSearchAsync(request, cts.Token);
             while (status.IsInProgress)
             {
-                ShowSiteSearchProgress(site, status);
+                ShowSiteSearchProgress(site, slow, status);
                 await Task.Delay(SiteSearchPollInterval, _time, cts.Token);
                 status = await _gateway.GetSiteSearchAsync(status.Id, cts.Token);
             }
@@ -1376,6 +1455,12 @@ public partial class CatalogViewModel : ObservableObject
             }
 
             ShowSiteSearchResult(site, status);
+
+            // Сортування за відстанню потребує відстаней до нових адрес — їх рахує повний прохід фільтрів
+            if (status.State == SiteSearchStatusDto.Completed && IsDistanceSort(SelectedSortOption))
+            {
+                await ExecuteLocalFilterAndSortAsync(updateBanner: false);
+            }
         }
         catch (ApiException ex) when (!cts.IsCancellationRequested)
         {
@@ -1399,12 +1484,14 @@ public partial class CatalogViewModel : ObservableObject
 
     private bool CanFetchFromSites() => !IsSiteSearchRunning;
 
-    private void ShowSiteSearchProgress(string site, SiteSearchStatusDto status)
+    private void ShowSiteSearchProgress(string site, bool slow, SiteSearchStatusDto status)
     {
         SiteSearchProgress = status.Progress;
+        // Сервер читає браузером по одній вакансії — попереджаємо, що це довше
+        string note = slow ? " (кожну вакансію відкриваємо окремо, це до кількох хвилин)" : string.Empty;
         SiteSearchStatusText = status.State == SiteSearchStatusDto.Queued
             ? $"🌐 {site}: у черзі — сайт зараз обробляє інший пошук…"
-            : $"🌐 {site}: сторінка {status.PagesDone} з {status.PagesTotal}, знайдено {status.Found}";
+            : $"🌐 {site}: сторінка {status.PagesDone} з {status.PagesTotal}, знайдено {status.Found}{note}";
     }
 
     private void ShowSiteSearchResult(string site, SiteSearchStatusDto status)
@@ -1425,9 +1512,7 @@ public partial class CatalogViewModel : ObservableObject
             Vacancies.Add(CreateVacancyItemViewModel(vacancy));
         }
 
-        // Список тепер — результат пошуку на сайті, тож «завантажити ще» з каталогу не підмішує інших вакансій
-        _hasNextPage = false;
-        _page = 1;
+        ErrorMessage = null;
         HasLoaded = true;
         TotalCount = found.Count;
         if (_isLocalFilterActive || HasActiveLocalFilterOrSort())
@@ -1437,9 +1522,10 @@ public partial class CatalogViewModel : ObservableObject
 
         OnPropertyChanged(nameof(IsEmpty));
         string cache = status.FromCache ? " (такий пошук уже виконувався протягом 3 годин, тож показано збережене)" : string.Empty;
+        string shown = Vacancies.Count < found.Count ? $", за фільтрами списку показано {Vacancies.Count}" : string.Empty;
         StaleCacheText = found.Count == 0
             ? $"🌐 {site}: {status.Message ?? "за цими фільтрами нічого не знайдено."}"
-            : $"🌐 {site}: знайдено {found.Count} вакансій{cache}. Їх збережено в каталог, а фільтри нижче уточнюють список без нового пошуку.";
+            : $"🌐 {site}: знайдено {found.Count} вакансій{cache}{shown}. Фільтри нижче уточнюють список без нового пошуку.";
     }
 
     /// <summary>Запит до сервера з фільтрів обраної панелі; null — для цього сайту пошук ще не підключено.</summary>
@@ -1455,8 +1541,28 @@ public partial class CatalogViewModel : ObservableObject
             SalaryFrom = int.TryParse(DjinniCustomMinSalary, NumberStyles.Integer, CultureInfo.InvariantCulture, out int custom) && custom > 0
                 ? custom
                 : DigitsOf(DjinniSelectedSalary),
-            Keywords = string.IsNullOrWhiteSpace(DjinniAllKeywords) ? null : DjinniAllKeywords.Trim(),
-            Pages = Math.Clamp(int.TryParse(DjinniPagesToParse, out int pages) ? pages : 1, 1, MaxSitePages)
+            Keywords = KeywordsOr(DjinniAllKeywords),
+            Pages = PagesOf(DjinniPagesToParse)
+        },
+        "WorkUa" => new SiteSearchRequest
+        {
+            Source = JobSource.WorkUa,
+            Categories = WorkUaCategorySlugs.TryGetValue(WorkUaSelectedCategory, out string? category) ? [category] : null,
+            City = WorkUaCitySlugs.GetValueOrDefault(WorkUaSelectedCity),
+            // «Дистанційна робота» на Work.ua — це окреме «місто» remote, тож лише коли місто не обрано
+            Remote = WorkUaSelectedEmployment == "Дистанційна робота",
+            Keywords = KeywordsOr(WorkUaSearchQuery),
+            Options = WorkUaOptions(),
+            Pages = PagesOf(WorkUaPagesToParse),
+            ListOnly = !WorkUaOpenJobPages
+        },
+        "RobotaUa" => new SiteSearchRequest
+        {
+            Source = JobSource.RobotaUa,
+            City = RobotaUaCities.FirstOrDefault(city => city.Name == RobotaUaSelectedCity).Slug,
+            Keywords = KeywordsOr(null),
+            Options = OptionsOf(RobotaUaSelectedEmployment, RobotaUaSelectedSalary, RobotaUaSelectedExperience),
+            Pages = PagesOf(RobotaUaPagesToParse)
         },
         "DOU" => new SiteSearchRequest
         {
@@ -1468,11 +1574,163 @@ public partial class CatalogViewModel : ObservableObject
                 : CodeInParentheses(DouSelectedExperience),
             City = DouSelectedCity == DouCityOptions[0] ? null : DouSelectedCity,
             Remote = DouIsRemote,
-            Keywords = string.IsNullOrWhiteSpace(DouSearchQuery) ? null : DouSearchQuery.Trim(),
+            Keywords = KeywordsOr(DouSearchQuery),
             Pages = 1
         },
         _ => null
     };
+
+    /// <summary>Спільні ключові слова блоку 1, а якщо їх немає — поле ключових слів самої платформи.</summary>
+    private string? KeywordsOr(string? platformKeywords) =>
+        !string.IsNullOrWhiteSpace(SiteKeywords) ? SiteKeywords.Trim()
+        : !string.IsNullOrWhiteSpace(platformKeywords) ? platformKeywords.Trim()
+        : null;
+
+    private static int PagesOf(string pages) =>
+        Math.Clamp(int.TryParse(pages, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) ? value : 1, 1, MaxSitePages);
+
+    /// <summary>Фільтри Work.ua, які сайт бере з параметрів адреси, а не зі шляху.</summary>
+    private Dictionary<string, string>? WorkUaOptions()
+    {
+        Dictionary<string, string> options = OptionsOf(WorkUaSelectedEmployment, WorkUaSelectedExperience, WorkUaSelectedEducation, WorkUaSelectedLanguage, WorkUaSelectedDays) ?? [];
+        if (WorkUaSalaryCode(WorkUaSalaryFrom, roundUp: false) is { } from)
+        {
+            options["salaryfrom"] = from;
+        }
+
+        if (WorkUaSalaryCode(WorkUaSalaryTo, roundUp: true) is { } to)
+        {
+            options["salaryto"] = to;
+        }
+
+        if (WorkUaSelectedWordMatch.Contains("anyword=1", StringComparison.Ordinal))
+        {
+            options["anyword"] = "1";
+        }
+        else if (WorkUaSelectedWordMatch.Contains("nosynonym=1", StringComparison.Ordinal))
+        {
+            options["nosynonym"] = "1";
+        }
+
+        foreach ((bool on, string name) in new[]
+        {
+            (WorkUaForStudents, "student"), (WorkUaForPersonsWithDisabilities, "disability"), (WorkUaForRetirees, "retired"),
+            (WorkUaForVeterans, "veteran"), (WorkUaHasReservation, "deferment"), (WorkUaWithoutResume, "noresume")
+        })
+        {
+            if (on)
+            {
+                options[name] = "1";
+            }
+        }
+
+        return options.Count == 0 ? null : options;
+    }
+
+    // Зарплата на Work.ua — не сума, а код межі: 2 — 10 000 грн, 3 — 15 000 … 8 — 100 000 грн
+    private static readonly (int Uah, string Code)[] WorkUaSalarySteps =
+        [(10_000, "2"), (15_000, "3"), (20_000, "4"), (30_000, "5"), (40_000, "6"), (50_000, "7"), (100_000, "8")];
+
+    /// <summary>Сума в гривнях → код межі Work.ua: «від» округлюємо вниз, «до» — вгору, щоб не загубити вакансій.</summary>
+    public static string? WorkUaSalaryCode(string? uah, bool roundUp)
+    {
+        if (!int.TryParse(uah, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value) || value <= 0)
+        {
+            return null;
+        }
+
+        return roundUp
+            ? WorkUaSalarySteps.FirstOrDefault(step => step.Uah >= value).Code ?? WorkUaSalarySteps[^1].Code
+            : WorkUaSalarySteps.LastOrDefault(step => step.Uah <= value).Code;
+    }
+
+    /// <summary>Варіанти з кодом «(назва=значення)» наприкінці → фільтри сайту; варіанти без коду пропускаються.</summary>
+    private static Dictionary<string, string>? OptionsOf(params string[] selected)
+    {
+        Dictionary<string, string> options = new(StringComparer.Ordinal);
+        foreach (string option in selected)
+        {
+            Match match = OptionCode().Match(option);
+            int equals = match.Success ? match.Groups[1].Value.IndexOf('=', StringComparison.Ordinal) : -1;
+            if (equals > 0)
+            {
+                options[match.Groups[1].Value[..equals]] = match.Groups[1].Value[(equals + 1)..];
+            }
+        }
+
+        return options.Count == 0 ? null : options;
+    }
+
+    /// <summary>Сфери в панелі Work.ua → частина адреси сайту (/jobs-it/, /jobs-sales/…).</summary>
+    private static readonly Dictionary<string, string> WorkUaCategorySlugs = new(StringComparer.Ordinal)
+    {
+        ["IT, комп'ютери, інтернет"] = "it",
+        ["Адміністрація, керівництво середньої ланки"] = "administration",
+        ["Будівництво, архітектура"] = "construction-architecture",
+        ["Бухгалтерія, аудит"] = "accounting",
+        ["Готельно-ресторанний бізнес, туризм"] = "hotel-restaurant-tourism",
+        ["Дизайн, творчість"] = "design-art",
+        ["ЗМІ, видавництво, поліграфія"] = "publishing-media",
+        ["Краса, фітнес, спорт"] = "beauty-sports",
+        ["Культура, музика, шоу-бізнес"] = "culture-music-showbiz",
+        ["Логістика, склад, ЗЕД"] = "logistic-supply-chain",
+        ["Маркетинг, реклама, PR"] = "marketing-advertising-pr",
+        ["Медицина, фармацевтика"] = "healthcare",
+        ["Нерухомість"] = "real-estate",
+        ["Освіта, наука"] = "education-scientific",
+        ["Охорона, безпека"] = "security",
+        ["Продаж, закупівля"] = "sales",
+        ["Робочі спеціальності, виробництво"] = "production-engineering",
+        ["Роздрібна торгівля"] = "retail",
+        ["Секретаріат, діловодство, АГВ"] = "office-secretarial",
+        ["Сільське господарство, агробізнес"] = "agriculture",
+        ["Страхування"] = "insurance",
+        ["Сфера обслуговування"] = "customer-service",
+        ["Телекомунікації та зв'язок"] = "telecommunications",
+        ["Топменеджмент, керівництво вищої ланки"] = "management-executive",
+        ["Транспорт, автобізнес"] = "auto-transport",
+        ["Управління персоналом, HR"] = "hr-recruitment",
+        ["Фінанси, банк"] = "banking-finance",
+        ["Юриспруденція"] = "legal"
+    };
+
+    /// <summary>Міста в панелі Work.ua → частина адреси сайту; «Дистанційно» на Work.ua — теж «місто».</summary>
+    private static readonly Dictionary<string, string> WorkUaCitySlugs = new(StringComparer.Ordinal)
+    {
+        ["Дистанційно"] = "remote",
+        ["Київ"] = "kyiv",
+        ["Львів"] = "lviv",
+        ["Дніпро"] = "dnipro",
+        ["Одеса"] = "odesa",
+        ["Харків"] = "kharkiv",
+        ["Вінниця"] = "vinnytsya",
+        ["Запоріжжя"] = "zaporizhzhya",
+        ["Івано-Франківськ"] = "ivano-frankivsk",
+        ["Тернопіль"] = "ternopil",
+        ["Полтава"] = "poltava",
+        ["Рівне"] = "rivne",
+        ["Хмельницький"] = "khmelnytskyi",
+        ["Черкаси"] = "cherkasy",
+        ["Чернівці"] = "chernivtsi_cv",
+        ["Житомир"] = "zhytomyr",
+        ["Ужгород"] = "uzhhorod",
+        ["Луцьк"] = "lutsk",
+        ["Миколаїв"] = "mykolaiv_nk",
+        ["Суми"] = "sumy",
+        ["Чернігів"] = "chernihiv",
+        ["Кропивницький"] = "kropyvnytskyi",
+        ["Інші країни"] = "other"
+    };
+
+    /// <summary>Міста Robota.ua та їхні коди в адресі (/zapros/python/kyiv); без міста — вся Україна.</summary>
+    private static readonly (string Name, string Slug)[] RobotaUaCities =
+    [
+        ("Київ", "kyiv"), ("Львів", "lviv"), ("Дніпро", "dnipro"), ("Одеса", "odessa"), ("Харків", "kharkiv"),
+        ("Вінниця", "vinnytsia"), ("Запоріжжя", "zaporizhia"), ("Івано-Франківськ", "ivano-frankivsk"), ("Тернопіль", "ternopil"),
+        ("Полтава", "poltava"), ("Рівне", "rivne"), ("Хмельницький", "khmelnytskyi"), ("Черкаси", "cherkasy"),
+        ("Чернівці", "chernivtsi"), ("Житомир", "zhitomir"), ("Ужгород", "uzhhorod"), ("Луцьк", "lutsk"),
+        ("Миколаїв", "mykolaiv"), ("Суми", "sumy"), ("Чернігів", "chernihiv"), ("Кропивницький", "kropyvnytskyi")
+    ];
 
     /// <summary>«1 рік (1y)» → «1y», «Київ (kyiv)» → «kyiv», «1…3 роки (exp=1-3)» → «1-3»; без дужок — null.</summary>
     public static string? CodeInParentheses(string option)
@@ -1586,7 +1844,7 @@ public partial class CatalogViewModel : ObservableObject
     private Task ApplyFiltersAsync() => FilterExistingAsync();
 
     /// <summary>
-    /// Скидання фільтрів та оновлення каталогу (US-002 AC-2/3, Test-07, Test-33).
+    /// Скидання фільтрів (US-002 AC-2/3, Test-07, Test-33): без нового запиту, список — знову весь знайдений результат.
     /// </summary>
     [RelayCommand]
     public Task ResetFiltersAsync()
@@ -1642,6 +1900,7 @@ public partial class CatalogViewModel : ObservableObject
 
         // Скидання фільтрів Work.ua
         WorkUaPagesToParse = "3";
+        WorkUaOpenJobPages = true;
         WorkUaSearchQuery = string.Empty;
         WorkUaSelectedWordMatch = WorkUaWordMatchOptions[0];
         WorkUaTitleOnly = false;
@@ -1688,8 +1947,23 @@ public partial class CatalogViewModel : ObservableObject
         DjinniHasReservation = false;
         DjinniHideStale = false;
 
+        // Скидання фільтрів Robota.ua і спільних ключових слів сайту
+        SiteKeywords = string.Empty;
+        RobotaUaPagesToParse = "1";
+        RobotaUaSelectedCity = RobotaUaCityOptions[0];
+        RobotaUaSelectedEmployment = RobotaUaEmploymentOptions[0];
+        RobotaUaSelectedSalary = RobotaUaSalaryOptions[0];
+        RobotaUaSelectedExperience = RobotaUaExperienceOptions[0];
+
+        // Знайдені вакансії лишаються: скидаються лише фільтри, тож список знову показує весь результат пошуку
         StaleCacheText = null;
-        return LoadFirstPageAsync();
+        _appliedQuery = null;
+        if (HasLoaded)
+        {
+            ApplyLocalFilterAndSort();
+        }
+
+        return Task.CompletedTask;
     }
 
     // # Mock
@@ -1709,86 +1983,44 @@ public partial class CatalogViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Перше відкриття вкладки: перевірити авторизацію та завантажити, якщо ще не завантажували.
+    /// Відкриття вкладки: лише оновити стан входу. Базового каталогу немає — вакансії з'являються після «Знайти».
     /// </summary>
     [RelayCommand]
-    private async Task EnsureLoadedAsync()
-    {
-        await RefreshAuthStatusAsync(CancellationToken.None);
-        if (!HasLoaded && !IsLoading)
-        {
-            await LoadFirstPageAsync();
-        }
-    }
+    private Task EnsureLoadedAsync() => RefreshAuthStatusAsync(CancellationToken.None);
 
     /// <summary>
-    /// Повтор після помилки.
+    /// Закрити банер помилки (наприклад, невдале додавання в «Обране»).
     /// </summary>
-    [RelayCommand(AllowConcurrentExecutions = true)]
-    private Task RetryAsync() => LoadFirstPageAsync();
+    [RelayCommand]
+    private void DismissError() => ErrorMessage = null;
 
     /// <summary>
-    /// Кнопка пошуку / Enter: шукати одразу, без очікування debounce.
+    /// Кнопка пошуку / Enter: застосувати рядок пошуку одразу, без очікування debounce.
     /// </summary>
-    [RelayCommand(AllowConcurrentExecutions = true)]
-    private Task SearchAsync()
+    [RelayCommand]
+    private void Search()
     {
         _debounceCts?.Cancel();
-        return Normalize(SearchText) == _loadedQuery && HasLoaded && !HasError
-            ? Task.CompletedTask
-            : LoadFirstPageAsync();
+        ApplySearchText();
     }
 
-    [RelayCommand(AllowConcurrentExecutions = true)]
+    /// <summary>
+    /// «Потягнути, щоб оновити»: сайти не перечитуємо (це робить «Знайти»), лише стан входу й фільтри списку.
+    /// </summary>
+    [RelayCommand]
     private async Task RefreshAsync()
     {
         try
         {
             await RefreshAuthStatusAsync(CancellationToken.None);
-            await LoadFirstPageAsync(showSpinner: false);
-        }
-        finally
-        {
-            IsRefreshing = false;
-        }
-    }
-
-    /// <summary>
-    /// Наступна сторінка (RemainingItemsThreshold). Ігнорується, якщо сторінок більше немає або йде завантаження.
-    /// </summary>
-    [RelayCommand]
-    private async Task LoadMoreAsync()
-    {
-        if (IsLoading || IsLoadingMore || !_hasNextPage || _loadCts is null)
-        {
-            return;
-        }
-
-        CancellationToken ct = _loadCts.Token;
-        IsLoadingMore = true;
-        try
-        {
-            PagedResult<VacancyDto> page = await _gateway.GetVacanciesAsync(_loadedQuery, _page + 1, PageSize, ct);
-            Append(page);
-            if (_isLocalFilterActive || HasActiveLocalFilterOrSort())
+            if (HasLoaded)
             {
                 ApplyLocalFilterAndSort();
             }
         }
-        catch (ApiException ex) when (!ct.IsCancellationRequested)
-        {
-            ErrorMessage = ex.Message;
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            // Замінено новим пошуком — він і керує станом.
-        }
         finally
         {
-            if (!ct.IsCancellationRequested)
-            {
-                IsLoadingMore = false;
-            }
+            IsRefreshing = false;
         }
     }
 
@@ -1808,65 +2040,30 @@ public partial class CatalogViewModel : ObservableObject
             return;
         }
 
-        if (Normalize(SearchText) != _loadedQuery || !HasLoaded)
-        {
-            await LoadFirstPageAsync();
-        }
+        ApplySearchText();
     }
 
-    private async Task LoadFirstPageAsync(bool showSpinner = true)
+    /// <summary>
+    /// Рядок пошуку звужує знайдені вакансії (назва, навички, компанія, категорія). Новий непорожній запит
+    /// записується в історію пошуків — з неї будуються рекомендації.
+    /// </summary>
+    private void ApplySearchText()
     {
-        _loadCts?.Cancel();
-        CancellationTokenSource cts = new();
-        _loadCts = cts;
-        CancellationToken ct = cts.Token;
-
         string? query = Normalize(SearchText);
-        IsLoadingMore = false;
-        ErrorMessage = null;
-        IsLoading = showSpinner;
-        try
+        if (query == _appliedQuery)
         {
-            PagedResult<VacancyDto> page = await _gateway.GetVacanciesAsync(query, 1, PageSize, ct);
-            if (!string.IsNullOrWhiteSpace(query))
-            {
-                _ = _gateway.RecordSearchAsync(query, ct);
-            }
-            Vacancies.Clear();
-            _loadedDtos.Clear();
-            _loadedQuery = query;
-            Append(page);
-            HasLoaded = true;
+            return;
+        }
 
-            if (_isLocalFilterActive || HasActiveLocalFilterOrSort())
-            {
-                await FetchRemainingPagesForLocalFilterAsync(ct);
-                if (IsDistanceSort(SelectedSortOption) && _distanceService != null && !string.IsNullOrWhiteSpace(_distanceService.UserAddress))
-                {
-                    bool titleOnly = UnifiedTitleOnly
-                        || (SelectedPlatform == "WorkUa" && WorkUaTitleOnly)
-                        || (SelectedPlatform == "Djinni" && DjinniSelectedSearchType.Contains("title-only", StringComparison.OrdinalIgnoreCase));
-                    IEnumerable<VacancyDto> filtered = _loadedDtos.Where(v => MatchesLocalFilters(v, titleOnly));
-                    await PrecalculateDistancesAsync(filtered, ct);
-                }
-                ApplyLocalFilterAndSort();
-            }
-        }
-        catch (ApiException ex) when (!ct.IsCancellationRequested)
+        _appliedQuery = query;
+        if (query is not null)
         {
-            ErrorMessage = ex.Message;
+            _ = _gateway.RecordSearchAsync(query, CancellationToken.None);
         }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+
+        if (HasLoaded)
         {
-            // Замінено новішим завантаженням.
-        }
-        finally
-        {
-            if (!ct.IsCancellationRequested)
-            {
-                IsLoading = false;
-                OnPropertyChanged(nameof(IsEmpty));
-            }
+            ApplyLocalFilterAndSort();
         }
     }
 
@@ -1884,55 +2081,23 @@ public partial class CatalogViewModel : ObservableObject
             initialDistanceKm: cachedKm);
     }
 
-    private void Append(PagedResult<VacancyDto> page)
-    {
-        foreach (VacancyDto vacancy in page.Items)
-        {
-            _loadedDtos.Add(vacancy);
-            Vacancies.Add(CreateVacancyItemViewModel(vacancy));
-        }
-
-        _page = page.Page;
-        _hasNextPage = page.HasNextPage;
-        TotalCount = page.TotalCount;
-    }
-
     private async Task ExecuteLocalFilterAndSortAsync(bool updateBanner)
     {
+        // Фільтри запам'ятовуються й застосуються до результату наступного пошуку на сайті
         _isLocalFilterActive = true;
-
         if (!HasLoaded)
         {
-            await LoadFirstPageAsync();
-        }
-        else if (_hasNextPage && _loadCts is not null && !IsLoading)
-        {
-            CancellationToken ct = _loadCts.Token;
-            IsLoading = true;
-            try
+            if (updateBanner)
             {
-                await FetchRemainingPagesForLocalFilterAsync(ct);
+                StaleCacheText = "🌐 Спочатку знайдіть вакансії: оберіть сайт і фільтри в блоці 1 та натисніть «Знайти».";
             }
-            catch (ApiException ex) when (!ct.IsCancellationRequested)
-            {
-                ErrorMessage = ex.Message;
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            finally
-            {
-                if (!ct.IsCancellationRequested)
-                {
-                    IsLoading = false;
-                }
-            }
+
+            return;
         }
 
         if (IsDistanceSort(SelectedSortOption) && _distanceService != null && !string.IsNullOrWhiteSpace(_distanceService.UserAddress))
         {
-            CancellationToken ct = _loadCts?.Token ?? CancellationToken.None;
+            CancellationToken ct = CancellationToken.None;
             bool titleOnly = UnifiedTitleOnly
                 || (SelectedPlatform == "WorkUa" && WorkUaTitleOnly)
                 || (SelectedPlatform == "Djinni" && DjinniSelectedSearchType.Contains("title-only", StringComparison.OrdinalIgnoreCase));
@@ -1949,33 +2114,14 @@ public partial class CatalogViewModel : ObservableObject
             string geoWarning = IsDistanceSort(SelectedSortOption) && string.IsNullOrWhiteSpace(_distanceService?.UserAddress)
                 ? " ⚠️ Вкажіть адресу в профілі для розрахунку відстані"
                 : string.Empty;
-            StaleCacheText = $"⚡ Відфільтровано вакансії з БД: знайдено {TotalCount} із {_loadedDtos.Count} (сортування: {SelectedSortOption}{whiteInfo}{banInfo}){geoWarning}";
-        }
-    }
-
-    private async Task FetchRemainingPagesForLocalFilterAsync(CancellationToken ct)
-    {
-        int safetyPages = 0;
-        while (_hasNextPage && safetyPages < 25 && !ct.IsCancellationRequested)
-        {
-            safetyPages++;
-            PagedResult<VacancyDto> nextPage = await _gateway.GetVacanciesAsync(_loadedQuery, _page + 1, PageSize, ct);
-            foreach (VacancyDto dto in nextPage.Items)
-            {
-                if (_loadedDtos.All(existing => existing.Id != dto.Id))
-                {
-                    _loadedDtos.Add(dto);
-                }
-            }
-
-            _page = nextPage.Page;
-            _hasNextPage = nextPage.HasNextPage;
+            StaleCacheText = $"⚡ Відфільтровано знайдені вакансії: {TotalCount} із {_loadedDtos.Count} (сортування: {SelectedSortOption}{whiteInfo}{banInfo}){geoWarning}";
         }
     }
 
     private bool HasActiveLocalFilterOrSort()
     {
         return SelectedSortOption != SortOptions[0]
+            || !string.IsNullOrWhiteSpace(SearchText)
             || SelectedSourceFilter != SourceFilterOptions[0]
             || SelectedFormat != FormatOptions[0]
             || WhiteListWords.Count > 0
@@ -2065,7 +2211,7 @@ public partial class CatalogViewModel : ObservableObject
             }
         }
 
-        // 2. Вайт-лист слів: перевіряється тільки за назвою посади та списком навичок Skills
+        // 2. Вайт-лист слів: назва, навички, компанія, категорія й опис (з «лише в назві» — тільки назва)
         if (WhiteListWords.Count > 0)
         {
             if (!WhiteListWords.Any(word => ContainsKeyword(v, word, titleOnly)))
@@ -2074,7 +2220,7 @@ public partial class CatalogViewModel : ObservableObject
             }
         }
 
-        // 3. Бан-слова: виключає вакансію, якщо слово знайдено в назві або навичках
+        // 3. Бан-слова: виключає вакансію, якщо слово знайдено в назві, навичках, компанії, категорії чи описі
         if (BanListWords.Count > 0)
         {
             if (BanListWords.Any(word => ContainsKeyword(v, word, titleOnly: false)))
@@ -2083,7 +2229,7 @@ public partial class CatalogViewModel : ObservableObject
             }
         }
 
-        // 4. Пошуковий запит (назва посади, навички або компанія)
+        // 4. Пошуковий запит (назва посади, навички, компанія, категорія або опис)
         string? searchKeyword = Normalize(SearchText);
         if (!string.IsNullOrWhiteSpace(searchKeyword) && !ContainsAllWords(v, searchKeyword, titleOnly))
         {
@@ -2157,7 +2303,9 @@ public partial class CatalogViewModel : ObservableObject
 
         return v.Skills.Any(s => s.Contains(word, StringComparison.OrdinalIgnoreCase))
             || v.Company.Contains(word, StringComparison.OrdinalIgnoreCase)
-            || v.Category.Contains(word, StringComparison.OrdinalIgnoreCase);
+            || v.Category.Contains(word, StringComparison.OrdinalIgnoreCase)
+            // Не в усіх сайтів є поле навичок: слово «C++» часто є лише в тексті вакансії
+            || v.Description.Contains(word, StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsDistanceSort(string? sortOption) =>
