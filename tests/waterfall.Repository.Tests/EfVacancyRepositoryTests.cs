@@ -606,4 +606,33 @@ public sealed class EfVacancyRepositoryTests : IDisposable
         (_, int withBlank) = await repo.GetAllAsync(skills: ["C#", " "]);
         Assert.Equal(2, withBlank);
     }
+
+    [Fact]
+    public async Task DeactivateExpiredAsync_MarksVacanciesOlderThanCutoffInactive()
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset cutoff = now.AddDays(-30);
+
+        VacancyDB expired = CreateVacancy(title: "Expired", publishedAt: now.AddDays(-31), isActive: true);
+        VacancyDB fresh = CreateVacancy(title: "Fresh", publishedAt: now.AddDays(-10), isActive: true);
+        VacancyDB alreadyInactive = CreateVacancy(title: "Old Inactive", publishedAt: now.AddDays(-40), isActive: false);
+
+        db.Vacancies.AddRange(expired, fresh, alreadyInactive);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act
+        int deactivated = await repo.DeactivateExpiredAsync(cutoff);
+
+        // Assert
+        Assert.Equal(1, deactivated);
+        VacancyDB? expiredReloaded = await db.Vacancies.FindAsync(expired.Id);
+        VacancyDB? freshReloaded = await db.Vacancies.FindAsync(fresh.Id);
+        Assert.False(expiredReloaded!.IsActive);
+        Assert.True(freshReloaded!.IsActive);
+    }
 }
