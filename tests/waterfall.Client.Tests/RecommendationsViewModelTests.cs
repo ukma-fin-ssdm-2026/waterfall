@@ -161,4 +161,31 @@ public class RecommendationsViewModelTests
         Assert.True(vm.IsEmpty);
         Assert.Equal("Нових рекомендацій поки немає", vm.EmptyTitle);
     }
+
+    [Theory]
+    [InlineData(new[] { "Python" }, new string[0], "Підібрано на основі ваших збережених вакансій (Python)")]
+    [InlineData(new string[0], new[] { "Java" }, "Підібрано на основі ваших збережених вакансій та пошуків (Java)")]
+    [InlineData(new string[0], new string[0], "Підібрано на основі 2 збережених вакансій")]
+    public async Task LoadRecommendations_FormatsBasisTextForAllCombinations(
+        string[] keywords,
+        string[] searches,
+        string expectedBasisText)
+    {
+        FakeGateway gateway = new();
+        StrongReferenceMessenger messenger = new();
+        RecommendationsViewModel vm = new(gateway, messenger);
+
+        Task loadTask = vm.LoadRecommendationsCommand.ExecuteAsync(null);
+        FakeGateway.RecommendationCall call = await gateway.WaitForRecommendationCallAsync(1);
+        call.Response.SetResult(new RecommendationsResultDto
+        {
+            Items = [],
+            SavedCount = 2,
+            BasisKeywords = keywords,
+            BasisSearches = searches
+        });
+        await loadTask;
+
+        Assert.Equal(expectedBasisText, vm.RecommendedBasisText);
+    }
 }

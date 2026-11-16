@@ -80,6 +80,27 @@ public class HttpGatewayServiceTests
     }
 
     [Fact]
+    public async Task GetRecommendations_DeserializesResultAndPassesLimit()
+    {
+        _server.Respond(HttpStatusCode.OK, """
+            {
+              "items": [{ "id": "11111111-1111-1111-1111-111111111111", "title": "Python Dev", "source": "Djinni" }],
+              "savedCount": 2,
+              "basisKeywords": ["Python"],
+              "basisSearches": ["Django"]
+            }
+            """);
+
+        RecommendationsResultDto result = await _gateway.GetRecommendationsAsync(limit: 15);
+
+        Assert.Equal("http://api.test:3000/api/v1/vacancies/recommendations?limit=15", _server.Requests.Single().Uri);
+        Assert.Equal(2, result.SavedCount);
+        Assert.Equal(["Python"], result.BasisKeywords);
+        Assert.Equal(["Django"], result.BasisSearches);
+        Assert.Single(result.Items);
+    }
+
+    [Fact]
     public async Task ErrorEnvelope_BecomesApiExceptionWithServerMessage()
     {
         _server.Respond(HttpStatusCode.Conflict, """
