@@ -4,8 +4,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging.Abstractions;
 using Waterfall.Api.Controllers;
+using Waterfall.Api.Models.Common;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Profile;
 using Waterfall.Services.Models.Vacancies;
@@ -17,6 +17,7 @@ public class ProfileControllerTests
     private readonly FakeProfileService _service = new();
     private readonly FakeUserStatsService _statsService = new();
     private readonly FakeVacancyService _vacancyService = new();
+    private readonly FakeLogger<ProfileController> _logger = new();
     private readonly ProfileController _controller;
     private readonly Guid _userId = Guid.NewGuid();
     private readonly Guid _vacancyId = Guid.NewGuid();
@@ -27,7 +28,7 @@ public class ProfileControllerTests
             _service,
             _statsService,
             _vacancyService,
-            NullLogger<ProfileController>.Instance);
+            _logger);
     }
 
     private void Authenticate()
@@ -77,6 +78,70 @@ public class ProfileControllerTests
         Assert.Equal("Київ, вул. Польова, 15", dto.Address);
         Assert.Equal("Київ, вул. Польова, 15", _service.StoredAddress);
         Assert.Equal(_userId, _service.LastUserId);
+    }
+
+    [Fact]
+    public async Task SaveAddress_WhenUnauthorized_Returns401()
+    {
+        // Arrange
+        _controller.ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() };
+        UserAddressDto request = new() { Address = "Київ, вул. Польова, 15" };
+
+        // Act
+        ActionResult<UserAddressDto> result = await _controller.SaveAddress(request, CancellationToken.None);
+
+        // Assert
+        UnauthorizedObjectResult unauthorized = Assert.IsType<UnauthorizedObjectResult>(result.Result);
+        ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(unauthorized.Value);
+        Assert.Equal("UNAUTHORIZED", error.Error.Code);
+        Assert.Null(_service.LastUserId); // Service must not be called
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SaveAddress_WhenAddressIsEmpty_Returns400AndServiceIsNotCalled(string? address)
+    {
+        // Arrange
+        Authenticate();
+        UserAddressDto request = new() { Address = address };
+
+        // Act
+        ActionResult<UserAddressDto> result = await _controller.SaveAddress(request, CancellationToken.None);
+
+        // Assert
+        BadRequestObjectResult badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(badRequest.Value);
+        Assert.Equal("VALIDATION_ERROR", error.Error.Code);
+        Assert.Null(_service.LastUserId); // Service must not be called
+    }
+
+    [Fact]
+    public async Task SaveAddress_WhenAuthenticated_LogsUserId()
+    {
+        // Arrange
+        Authenticate();
+        UserAddressDto request = new() { Address = "Київ, вул. Польова, 15" };
+
+        // Act
+        await _controller.SaveAddress(request, CancellationToken.None);
+
+        // Assert
+        Assert.Contains(_logger.Logs, log => log.Contains(_userId.ToString(), StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task GetStats_WhenAuthenticated_LogsUserId()
+    {
+        // Arrange
+        Authenticate();
+
+        // Act
+        await _controller.GetStats(CancellationToken.None);
+
+        // Assert
+        Assert.Contains(_logger.Logs, log => log.Contains(_userId.ToString(), StringComparison.Ordinal));
     }
 
     [Fact]

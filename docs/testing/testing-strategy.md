@@ -3,31 +3,33 @@
 
 ## 1. Поточний статус
 
-У рішенні **567 тести** у 6 проєктах (кількість — за `dotnet test`, 01.11.2026):
+У рішенні **961 тест** у 7 проєктах (кількість — за `dotnet test`, 16.11.2026):
 
 | Набір тестів | Модуль | Тестів | Що перевіряє |
 | :--- | :--- | :---: | :--- |
-| [`waterfall.Ingestion.Tests`](../../tests/waterfall.Ingestion.Tests/README.md) | збір вакансій | 186 | нормалізація полів, фоновий парсер, `BulkUpsertAsync` на справжній SQLite; розбір сторінок Djinni/Dou/Work.ua, `robots.txt` і темп запитів `SiteCrawler`; фікстури, заглушки, граничні випадки |
+| [`waterfall.Ingestion.Tests`](../../tests/waterfall.Ingestion.Tests/README.md) | збір вакансій | 239 | нормалізація полів, фоновий парсер, `BulkUpsertAsync` на справжній SQLite; розбір сторінок Djinni/Dou/Work.ua, `robots.txt` і темп запитів `SiteCrawler`; фікстури, заглушки, граничні випадки |
 | `waterfall.Auth.Tests` | автентифікація | 40 | сервіс автентифікації, JWT, хешування паролів, контролер, валідація запитів |
-| [`waterfall.Client.Tests`](../../tests/waterfall.Client.Tests/README.md) | клієнт / UI | 168 | `HttpGatewayService` (помилки мережі й сервера), viewmodels каталогу, «Обраного», входу і картки, розбір JWT; заглушки з керованими відповідями, `FakeTimeProvider`, property-based тест (FsCheck) |
-| [`waterfall.Repository.Tests`](../../tests/waterfall.Repository.Tests/README.md) | сховище (репозиторії) | 61 | SQLite in-memory: пошук за 4 полями та JSON, фільтрація, сортування, пагінація, `BulkUpsert`, ізоляція закладок, операції користувачів і геокешу |
-| [`waterfall.Services.Tests`](../../tests/waterfall.Services.Tests/README.md) | бізнес-сервіси та кеш | 66 | Cache-Aside (PERF-001), Stale-Cache fallback (REL-001), збагачення `IsSaved`, каскадна інвалідація кешу, стійкість до битого JSON; адреса користувача в `UserPersonalData` |
-| [`waterfall.Api.Tests`](../../tests/waterfall.Api.Tests/README.md) | REST API та безпека | 46 | Ендпоїнти вакансій, закладок, автентифікації, профілю й геокодування (HTTP 200/201/400/401/404/409), трасування запитів, витяг claims з JWT, захист від витоку даних у логи (CWE-532) |
+| [`waterfall.Client.Tests`](../../tests/waterfall.Client.Tests/README.md) | клієнт / UI | 233 | `HttpGatewayService` (помилки мережі й сервера), viewmodels каталогу, «Обраного», входу і картки, розбір JWT; заглушки з керованими відповідями, `FakeTimeProvider`, property-based тест (FsCheck) |
+| [`waterfall.Repository.Tests`](../../tests/waterfall.Repository.Tests/README.md) | сховище (репозиторії) | 140 | SQLite in-memory: пошук за 4 полями та JSON, фільтрація, сортування, пагінація, `BulkUpsert`, ізоляція закладок, операції користувачів і геокешу |
+| [`waterfall.Services.Tests`](../../tests/waterfall.Services.Tests/README.md) | бізнес-сервіси та кеш | 196 | Cache-Aside (PERF-001), Stale-Cache fallback (REL-001), збагачення `IsSaved`, каскадна інвалідація кешу, стійкість до битого JSON; адреса користувача в `UserPersonalData` |
+| [`waterfall.Api.Tests`](../../tests/waterfall.Api.Tests/README.md) | REST API та безпека | 82 | Ендпоїнти вакансій, закладок, автентифікації, профілю, геокодування й ШІ-консультанта (HTTP 200/201/202/204/400/401/403/404/409/429/503), трасування запитів, витяг claims з JWT, захист від витоку даних у логи (CWE-532) |
+| [`tests/reliability`](../../tests/reliability) | стійкість і відмови | 32 | межові значення геокешу, обробка помилок без 500, ін'єкція відмов у зовнішні сервіси, health checks БД і геосервісу |
 | `src/mcp` (TypeScript) | MCP-сервер | — | тестів немає; лише статичні перевірки: ESLint з `eslint-plugin-security`, `tsc`, `npm audit` |
 
-Усі набори .NET прописані в CI (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)). З 19.10.2026 workflow-и виконуються на self-hosted раннерах курсу (PR #111), тож зелений прогін CI знову щось доводить: 01.11.2026 на `main` пройшли і тести (567, 0 падінь), і ворота покриття (76,5 %).
+Усі набори .NET прописані в CI (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)). З 19.10.2026 workflow-и виконуються на self-hosted раннерах курсу (PR #111), тож зелений прогін CI знову щось доводить: 16.11.2026 локально пройшли всі 7 наборів (961 тест, 0 падінь), а ворота покриття тримаються на позначці 78,0 %.
 
 ## 2. Покриття та філософія якості
 
 Замість штучної гонитви за «100% рядковим покриттям» через тривіальні перевірки вбудованих методів ORM чи авто-властивостей, набір тестів сфокусовано на критичній бізнес-логіці, стійкості (resilience) та граничних умовах.
 
-Загальне покриття по всьому рішенню: **76,5 % рядків, 67,2 % гілок** (усі 6 наборів, coverlet + ReportGenerator з фільтрами з `ci.yml`, 01.11.2026). Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) виключає спільний [`tests/coverage.runsettings`](../../tests/coverage.runsettings).
+Загальне покриття по всьому рішенню: **78,0 % рядків, 86,5 % гілок** (усі 7 наборів, coverlet + ReportGenerator з фільтрами з `ci.yml`, 16.11.2026). Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) виключає спільний [`tests/coverage.runsettings`](../../tests/coverage.runsettings). Модуль REST API (`Waterfall.Api`) — **80,7 %** рядків; усі контролери, крім `AIConsultantController`, — **100 %**.
 
 Що залишилось непокритим модульним тестуванням і чому:
 - **`Program.cs` та конфігурація хоста (0 %):** шаблонне завантаження веб-сервера ASP.NET Core; покривається smoke-тестами та e2e сценаріями при запуску.
 - **`WaterfallDbSeeder.cs` (0 %):** одноразовий ініціалізатор демо-даних, не бере участі в робочому циклі обробки клієнтських запитів.
 - **`OpenApiGenerator.cs` (0 %):** службова утиліта експорту OpenAPI специфікації для документації, валідується статично в CI.
-- **`ServiceCollectionExtensions` (0 %):** декларативна реєстрація DI-залежностей.
+- **`ServiceCollectionExtensions` (0 %):** декларативна реєстрація DI-залежностей (перевірка fail-fast конфігурації JWT — окремий план).
+- **`AIConsultantController` (73 %):** непокриті лише обробники обриву SSE-з'єднання (`IOException`, скасування) та термінальні події `error`; основні сценарії (403 за роллю, 404, 503 до стрімінгу, 429 за лімітом) перевіряються.
 - **Клієнт:** лише властивості, що передають поле DTO (`Title`, `Description`, `Notes`), і неможливі комбінації умов у `FavoritesViewModel.IsEmpty`. Аналіз непокритого `catch` знайшов справжню ваду: відповідь у невідомому кодуванні (сторінка проксі в `windows-1251`) вилітала повз `ApiException`; виправлено з регресійними тестами. Проєкт `waterfall.UI` (XAML, code-behind, `SecureStorage`) у звіт не входить: це прив'язки без логіки, вони потребують MAUI-воркладів і перевіряються системними тестами. [HTML-звіт](../../tests/waterfall.Client.Tests/coverage-report/index.html)
 - **`src/mcp` (TypeScript):** MCP-сервер перевіряється статичними аналізаторами (ESLint з `eslint-plugin-security`, `tsc`, `npm audit`).
 
