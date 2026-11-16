@@ -193,4 +193,45 @@ public sealed class RecommendationServiceTests
         Assert.Contains(result.Items, item => item.Id == unsavedGo.Id);
         Assert.Contains("Go", result.BasisSearches);
     }
+
+    [Fact]
+    public async Task GetRecommendations_EmptyUserId_ThrowsArgumentException()
+    {
+        RecommendationService service = new(
+            new FakeSavedVacancyRepository(),
+            new FakeSearchQueryRepository(),
+            new FakeVacancyRepository());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.GetRecommendationsAsync(Guid.Empty));
+    }
+
+    [Fact]
+    public async Task GetRecommendations_SearchMatchingExistingKeyword_BoostsExistingWeight()
+    {
+        Guid userId = Guid.NewGuid();
+        FakeSavedVacancyRepository savedRepo = new();
+        FakeSearchQueryRepository searchRepo = new();
+        FakeVacancyRepository vacancyRepo = new();
+
+        VacancyDB savedPython = CreateVacancy("Python Developer", skills: ["Python"]);
+        VacancyDB unsavedPython = CreateVacancy("Senior Python Engineer", skills: ["Python"]);
+        vacancyRepo.Vacancies.AddRange([savedPython, unsavedPython]);
+
+        await savedRepo.SaveAsync(new SavedVacancyDB
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            VacancyId = savedPython.Id,
+            Vacancy = savedPython,
+            SavedAt = DateTimeOffset.UtcNow
+        });
+        await searchRepo.AddAsync(new SearchQueryDB { UserId = userId, QueryText = "Python" });
+
+        RecommendationService service = new(savedRepo, searchRepo, vacancyRepo);
+
+        RecommendationsResultDto result = await service.GetRecommendationsAsync(userId);
+
+        Assert.Single(result.Items);
+        Assert.Equal(unsavedPython.Id, result.Items[0].Id);
+    }
 }
