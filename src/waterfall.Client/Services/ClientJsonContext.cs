@@ -21,6 +21,7 @@ namespace Waterfall.Client.Services;
 /// </summary>
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web, Converters = [typeof(JsonStringEnumConverter)])]
 [JsonSerializable(typeof(PagedResult<VacancyDto>))]
+[JsonSerializable(typeof(RecommendationsResultDto))]
 [JsonSerializable(typeof(VacancyDto))]
 [JsonSerializable(typeof(SiteSearchRequest))]
 [JsonSerializable(typeof(SiteSearchStatusDto))]
