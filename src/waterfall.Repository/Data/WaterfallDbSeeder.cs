@@ -335,6 +335,14 @@ public static class WaterfallDbSeeder
                     ""CreatedAt"" INTEGER NOT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS ""IX_GeoLocationCache_NormalizedAddress"" ON ""GeoLocationCache"" (""NormalizedAddress"");
+
+                CREATE TABLE IF NOT EXISTS ""SiteSearchCache"" (
+                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_SiteSearchCache"" PRIMARY KEY,
+                    ""CacheKey"" TEXT NOT NULL,
+                    ""ExternalIdsJson"" TEXT NOT NULL,
+                    ""CachedAt"" INTEGER NOT NULL
+                );
+                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_SiteSearchCache_CacheKey"" ON ""SiteSearchCache"" (""CacheKey"");
             ");
         }
         else if (context.Database.IsSqlServer())
@@ -358,6 +366,16 @@ public static class WaterfallDbSeeder
                 );
                 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_GeoLocationCache_NormalizedAddress')
                 CREATE UNIQUE INDEX [IX_GeoLocationCache_NormalizedAddress] ON [GeoLocationCache] ([NormalizedAddress]);
+
+                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SiteSearchCache' and xtype='U')
+                CREATE TABLE [SiteSearchCache] (
+                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
+                    [CacheKey] nvarchar(500) NOT NULL,
+                    [ExternalIdsJson] nvarchar(max) NOT NULL,
+                    [CachedAt] datetimeoffset NOT NULL
+                );
+                IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_SiteSearchCache_CacheKey')
+                CREATE UNIQUE INDEX [IX_SiteSearchCache_CacheKey] ON [SiteSearchCache] ([CacheKey]);
             ");
         }
     }
