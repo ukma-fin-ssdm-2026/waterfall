@@ -54,4 +54,9 @@ public interface IVacancyRepository
     Task<VacancyDB> CreateAsync(VacancyDB entity, CancellationToken ct = default);
     Task<VacancyDB?> UpdateAsync(VacancyDB entity, CancellationToken ct = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Позначає неактивними (IsActive = false) усі активні вакансії, опубліковані до <paramref name="publishedBefore"/>.
+    /// </summary>
+    Task<int> DeactivateExpiredAsync(DateTimeOffset publishedBefore, CancellationToken ct = default);
 }
