@@ -6,7 +6,10 @@
 
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Waterfall.Repository.Data;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Services;
@@ -82,10 +85,10 @@ public sealed class SiteSearchService : ISiteSearchService
 
         JobSource source = request.Source!.Value;
         string key = CacheKey(request);
-        if (_cache.TryGetValue(key, out (DateTimeOffset At, IReadOnlyList<string> Ids) cached) && now - cached.At < CacheLifetime)
+        if (TryGetCachedIds(key, now, out IReadOnlyList<string>? cachedIds))
         {
             SearchJob fromCache = new(userId, source, key, request.Pages, now) { FromCache = true };
-            fromCache.Complete(cached.Ids, cached.Ids.Count);
+            fromCache.Complete(cachedIds, cachedIds.Count);
             _jobs[fromCache.Id] = fromCache;
             return new SiteSearchStart(fromCache.Snapshot(), null);
         }
@@ -112,6 +115,88 @@ public sealed class SiteSearchService : ISiteSearchService
         // Скасування при зупинці сервера RunAsync обробляє сам через _stopping: так завдання встигне позначити пошук як невдалий
         _ = Task.Run(() => RunAsync(job, request), CancellationToken.None);
         return new SiteSearchStart(job.Snapshot(), null);
+    }
+
+    private bool TryGetCachedIds(string key, DateTimeOffset now, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IReadOnlyList<string>? ids)
+    {
+        if (_cache.TryGetValue(key, out (DateTimeOffset At, IReadOnlyList<string> Ids) cached) && now - cached.At < CacheLifetime)
+        {
+            ids = cached.Ids;
+            return true;
+        }
+
+        try
+        {
+            using IServiceScope scope = _scopeFactory.CreateScope();
+            WaterfallDbContext? db = scope.ServiceProvider.GetService<WaterfallDbContext>();
+            if (db is not null)
+            {
+                SiteSearchCacheDB? entry = db.SiteSearchCache
+                    .AsNoTracking()
+                    .FirstOrDefault(c => c.CacheKey == key);
+
+                if (entry is not null && now - entry.CachedAt < CacheLifetime)
+                {
+                    List<string>? parsed = JsonSerializer.Deserialize<List<string>>(entry.ExternalIdsJson);
+                    if (parsed is not null)
+                    {
+                        _cache[key] = (entry.CachedAt, parsed);
+                        ids = parsed;
+                        return true;
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Не вдалося прочитати кеш пошуку на сайтах з БД.");
+        }
+
+        ids = null;
+        return false;
+    }
+
+    private async Task SaveToDbCacheAsync(
+        IServiceProvider services,
+        string key,
+        IReadOnlyList<string> ids,
+        DateTimeOffset cachedAt,
+        CancellationToken ct)
+    {
+        try
+        {
+            WaterfallDbContext? db = services.GetService<WaterfallDbContext>();
+            if (db is null)
+            {
+                return;
+            }
+
+            string json = JsonSerializer.Serialize(ids);
+            SiteSearchCacheDB? existing = await db.SiteSearchCache
+                .FirstOrDefaultAsync(c => c.CacheKey == key, ct);
+
+            if (existing is not null)
+            {
+                existing.ExternalIdsJson = json;
+                existing.CachedAt = cachedAt;
+            }
+            else
+            {
+                await db.SiteSearchCache.AddAsync(new SiteSearchCacheDB
+                {
+                    Id = Guid.NewGuid(),
+                    CacheKey = key,
+                    ExternalIdsJson = json,
+                    CachedAt = cachedAt
+                }, ct);
+            }
+
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Не вдалося зберегти кеш пошуку на сайтах у БД.");
+        }
     }
 
     public async Task<SiteSearchStatusDto?> GetAsync(Guid id, Guid userId, CancellationToken ct = default)
@@ -294,7 +379,9 @@ public sealed class SiteSearchService : ISiteSearchService
 
                 List<string> ids = raw.Select(item => item.Id?.Trim()).OfType<string>().Where(id => id.Length > 0).Distinct().ToList();
                 job.Complete(ids, ids.Count);
-                _cache[job.Key] = (_time.GetUtcNow(), ids);
+                DateTimeOffset cachedAt = _time.GetUtcNow();
+                _cache[job.Key] = (cachedAt, ids);
+                await SaveToDbCacheAsync(scope.ServiceProvider, job.Key, ids, cachedAt, _stopping);
                 if (_logger.IsEnabled(LogLevel.Information))
                 {
                     _logger.LogInformation("Пошук на {Source}: знайдено {Count} вакансій.", job.Source, ids.Count);
