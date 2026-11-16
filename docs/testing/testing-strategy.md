@@ -72,13 +72,15 @@
 
 ## 5. Інтеграція у конвеєр CI/CD
 
-**Зараз** у [`ci.yml`](../../.github/workflows/ci.yml) на кожен Pull Request і пуш у `main`: job `build` збирає API (`Release`; SecurityCodeScan працює як аналізатор під час збірки), job `test` по черзі запускає всі 6 наборів .NET із `--collect:"XPlat Code Coverage"`, ReportGenerator зводить звіти в `Summary.txt` і підсумок у Step Summary, а крок Quality Gate валить job, якщо загальне рядкове покриття нижче 75 %. MCP-сервер перевіряє окремий workflow `mcp.yml`. Обмеження:
-- гілка `main` не захищена (branch protection вимкнено), тож червоний `test` не блокує злиття, а лише позначає PR;
+**Зараз** у [`ci.yml`](../../.github/workflows/ci.yml) на кожен Pull Request і пуш у `main` працює **один** job `test`: спершу збирається API (`Release`; SecurityCodeScan працює як аналізатор під час збірки), потім по черзі запускаються всі 6 наборів .NET із `--collect:"XPlat Code Coverage"`, ReportGenerator зводить звіти в `Summary.txt` і підсумок у Step Summary, а крок Quality Gate валить job, якщо загальне рядкове покриття нижче 75 %. Один job означає **одну чергу** на спільних self-hosted раннерах замість двох. Зміни лише в документації (`docs/**`, `*.md`, `Labs/**`, `coverage-report/**`) не запускають ні збірки, ні тестів: job швидко зеленіє. MCP-сервер перевіряє окремий workflow `mcp.yml`.
+
+Обмеження:
+- `main` захищена ruleset «Branches»: обов'язкові перевірки `test` (CI) і `SonarCloud Code Analysis`, тож червоний `test` блокує злиття PR;
 - CI не передає `tests/coverage.runsettings`, тому ворота рахують і згенерований код клієнта (81,7 % замість 80,3 %);
 - HTML-звіт у CI не зберігається; дашборд `coverage-report/` згенеровано локально й закомічено вручну.
 
 **План** (у порядку користі):
-1. **Обов'язкова перевірка:** увімкнути branch protection для `main` з required status check `test`, інакше ворота лише попереджають.
+1. (Виконано) **Обов'язкова перевірка:** увімкнути branch protection для `main` з required status check `test`, інакше ворота лише попереджають.
 2. **Покриття без згенерованого коду:** додати `--settings tests/coverage.runsettings` до кроків `dotnet test`, HTML-звіт — у workflow artifact. Тоді звіти не треба комітити вручну, і вони не застарівають.
 3. **Підсумок у PR:** `SummaryGithub.md` — коментарем до PR, а не лише в Step Summary.
 4. **Lint:** `dotnet format --verify-no-changes` (налаштування вже в `.editorconfig`).

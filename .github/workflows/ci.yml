@@ -10,67 +10,103 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    # Timeout 5 minutes in accordance with MAINT-001
-    # Check: /docs/requirements/requirements.md
-    timeout-minutes: 5
-    runs-on: [self-hosted, linux]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v6
-        with:
-          dotnet-version: 10.0.403
-
-      # Only API for now to not bundle excess packages (MAUI)
-      - name: Restore dependencies
-        run: dotnet restore src/api/Waterfall.Api.csproj
-
-      - name: Build
-        run: dotnet build src/api/Waterfall.Api.csproj -c Release --no-restore --nologo
-
+  # Combined job of build and test per improvement plan in dora-summary.md
   test:
-    # Прогін юніт-тестів та Quality Gate покриття у CI (issue #62, Lab 6 Bonus)
-    timeout-minutes: 5
+    timeout-minutes: 10
     runs-on: [self-hosted, linux]
 
     steps:
+      # Full history: the docs-only detection compares the base commit with HEAD.
       - name: Checkout
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # Documentation-only changes do not need a build and a test run.
+      # The skip is done inside the job instead of paths-ignore because
+      # the job is required by the branch ruleset.
+      - name: Detect docs-only changes
+        id: changes
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          # The base of the comparison: the PR branch point or the previous commit of the branch
+          base=""
+          case "$EVENT_NAME" in
+            pull_request) base="$PR_BASE_SHA" ;;
+            push) base="$PUSH_BASE_SHA" ;;
+          esac
+          if [ -z "$base" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            echo "Base commit is not available locally, running the full pipeline."
+            exit 0
+          fi
+          changed="$(git diff --name-only "$base" HEAD)"
+          if [ -z "$changed" ]; then
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Changed files:"
+          echo "$changed"
+          # Everything outside of docs/, Labs/, coverage-report/ and markdown files is code
+          code="$(printf '%s\n' "$changed" | grep -Ev '^(docs/|Labs/|coverage-report/)|\.md$' || true)"
+          if [ -z "$code" ]; then
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+            echo "Only documentation changed, skipping build and tests."
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup .NET
+        if: steps.changes.outputs.docs_only != 'true'
         uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.403
+
+      - name: Restore and build
+        if: steps.changes.outputs.docs_only != 'true'
+        run: dotnet build src/api/Waterfall.Api.csproj -c Release --nologo
 
       # On Linux the libraries target net10.0 only, so test projects build without MAUI workloads
       # Note: Sensitive logging security regression tests (CWE-532) are integrated into Api tests
 
       - name: Ingestion tests
+        if: steps.changes.outputs.docs_only != 'true'
         run: dotnet test tests/waterfall.Ingestion.Tests/waterfall.Ingestion.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Ingestion
 
       - name: Client tests
+        if: steps.changes.outputs.docs_only != 'true'
         run: dotnet test tests/waterfall.Client.Tests/waterfall.Client.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Client
 
       - name: Auth tests
+        if: steps.changes.outputs.docs_only != 'true'
         run: dotnet test tests/waterfall.Auth.Tests/waterfall.Auth.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Auth
 
       - name: Repository tests
+        if: steps.changes.outputs.docs_only != 'true'
         run: dotnet test tests/waterfall.Repository.Tests/waterfall.Repository.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Repository
 
       - name: Services tests
+        if: steps.changes.outputs.docs_only != 'true'
         run: dotnet test tests/waterfall.Services.Tests/waterfall.Services.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Services
 
       - name: Api tests
+        if: steps.changes.outputs.docs_only != 'true'
         run: dotnet test tests/waterfall.Api.Tests/waterfall.Api.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Api
         
       - name: Reliability tests
+        if: steps.changes.outputs.docs_only != 'true'
         run: dotnet test tests/reliability/waterfall.Reliability.Tests.csproj -c Release --nologo --collect:"XPlat Code Coverage" --results-directory ./TestResults/Reliability
 
       - name: Restore tools & Generate coverage report
+        if: steps.changes.outputs.docs_only != 'true'
         run: |
           dotnet tool restore
           dotnet tool run reportgenerator \
@@ -81,12 +117,14 @@ jobs:
             -classfilters:"-Microsoft.AspNetCore.OpenApi.Generated*;-*Program*"
 
       - name: Publish coverage to GitHub Step Summary
+        if: steps.changes.outputs.docs_only != 'true'
         run: |
           if [ -f coverage-report/SummaryGithub.md ]; then
             cat coverage-report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Coverage Quality Gate (Fail under 75%)
+        if: steps.changes.outputs.docs_only != 'true'
         run: |
           echo "=== Quality Gate Check ==="
           cat coverage-report/Summary.txt
@@ -114,4 +152,3 @@ jobs:
           else:
               print(f'✅ Code coverage gate PASSED: {coverage}% >= {threshold}%!')
           "
-
