@@ -916,6 +916,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/vacancies/recommendations:
+    get:
+      tags:
+        - Vacancies
+      summary: 'Отримати персоналізовані рекомендації вакансій (FR-006, US-004).'
+      description: 'Підбирає нові вакансії на основі збережених вакансій та історії пошуків користувача, виключаючи вже збережені.'
+      operationId: GetRecommendedVacancies
+      parameters:
+        - name: limit
+          in: query
+          description: 'Максимальна кількість рекомендованих вакансій (1–100, за замовчуванням 20).'
+          schema:
+            type: integer
+            format: int32
+            default: 20
+      responses:
+        '200':
+          description: 'Рекомендації успішно сформовано (або порожній список, якщо збережень ще немає).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecommendationsResultDto'
+        '401':
+          description: Користувач не авторизований.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   '/api/v1/vacancies/{id}':
     get:
       tags:
@@ -1290,6 +1318,33 @@ components:
           example: Secret123456
       additionalProperties: false
       description: 'Модель запиту на вхід користувача (навмисно без політики складності, щоб не розкривати її на логіні, THR-01).'
+    RecommendationsResultDto:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/VacancyDto'
+          description: 'Рекомендовані (ще не збережені) вакансії, відсортовані за релевантністю.'
+          nullable: true
+        savedCount:
+          type: integer
+          description: Кількість активних збережених вакансій користувача (0 означає початковий стан).
+          format: int32
+        basisKeywords:
+          type: array
+          items:
+            type: string
+          description: 'Ключові технології та слова зі збережених вакансій, на основі яких підібрано рекомендації.'
+          nullable: true
+        basisSearches:
+          type: array
+          items:
+            type: string
+          description: 'Недавні пошукові запити користувача, враховані при підборі.'
+          nullable: true
+      additionalProperties: false
+      description: 'Результат підбору персоналізованих рекомендацій вакансій (FR-006, US-004).'
     RecordSearchRequest:
       required:
         - query
