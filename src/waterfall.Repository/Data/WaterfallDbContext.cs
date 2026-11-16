@@ -24,6 +24,7 @@ public class WaterfallDbContext : DbContext
     public DbSet<UserDB> Users => Set<UserDB>();
     public DbSet<UserPersonalDataDB> UserPersonalData => Set<UserPersonalDataDB>();
     public DbSet<GeoLocationCacheDB> GeoLocationCache => Set<GeoLocationCacheDB>();
+    public DbSet<SiteSearchCacheDB> SiteSearchCache => Set<SiteSearchCacheDB>();
     public DbSet<SearchQueryDB> SearchQueries => Set<SearchQueryDB>();
     public DbSet<VacancyViewDB> VacancyViews => Set<VacancyViewDB>();
     public DbSet<ChatSessionDB> ChatSessions => Set<ChatSessionDB>();

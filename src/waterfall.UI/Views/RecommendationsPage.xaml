@@ -62,11 +62,11 @@
                         <Label Text="💡"
                                FontSize="36"
                                HorizontalOptions="Center" />
-                        <Label Text="Поки немає рекомендацій"
+                        <Label Text="{Binding EmptyTitle}"
                                HorizontalOptions="Center"
                                HorizontalTextAlignment="Center"
                                Style="{StaticResource CardTitle}" />
-                        <Label Text="Зберігайте вакансії або користуйтесь ШІ-консультантом, щоб отримати персоналізовані пропозиції"
+                        <Label Text="{Binding EmptyDescription}"
                                HorizontalOptions="Center"
                                HorizontalTextAlignment="Center"
                                Style="{StaticResource MutedLabel}" />

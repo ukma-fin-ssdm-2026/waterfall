@@ -49,6 +49,12 @@ public sealed class HttpGatewayService : IHttpGatewayService
         return SendAsync(new HttpRequestMessage(HttpMethod.Get, url), Json.PagedResultVacancyDto, ct);
     }
 
+    public Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default) =>
+        SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, $"api/v1/vacancies/recommendations?limit={limit}"),
+            Json.RecommendationsResultDto,
+            ct);
+
     public Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default) =>
         SendAsync(new HttpRequestMessage(HttpMethod.Get, $"api/v1/vacancies/{id}"), Json.VacancyDto, ct);
 

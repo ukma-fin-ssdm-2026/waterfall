@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using Waterfall.Api.Models.Common;
@@ -18,12 +19,17 @@ namespace Waterfall.Api.Controllers;
 public class VacanciesController : ApiControllerBase
 {
     private readonly IVacancyService _vacancyService;
+    private readonly IRecommendationService? _recommendationService;
     private readonly ILogger<VacanciesController> _logger;
 
-    public VacanciesController(IVacancyService vacancyService, ILogger<VacanciesController> logger)
+    public VacanciesController(
+        IVacancyService vacancyService,
+        ILogger<VacanciesController> logger,
+        IRecommendationService? recommendationService = null)
     {
         _vacancyService = vacancyService;
         _logger = logger;
+        _recommendationService = recommendationService;
     }
 
     /// <summary>
@@ -51,6 +57,40 @@ public class VacanciesController : ApiControllerBase
             filter.Page, filter.PageSize, filter.Search);
 
         PagedResult<VacancyDto> result = await _vacancyService.GetAllAsync(filter, ct, CurrentUserId);
+        return Ok(result);
+    }
+
+    /// <summary>
+    /// Отримати персоналізовані рекомендації вакансій (FR-006, US-004).
+    /// </summary>
+    /// <param name="limit">Максимальна кількість рекомендованих вакансій (1–100, за замовчуванням 20).</param>
+    /// <param name="ct">Токен скасування операції.</param>
+    /// <response code="200">Рекомендації успішно сформовано (або порожній список, якщо збережень ще немає).</response>
+    /// <response code="401">Користувач не авторизований.</response>
+    [HttpGet("recommendations")]
+    [Authorize]
+    [SwaggerOperation(
+        Summary = "Отримати персоналізовані рекомендації",
+        Description = "Підбирає нові вакансії на основі збережених вакансій та історії пошуків користувача, виключаючи вже збережені.",
+        OperationId = "GetRecommendedVacancies",
+        Tags = ["Vacancies"])]
+    [ProducesResponseType(typeof(RecommendationsResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<RecommendationsResultDto>> GetRecommendations(
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
+    {
+        if (CurrentUserId is not { } userId)
+        {
+            return ErrorUnauthorized("Користувач не авторизований.");
+        }
+
+        if (_recommendationService is null)
+        {
+            throw new InvalidOperationException("Сервіс рекомендацій не зареєстровано в DI.");
+        }
+
+        RecommendationsResultDto result = await _recommendationService.GetRecommendationsAsync(userId, limit, ct);
         return Ok(result);
     }
 

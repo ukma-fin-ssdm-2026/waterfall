@@ -241,4 +241,24 @@ public class EfVacancyRepository : IVacancyRepository
         await _context.SaveChangesAsync(ct);
         return true;
     }
+
+    public async Task<int> DeactivateExpiredAsync(DateTimeOffset publishedBefore, CancellationToken ct = default)
+    {
+        List<VacancyDB> expired = await _context.Vacancies
+            .Where(v => v.IsActive && v.PublishedAt < publishedBefore)
+            .ToListAsync(ct);
+
+        if (expired.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (VacancyDB vacancy in expired)
+        {
+            vacancy.IsActive = false;
+        }
+
+        await _context.SaveChangesAsync(ct);
+        return expired.Count;
+    }
 }

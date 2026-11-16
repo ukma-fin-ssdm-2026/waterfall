@@ -556,4 +556,87 @@ public sealed class SiteSearchServiceTests : IDisposable
         {
         }
     }
+
+    [Fact]
+    public async Task Search_PersistedDbCache_SurvivesRestartWithinThreeHours_AndExpiresAfter()
+    {
+        MutableTimeProvider clock = new(new DateTimeOffset(2026, 11, 16, 12, 0, 0, TimeSpan.Zero));
+        SiteSearchRequest request = new() { Source = JobSource.Djinni, Categories = ["Python"] };
+        _sites.Pages[SiteSearchService.ListPageUrl(request, 1)!] = DjinniPageTests.Page(DjinniPageTests.Job(101));
+
+        SiteSearchService firstInstance = new(
+            _services.GetRequiredService<IServiceScopeFactory>(),
+            _sites,
+            Options.Create(new IngestionOptions { RequestDelay = TimeSpan.Zero }),
+            new Lifetime(),
+            NullLogger<SiteSearchService>.Instance,
+            _browser,
+            clock);
+
+        SiteSearchStatusDto firstDone = await WaitDoneForAsync(firstInstance, firstInstance.Start(request, User).Status!.Id, User);
+        Assert.False(firstDone.FromCache);
+        int requestsAfterFirst = _sites.Requested.Count;
+
+        // Через 2 години після «перезапуску» (новий екземпляр з порожнім in-memory кешем) -> віддає з БД-кешу без парсингу
+        clock.Advance(TimeSpan.FromHours(2));
+        SiteSearchService restartedWithinTtl = new(
+            _services.GetRequiredService<IServiceScopeFactory>(),
+            _sites,
+            Options.Create(new IngestionOptions { RequestDelay = TimeSpan.Zero }),
+            new Lifetime(),
+            NullLogger<SiteSearchService>.Instance,
+            _browser,
+            clock);
+
+        SiteSearchStart cachedStart = restartedWithinTtl.Start(request, User);
+        Assert.NotNull(cachedStart.Status);
+        Assert.True(cachedStart.Status.FromCache);
+        Assert.Equal(requestsAfterFirst, _sites.Requested.Count);
+
+        SiteSearchStatusDto cachedDone = (await restartedWithinTtl.GetAsync(cachedStart.Status.Id, User))!;
+        Assert.Single(cachedDone.Vacancies!);
+
+        // Через 5 годин від першого пошуку (> 3 год) -> кеш протух, парсить сайт заново
+        clock.Advance(TimeSpan.FromHours(3));
+        SiteSearchService restartedAfterExpiry = new(
+            _services.GetRequiredService<IServiceScopeFactory>(),
+            _sites,
+            Options.Create(new IngestionOptions { RequestDelay = TimeSpan.Zero }),
+            new Lifetime(),
+            NullLogger<SiteSearchService>.Instance,
+            _browser,
+            clock);
+
+        SiteSearchStart freshStart = restartedAfterExpiry.Start(request, User);
+        Assert.NotNull(freshStart.Status);
+        Assert.False(freshStart.Status.FromCache);
+        await WaitDoneForAsync(restartedAfterExpiry, freshStart.Status.Id, User);
+        Assert.True(_sites.Requested.Count > requestsAfterFirst);
+    }
+
+    private static async Task<SiteSearchStatusDto> WaitDoneForAsync(SiteSearchService service, Guid id, Guid userId)
+    {
+        DateTimeOffset deadline = DateTimeOffset.UtcNow + WaitLimit;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            SiteSearchStatusDto status = (await service.GetAsync(id, userId))!;
+            if (status.State is SiteSearchStates.Completed or SiteSearchStates.Failed)
+            {
+                return status;
+            }
+
+            await Task.Delay(20);
+        }
+
+        throw new TimeoutException("SiteSearchService did not finish in time.");
+    }
+
+    private sealed class MutableTimeProvider(DateTimeOffset initial) : TimeProvider
+    {
+        private DateTimeOffset _now = initial;
+
+        public void Advance(TimeSpan delta) => _now += delta;
+
+        public override DateTimeOffset GetUtcNow() => _now;
+    }
 }

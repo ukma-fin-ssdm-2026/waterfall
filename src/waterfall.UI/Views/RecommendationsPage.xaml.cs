@@ -15,9 +15,6 @@ public partial class RecommendationsPage : ContentPage
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        if (!_viewModel.HasLoaded && !_viewModel.IsLoading)
-        {
-            _viewModel.LoadRecommendationsCommand.Execute(null);
-        }
+        _viewModel.LoadRecommendationsCommand.Execute(null);
     }
 }

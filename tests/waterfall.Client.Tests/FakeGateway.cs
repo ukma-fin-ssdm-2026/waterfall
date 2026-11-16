@@ -24,6 +24,12 @@ internal sealed class FakeGateway : IHttpGatewayService
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
+    public sealed record RecommendationCall(int Limit, CancellationToken Ct)
+    {
+        public TaskCompletionSource<RecommendationsResultDto> Response { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
     public sealed record SavedCall(CancellationToken Ct)
     {
         public TaskCompletionSource<IReadOnlyList<SavedVacancyDto>> Response { get; } =
@@ -32,9 +38,13 @@ internal sealed class FakeGateway : IHttpGatewayService
 
     private readonly SemaphoreSlim _callSignal = new(0);
 
+    private readonly SemaphoreSlim _recommendationSignal = new(0);
+
     private readonly SemaphoreSlim _savedSignal = new(0);
 
     public List<CatalogCall> CatalogCalls { get; } = [];
+
+    public List<RecommendationCall> RecommendationCalls { get; } = [];
 
     /// <summary>
     /// Відповідь на SaveVacancyAsync / UnsaveVacancyAsync; null — успіх.
@@ -54,6 +64,32 @@ internal sealed class FakeGateway : IHttpGatewayService
 
         _callSignal.Release();
         return call.Response.Task;
+    }
+
+    public Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default)
+    {
+        RecommendationCall call = new(limit, ct);
+        ct.Register(() => call.Response.TrySetCanceled(ct));
+        lock (RecommendationCalls)
+        {
+            RecommendationCalls.Add(call);
+        }
+
+        _recommendationSignal.Release();
+        return call.Response.Task;
+    }
+
+    public async Task<RecommendationCall> WaitForRecommendationCallAsync(int count)
+    {
+        while (RecommendationCalls.Count < count)
+        {
+            if (!await _recommendationSignal.WaitAsync(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException($"Очікувалось {count} викликів рекомендацій, отримано {RecommendationCalls.Count}.");
+            }
+        }
+
+        return RecommendationCalls[count - 1];
     }
 
     /// <summary>

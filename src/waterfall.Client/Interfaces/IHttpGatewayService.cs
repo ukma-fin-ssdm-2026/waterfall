@@ -19,6 +19,11 @@ public interface IHttpGatewayService
     /// </summary>
     Task<PagedResult<VacancyDto>> GetVacanciesAsync(string? search, int page, int pageSize, CancellationToken ct = default);
 
+    /// <summary>
+    /// Персоналізовані рекомендації на основі збережених вакансій та історії пошуків.
+    /// </summary>
+    Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default);
+
     Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Запускає пошук на сайті за фільтрами (POST /api/v1/site-searches); потрібен вхід.</summary>

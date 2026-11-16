@@ -133,6 +133,18 @@ public sealed class FakeVacancyRepository : IVacancyRepository
     {
         return Task.FromResult((vacancies.Count, 0));
     }
+
+    public Task<int> DeactivateExpiredAsync(DateTimeOffset publishedBefore, CancellationToken ct = default)
+    {
+        int count = 0;
+        foreach (VacancyDB vacancy in Vacancies.Where(v => v.IsActive && v.PublishedAt < publishedBefore))
+        {
+            vacancy.IsActive = false;
+            count++;
+        }
+
+        return Task.FromResult(count);
+    }
 }
 
 public sealed class FakeSavedVacancyRepository : ISavedVacancyRepository
