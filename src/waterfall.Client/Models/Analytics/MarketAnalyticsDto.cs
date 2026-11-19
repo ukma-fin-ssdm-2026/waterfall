@@ -1,51 +1,66 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.Text.Json.Serialization;
+
 namespace Waterfall.Client.Models.Analytics;
 
-public class MarketAnalyticsDto
+public sealed record MarketAnalyticsDto
 {
-    public int TotalVacancies { get; set; }
+    [JsonPropertyName("totalVacancies")]
+    public int TotalVacancies { get; init; }
 
-    public bool HasEnoughData { get; set; }
+    [JsonPropertyName("hasEnoughData")]
+    public bool HasEnoughData { get; init; }
 
-    public string? PrimaryCurrency { get; set; }
+    [JsonPropertyName("primaryCurrency")]
+    public string? PrimaryCurrency { get; init; }
 
-    public double SalaryTransparencyPercent { get; set; }
+    [JsonPropertyName("salaryTransparencyPercent")]
+    public double SalaryTransparencyPercent { get; init; }
 
-    public double EntryLevelPercent { get; set; }
+    [JsonPropertyName("entryLevelPercent")]
+    public double EntryLevelPercent { get; init; }
 
-    public int EntryLevelCount { get; set; }
+    [JsonPropertyName("entryLevelCount")]
+    public int EntryLevelCount { get; init; }
 
-    public IReadOnlyList<GradeSalaryDto> SalariesByGrade { get; set; } = [];
+    [JsonPropertyName("salariesByGrade")]
+    public IReadOnlyList<GradeSalaryDto> SalariesByGrade { get; init; } = [];
 
-    public IReadOnlyList<TechSalaryDto> TopPayingTechnologies { get; set; } = [];
+    [JsonPropertyName("topPayingTechnologies")]
+    public IReadOnlyList<TechSalaryDto> TopPayingTechnologies { get; init; } = [];
 
-    public IReadOnlyList<CategoryShareDto> WorkFormats { get; set; } = [];
+    [JsonPropertyName("workFormats")]
+    public IReadOnlyList<CategoryShareDto> WorkFormats { get; init; } = [];
 
-    public IReadOnlyList<CategoryShareDto> TopCities { get; set; } = [];
+    [JsonPropertyName("topCities")]
+    public IReadOnlyList<CategoryShareDto> TopCities { get; init; } = [];
 
-    public IReadOnlyList<CategoryShareDto> Sources { get; set; } = [];
+    [JsonPropertyName("sources")]
+    public IReadOnlyList<CategoryShareDto> Sources { get; init; } = [];
 
-    public IReadOnlyList<CategoryShareDto> TopCompanies { get; set; } = [];
+    [JsonPropertyName("topCompanies")]
+    public IReadOnlyList<CategoryShareDto> TopCompanies { get; init; } = [];
 
-    public IReadOnlyList<string> AvailableCategories { get; set; } = [];
+    [JsonPropertyName("availableCategories")]
+    public IReadOnlyList<string> AvailableCategories { get; init; } = [];
 }
 
 public sealed record GradeSalaryDto(
-    string Grade,
-    decimal AverageSalary,
-    decimal MinSalary,
-    decimal MaxSalary,
-    int VacanciesCount,
-    string Currency);
+    [property: JsonPropertyName("grade")] string Grade,
+    [property: JsonPropertyName("averageSalary")] decimal AverageSalary,
+    [property: JsonPropertyName("minSalary")] decimal MinSalary,
+    [property: JsonPropertyName("maxSalary")] decimal MaxSalary,
+    [property: JsonPropertyName("vacanciesCount")] int VacanciesCount,
+    [property: JsonPropertyName("currency")] string Currency);
 
 public sealed record TechSalaryDto(
-    string Name,
-    decimal AverageSalary,
-    int VacanciesCount,
-    string Currency);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("averageSalary")] decimal AverageSalary,
+    [property: JsonPropertyName("vacanciesCount")] int VacanciesCount,
+    [property: JsonPropertyName("currency")] string Currency);
 
 public sealed record CategoryShareDto(
-    string Name,
-    int Count,
-    double SharePercent);
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("count")] int Count,
+    [property: JsonPropertyName("sharePercent")] double SharePercent);

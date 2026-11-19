@@ -149,13 +149,17 @@ public partial class AnalyticsViewModel : ObservableObject
     [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task CheckAccessAndReloadAsync()
     {
-        string? token = await _tokens.GetTokenAsync();
+        string? token = await _tokens.GetTokenAsync(CancellationToken.None);
         AuthSession? session = token is null ? null : AuthSession.FromToken(token);
         IsAnalyst = session is { Role: UserRole.Analyst };
 
         if (!IsAnalyst)
         {
-            _loadCts?.Cancel();
+            if (_loadCts is not null)
+            {
+                await _loadCts.CancelAsync();
+            }
+
             ErrorMessage = null;
             HasEnoughData = false;
             HasLoaded = false;
@@ -175,7 +179,11 @@ public partial class AnalyticsViewModel : ObservableObject
             return;
         }
 
-        _loadCts?.Cancel();
+        if (_loadCts is not null)
+        {
+            await _loadCts.CancelAsync();
+        }
+
         CancellationTokenSource cts = new();
         _loadCts = cts;
         CancellationToken ct = cts.Token;
