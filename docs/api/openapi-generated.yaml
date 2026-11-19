@@ -221,6 +221,43 @@ paths:
             text/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/analytics:
+    get:
+      tags:
+        - Analytics
+      summary: Отримати ринкову аналітику вакансій
+      description: 'Повертає динаміку публікацій, топ-технології та середню зарплату за обраними категорією й періодом. Доступно лише аналітикам.'
+      operationId: GetMarketAnalytics
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: months
+          in: query
+          schema:
+            type: integer
+            format: int32
+            default: 3
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarketAnalyticsDto'
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/auth/register:
     post:
       tags:
@@ -1112,6 +1149,19 @@ components:
           $ref: '#/components/schemas/UserRole'
       additionalProperties: false
       description: 'Відповідь автентифікації: access-JWT (15 хв, THR-02) та ідентифікатор користувача.'
+    CategoryShareDto:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        count:
+          type: integer
+          format: int32
+        sharePercent:
+          type: number
+          format: double
+      additionalProperties: false
     CoordinatesDto:
       type: object
       properties:
@@ -1290,6 +1340,28 @@ components:
           nullable: true
       additionalProperties: false
       description: 'Відповідь двосторонньої синхронізації геокешу: повертає актуальні записи бази сервера.'
+    GradeSalaryDto:
+      type: object
+      properties:
+        grade:
+          type: string
+          nullable: true
+        averageSalary:
+          type: number
+          format: double
+        minSalary:
+          type: number
+          format: double
+        maxSalary:
+          type: number
+          format: double
+        vacanciesCount:
+          type: integer
+          format: int32
+        currency:
+          type: string
+          nullable: true
+      additionalProperties: false
     JobSource:
       enum:
         - Unknown
@@ -1318,6 +1390,71 @@ components:
           example: Secret123456
       additionalProperties: false
       description: 'Модель запиту на вхід користувача (навмисно без політики складності, щоб не розкривати її на логіні, THR-01).'
+    MarketAnalyticsDto:
+      type: object
+      properties:
+        totalVacancies:
+          type: integer
+          format: int32
+        hasEnoughData:
+          type: boolean
+        primaryCurrency:
+          type: string
+          nullable: true
+        salaryTransparencyPercent:
+          type: number
+          description: 'Частка вакансій, у яких вказана зарплата (%).'
+          format: double
+        entryLevelPercent:
+          type: number
+          description: 'Частка вакансій із низьким порогом входу (досвід <= 1 року, %).'
+          format: double
+        entryLevelCount:
+          type: integer
+          format: int32
+        salariesByGrade:
+          type: array
+          items:
+            $ref: '#/components/schemas/GradeSalaryDto'
+          description: 1. Зарплати за грейдами (Junior / Middle / Senior).
+          nullable: true
+        topPayingTechnologies:
+          type: array
+          items:
+            $ref: '#/components/schemas/TechSalaryDto'
+          description: 2. Топ-5 найвисокооплачуваніших технологій за середньою зарплатою.
+          nullable: true
+        workFormats:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryShareDto'
+          description: 3. Розподіл форматів роботи (Remote / Hybrid / Office).
+          nullable: true
+        topCities:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryShareDto'
+          description: 4a. Топ-5 міст за кількістю вакансій.
+          nullable: true
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryShareDto'
+          description: '4b. Розподіл вакансій за джерелами (Djinni, DOU, WorkUa, RobotaUa).'
+          nullable: true
+        topCompanies:
+          type: array
+          items:
+            $ref: '#/components/schemas/CategoryShareDto'
+          description: 5. Топ-5 найактивніших компаній-роботодавців.
+          nullable: true
+        availableCategories:
+          type: array
+          items:
+            type: string
+          nullable: true
+      additionalProperties: false
+      description: 'Агрегована ринкова аналітика вакансій (FR-003, FR-008, US-006, US-007).'
     RecommendationsResultDto:
       type: object
       properties:
@@ -1565,6 +1702,22 @@ components:
           format: int32
       additionalProperties: false
       description: 'Елемент агрегованої частоти: назва технології/категорії та кількість переглядів і збережень.'
+    TechSalaryDto:
+      type: object
+      properties:
+        name:
+          type: string
+          nullable: true
+        averageSalary:
+          type: number
+          format: double
+        vacanciesCount:
+          type: integer
+          format: int32
+        currency:
+          type: string
+          nullable: true
+      additionalProperties: false
     UpdateVacancyRequest:
       type: object
       properties:
@@ -1900,6 +2053,8 @@ security:
 tags:
   - name: AIConsultant
     description: 'ШІ-консультант: підбір вакансій звичайною мовою (SSE)'
+  - name: Analytics
+    description: Агрегована ринкова аналітика вакансій
   - name: Auth
     description: Реєстрація та вхід користувачів платформи Waterfall (JWT)
   - name: Geo
