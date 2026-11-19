@@ -4,6 +4,7 @@
 using System.Runtime.CompilerServices;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Ai;
+using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SavedVacancies;
@@ -30,6 +31,12 @@ internal sealed class FakeGateway : IHttpGatewayService
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
+    public sealed record AnalyticsCall(string? Category, int Months, CancellationToken Ct)
+    {
+        public TaskCompletionSource<MarketAnalyticsDto> Response { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
     public sealed record SavedCall(CancellationToken Ct)
     {
         public TaskCompletionSource<IReadOnlyList<SavedVacancyDto>> Response { get; } =
@@ -40,11 +47,15 @@ internal sealed class FakeGateway : IHttpGatewayService
 
     private readonly SemaphoreSlim _recommendationSignal = new(0);
 
+    private readonly SemaphoreSlim _analyticsSignal = new(0);
+
     private readonly SemaphoreSlim _savedSignal = new(0);
 
     public List<CatalogCall> CatalogCalls { get; } = [];
 
     public List<RecommendationCall> RecommendationCalls { get; } = [];
+
+    public List<AnalyticsCall> AnalyticsCalls { get; } = [];
 
     /// <summary>
     /// Відповідь на SaveVacancyAsync / UnsaveVacancyAsync; null — успіх.
@@ -90,6 +101,32 @@ internal sealed class FakeGateway : IHttpGatewayService
         }
 
         return RecommendationCalls[count - 1];
+    }
+
+    public Task<MarketAnalyticsDto> GetMarketAnalyticsAsync(string? category = null, int months = 3, CancellationToken ct = default)
+    {
+        AnalyticsCall call = new(category, months, ct);
+        ct.Register(() => call.Response.TrySetCanceled(ct));
+        lock (AnalyticsCalls)
+        {
+            AnalyticsCalls.Add(call);
+        }
+
+        _analyticsSignal.Release();
+        return call.Response.Task;
+    }
+
+    public async Task<AnalyticsCall> WaitForAnalyticsCallAsync(int count)
+    {
+        while (AnalyticsCalls.Count < count)
+        {
+            if (!await _analyticsSignal.WaitAsync(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException($"Очікувалось {count} викликів аналітики, отримано {AnalyticsCalls.Count}.");
+            }
+        }
+
+        return AnalyticsCalls[count - 1];
     }
 
     /// <summary>

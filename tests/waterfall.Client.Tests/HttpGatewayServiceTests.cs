@@ -10,6 +10,7 @@ using Microsoft.Extensions.Http;
 using Waterfall.Client;
 using Waterfall.Client.Extensions;
 using Waterfall.Client.Interfaces;
+using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Vacancies;
 
@@ -98,6 +99,41 @@ public class HttpGatewayServiceTests
         Assert.Equal(["Python"], result.BasisKeywords);
         Assert.Equal(["Django"], result.BasisSearches);
         Assert.Single(result.Items);
+    }
+
+    [Fact]
+    public async Task GetMarketAnalytics_DeserializesResultAndPassesQueryParams()
+    {
+        _server.Respond(HttpStatusCode.OK, """
+            {
+              "totalVacancies": 15,
+              "hasEnoughData": true,
+              "primaryCurrency": "USD",
+              "salaryTransparencyPercent": 80.0,
+              "entryLevelPercent": 26.7,
+              "entryLevelCount": 4,
+              "salariesByGrade": [{ "grade": "Middle (1–3 р.)", "averageSalary": 2800, "minSalary": 2000, "maxSalary": 3500, "vacanciesCount": 8, "currency": "USD" }],
+              "topPayingTechnologies": [{ "name": "Go", "averageSalary": 4200, "vacanciesCount": 3, "currency": "USD" }],
+              "workFormats": [{ "name": "Віддалено", "count": 10, "sharePercent": 66.7 }],
+              "topCities": [{ "name": "Київ", "count": 9, "sharePercent": 60.0 }],
+              "sources": [{ "name": "Djinni", "count": 8, "sharePercent": 53.3 }],
+              "topCompanies": [{ "name": "Genesis", "count": 3, "sharePercent": 20.0 }],
+              "availableCategories": ["Backend"]
+            }
+            """);
+
+        MarketAnalyticsDto result = await _gateway.GetMarketAnalyticsAsync(category: "Backend", months: 6);
+
+        Assert.Equal("http://api.test:3000/api/v1/analytics?months=6&category=Backend", _server.Requests.Single().Uri);
+        Assert.True(result.HasEnoughData);
+        Assert.Equal(15, result.TotalVacancies);
+        Assert.Equal(80.0, result.SalaryTransparencyPercent);
+        Assert.Single(result.SalariesByGrade);
+        Assert.Single(result.TopPayingTechnologies);
+        Assert.Single(result.WorkFormats);
+        Assert.Single(result.TopCities);
+        Assert.Single(result.Sources);
+        Assert.Single(result.TopCompanies);
     }
 
     [Fact]
