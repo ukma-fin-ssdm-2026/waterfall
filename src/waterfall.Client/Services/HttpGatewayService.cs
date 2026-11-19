@@ -10,6 +10,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Ai;
+using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Geo;
@@ -54,6 +55,17 @@ public sealed class HttpGatewayService : IHttpGatewayService
             new HttpRequestMessage(HttpMethod.Get, $"api/v1/vacancies/recommendations?limit={limit}"),
             Json.RecommendationsResultDto,
             ct);
+
+    public Task<MarketAnalyticsDto> GetMarketAnalyticsAsync(string? category = null, int months = 3, CancellationToken ct = default)
+    {
+        string url = $"api/v1/analytics?months={months}";
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            url += "&category=" + Uri.EscapeDataString(category.Trim());
+        }
+
+        return SendAsync(new HttpRequestMessage(HttpMethod.Get, url), Json.MarketAnalyticsDto, ct);
+    }
 
     public Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default) =>
         SendAsync(new HttpRequestMessage(HttpMethod.Get, $"api/v1/vacancies/{id}"), Json.VacancyDto, ct);
