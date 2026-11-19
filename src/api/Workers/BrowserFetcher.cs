@@ -113,14 +113,21 @@ public sealed class BrowserFetcher : IBrowserFetcher, IAsyncDisposable
                 string? fastHtml = await TryFastFetchAsync(page, url, ct);
                 if (fastHtml is not null)
                 {
-                    _logger.LogDebug("FastFetch через прогріту сесію: {Url}", url);
+                    if (_logger.IsEnabled(LogLevel.Debug))
+                    {
+                        _logger.LogDebug("FastFetch через прогріту сесію: {Url}", url);
+                    }
+
                     return fastHtml;
                 }
 
                 _warmedHosts.Remove(host);
             }
 
-            _logger.LogDebug("Відкриваємо через headless браузер: {Url}", url);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug("Відкриваємо через headless браузер: {Url}", url);
+            }
 
             await page.GoToAsync(url, new NavigationOptions
             {
@@ -229,7 +236,11 @@ public sealed class BrowserFetcher : IBrowserFetcher, IAsyncDisposable
         }
         catch (Exception ex)
         {
-            _logger.LogDebug(ex, "FastFetch не вдався для {Url}, переходимо на повну навігацію.", url);
+            if (_logger.IsEnabled(LogLevel.Debug))
+            {
+                _logger.LogDebug(ex, "FastFetch не вдався для {Url}, переходимо на повну навігацію.", url);
+            }
+
             return null;
         }
     }
