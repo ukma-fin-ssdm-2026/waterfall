@@ -126,6 +126,15 @@ public class RecommendationsViewModelTests
 
         Assert.Empty(vm.Recommendations);
 
+        TaskCompletionSource reloadDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.Recommendations.CollectionChanged += (_, _) =>
+        {
+            if (vm.Recommendations.Count == 1)
+            {
+                reloadDone.TrySetResult();
+            }
+        };
+
         FakeGateway.RecommendationCall call2 = await gateway.WaitForRecommendationCallAsync(2);
         call2.Response.SetResult(new RecommendationsResultDto
         {
@@ -134,7 +143,7 @@ public class RecommendationsViewModelTests
             BasisKeywords = ["Python", "Java"]
         });
 
-        await Task.Delay(50);
+        await reloadDone.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Single(vm.Recommendations);
         Assert.Equal(javaId, vm.Recommendations[0].Id);

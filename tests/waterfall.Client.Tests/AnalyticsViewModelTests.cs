@@ -117,11 +117,20 @@ public class AnalyticsViewModelTests
         });
         await initTask;
 
+        TaskCompletionSource reloadDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AnalyticsViewModel.IsLoading) && !vm.IsLoading)
+            {
+                reloadDone.TrySetResult();
+            }
+        };
+
         vm.SelectedCategory = "Backend";
         FakeGateway.AnalyticsCall call2 = await gateway.WaitForAnalyticsCallAsync(2);
         Assert.Equal("Backend", call2.Category);
         call2.Response.SetResult(new MarketAnalyticsDto { TotalVacancies = 2, HasEnoughData = false });
-        await Task.Delay(50);
+        await reloadDone.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.True(vm.IsInsufficientData);
         Assert.False(vm.HasEnoughData);
@@ -140,11 +149,20 @@ public class AnalyticsViewModelTests
         call1.Response.SetResult(new MarketAnalyticsDto { TotalVacancies = 2, HasEnoughData = false, AvailableCategories = ["Backend"] });
         await initTask;
 
+        TaskCompletionSource periodReloadDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AnalyticsViewModel.IsLoading) && !vm.IsLoading)
+            {
+                periodReloadDone.TrySetResult();
+            }
+        };
+
         vm.SelectedPeriod = "1 рік";
         FakeGateway.AnalyticsCall call2 = await gateway.WaitForAnalyticsCallAsync(2);
         Assert.Equal(12, call2.Months);
         call2.Response.SetResult(new MarketAnalyticsDto { TotalVacancies = 2, HasEnoughData = false });
-        await Task.Delay(50);
+        await periodReloadDone.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
         Task resetTask = vm.ResetAnalyticsFiltersCommand.ExecuteAsync(null);
         FakeGateway.AnalyticsCall call3 = await gateway.WaitForAnalyticsCallAsync(3);
