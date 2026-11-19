@@ -1,39 +1,69 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Net;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Interfaces;
+using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
 
 namespace Waterfall.Client.ViewModels;
 
-public sealed record TechDemandItem(string Name, int Count, double BarWidthFraction, string DisplayShare);
+public sealed record GradeSalaryItem(
+    string Grade,
+    decimal AverageSalary,
+    string FormattedAverage,
+    string RangeText,
+    int VacanciesCount);
 
-public sealed record TimelinePoint(string Period, int VacanciesCount);
+public sealed record TechSalaryItem(
+    string Name,
+    decimal AverageSalary,
+    string FormattedSalary,
+    int VacanciesCount);
+
+public sealed record AnalyticsShareItem(
+    string Name,
+    int Count,
+    double SharePercent,
+    string DisplayLabel);
 
 /// <summary>
-/// Вкладка «Аналітика» (FR-003, FR-008, US-006, US-007): графіки, середня ЗП, попит на стек.
+/// Вкладка «Аналітика» (FR-003, FR-008): 5 аналітичних розрізів за реальними вакансіями БД,
+/// миттєве перемальовування графіків при зміні фільтрів та перевірка ролі Аналітика.
 /// </summary>
 public partial class AnalyticsViewModel : ObservableObject
 {
-    private readonly IAuthTokenStore _tokens;
+    public const string AllCategoriesOption = "Всі категорії";
 
-    public AnalyticsViewModel(IAuthTokenStore tokens)
+    private readonly IAuthTokenStore _tokens;
+    private readonly IHttpGatewayService _gateway;
+    private CancellationTokenSource? _loadCts;
+    private bool _suppressFilterReload;
+
+    public AnalyticsViewModel(
+        IAuthTokenStore tokens,
+        IHttpGatewayService gateway,
+        IMessenger? messenger = null)
     {
         _tokens = tokens;
-        LoadMockData();
+        _gateway = gateway;
+
+        if (messenger is not null)
+        {
+            messenger.Register<AnalyticsViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
+            {
+                _ = vm.CheckAccessAndReloadAsync();
+            });
+        }
     }
 
-    public IReadOnlyList<string> Categories { get; } =
-    [
-        "Всі категорії",
-        ".NET / C#",
-        "Python",
-        "JavaScript / TypeScript",
-        "QA / Testing",
-        "DevOps / Cloud"
-    ];
+    public event EventHandler? ChartsUpdated;
+
+    public ObservableCollection<string> Categories { get; } = [AllCategoriesOption];
 
     public IReadOnlyList<string> Periods { get; } =
     [
@@ -44,112 +74,292 @@ public partial class AnalyticsViewModel : ObservableObject
     ];
 
     [ObservableProperty]
-    public partial string SelectedCategory { get; set; } = "Всі категорії";
+    public partial string SelectedCategory { get; set; } = AllCategoriesOption;
 
     [ObservableProperty]
     public partial string SelectedPeriod { get; set; } = "3 місяці";
 
     [ObservableProperty]
-    public partial string AverageSalary { get; set; } = "$2 450";
+    public partial int TotalVacancies { get; set; }
 
     [ObservableProperty]
-    public partial int TotalVacancies { get; set; } = 384;
+    public partial string SalaryTransparencyText { get; set; } = "—";
 
     [ObservableProperty]
-    public partial string DynamicsPercent { get; set; } = "+14.2% зростання";
+    public partial string EntryLevelText { get; set; } = "—";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsInsufficientData))]
-    public partial bool HasEnoughData { get; set; } = true;
-
-    public bool IsInsufficientData => !HasEnoughData;
+    public partial bool HasLoaded { get; private set; }
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(AccessDeniedMessage), nameof(IsAccessDenied))]
-    public partial bool IsAnalyst { get; set; } = true;
+    [NotifyPropertyChangedFor(nameof(IsInsufficientData))]
+    public partial bool IsLoading { get; private set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsInsufficientData))]
+    public partial bool HasEnoughData { get; private set; }
+
+    public bool IsInsufficientData => HasLoaded && !IsLoading && IsAnalyst && ErrorMessage is null && !HasEnoughData;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasError))]
+    [NotifyPropertyChangedFor(nameof(IsInsufficientData))]
+    public partial string? ErrorMessage { get; set; }
+
+    public bool HasError => ErrorMessage is not null;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsAccessDenied))]
+    [NotifyPropertyChangedFor(nameof(IsInsufficientData))]
+    public partial bool IsAnalyst { get; private set; }
 
     public bool IsAccessDenied => !IsAnalyst;
 
     public string AccessDeniedMessage => "Розділ доступний виключно користувачам із роллю «Роботодавець / Аналітик ринку» (FR-008, US-006 AC-3).";
 
-    public ObservableCollection<TechDemandItem> TopTechnologies { get; } = [];
+    public ObservableCollection<GradeSalaryItem> SalariesByGrade { get; } = [];
 
-    public ObservableCollection<TimelinePoint> Timeline { get; } = [];
+    public ObservableCollection<TechSalaryItem> TopPayingTechnologies { get; } = [];
 
-    // # Mock
-    [RelayCommand]
+    public ObservableCollection<AnalyticsShareItem> WorkFormats { get; } = [];
+
+    public ObservableCollection<AnalyticsShareItem> TopCities { get; } = [];
+
+    public ObservableCollection<AnalyticsShareItem> Sources { get; } = [];
+
+    public ObservableCollection<AnalyticsShareItem> TopCompanies { get; } = [];
+
+    partial void OnSelectedCategoryChanged(string value)
+    {
+        if (!_suppressFilterReload && IsAnalyst)
+        {
+            _ = ApplyFiltersAsync();
+        }
+    }
+
+    partial void OnSelectedPeriodChanged(string value)
+    {
+        if (!_suppressFilterReload && IsAnalyst)
+        {
+            _ = ApplyFiltersAsync();
+        }
+    }
+
+    [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task CheckAccessAndReloadAsync()
     {
         string? token = await _tokens.GetTokenAsync();
-        if (token is not null)
-        {
-            var session = AuthSession.FromToken(token);
-            if (session is not null)
-            {
-                IsAnalyst = session.Role == UserRole.Analyst;
-            }
-        }
+        AuthSession? session = token is null ? null : AuthSession.FromToken(token);
+        IsAnalyst = session is { Role: UserRole.Analyst };
 
-        ApplyFilters();
-    }
-
-    // # Mock
-    [RelayCommand]
-    private void ApplyFilters()
-    {
-        if (SelectedCategory == "QA / Testing" && SelectedPeriod == "Останній місяць")
+        if (!IsAnalyst)
         {
-            // Демонстрація стану US-006 AC-2 (< 5 вакансій)
+            _loadCts?.Cancel();
+            ErrorMessage = null;
             HasEnoughData = false;
+            HasLoaded = false;
+            ClearCollections();
+            ChartsUpdated?.Invoke(this, EventArgs.Empty);
             return;
         }
 
-        HasEnoughData = true;
-        LoadMockData();
+        await ApplyFiltersAsync();
     }
 
-    // # Mock
-    [RelayCommand]
-    private void ResetAnalyticsFilters()
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task ApplyFiltersAsync()
     {
-        SelectedCategory = Categories[0];
-        SelectedPeriod = Periods[1];
-        HasEnoughData = true;
-        LoadMockData();
+        if (!IsAnalyst)
+        {
+            return;
+        }
+
+        _loadCts?.Cancel();
+        CancellationTokenSource cts = new();
+        _loadCts = cts;
+        CancellationToken ct = cts.Token;
+
+        ErrorMessage = null;
+        IsLoading = true;
+        try
+        {
+            string? categoryParam = string.IsNullOrWhiteSpace(SelectedCategory)
+                || string.Equals(SelectedCategory, AllCategoriesOption, StringComparison.Ordinal)
+                ? null
+                : SelectedCategory;
+            int months = ParsePeriodMonths(SelectedPeriod);
+
+            MarketAnalyticsDto result = await _gateway.GetMarketAnalyticsAsync(categoryParam, months, ct);
+            if (ct.IsCancellationRequested)
+            {
+                return;
+            }
+
+            SyncCategories(result.AvailableCategories);
+
+            TotalVacancies = result.TotalVacancies;
+            HasEnoughData = result.HasEnoughData;
+
+            ClearCollections();
+            if (!result.HasEnoughData)
+            {
+                SalaryTransparencyText = "—";
+                EntryLevelText = "—";
+            }
+            else
+            {
+                SalaryTransparencyText = $"{result.SalaryTransparencyPercent.ToString("0.#", CultureInfo.InvariantCulture)}%";
+                EntryLevelText = $"{result.EntryLevelPercent.ToString("0.#", CultureInfo.InvariantCulture)}% ({result.EntryLevelCount})";
+
+                foreach (GradeSalaryDto g in result.SalariesByGrade)
+                {
+                    SalariesByGrade.Add(new GradeSalaryItem(
+                        g.Grade,
+                        g.AverageSalary,
+                        FormatMoney(g.AverageSalary, g.Currency),
+                        $"{FormatMoney(g.MinSalary, g.Currency)} – {FormatMoney(g.MaxSalary, g.Currency)} ({g.VacanciesCount})",
+                        g.VacanciesCount));
+                }
+
+                foreach (TechSalaryDto t in result.TopPayingTechnologies)
+                {
+                    TopPayingTechnologies.Add(new TechSalaryItem(
+                        t.Name,
+                        t.AverageSalary,
+                        $"{FormatMoney(t.AverageSalary, t.Currency)} ({t.VacanciesCount})",
+                        t.VacanciesCount));
+                }
+
+                PopulateShares(WorkFormats, result.WorkFormats);
+                PopulateShares(TopCities, result.TopCities);
+                PopulateShares(Sources, result.Sources);
+                PopulateShares(TopCompanies, result.TopCompanies);
+            }
+
+            HasLoaded = true;
+            ChartsUpdated?.Invoke(this, EventArgs.Empty);
+        }
+        catch (ApiException ex) when (!ct.IsCancellationRequested)
+        {
+            if (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.Unauthorized)
+            {
+                IsAnalyst = false;
+                ClearCollections();
+                ChartsUpdated?.Invoke(this, EventArgs.Empty);
+            }
+            else
+            {
+                ErrorMessage = ex.Message;
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // Замінено новішим запитом при зміні фільтрів.
+        }
+        finally
+        {
+            if (!ct.IsCancellationRequested)
+            {
+                IsLoading = false;
+                OnPropertyChanged(nameof(IsInsufficientData));
+            }
+        }
     }
 
-    // # Mock
-    private void LoadMockData()
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private async Task ResetAnalyticsFiltersAsync()
     {
-        TopTechnologies.Clear();
-        TopTechnologies.Add(new TechDemandItem("Python", 145, 1.0, "38%"));
-        TopTechnologies.Add(new TechDemandItem("C# / .NET", 112, 0.77, "29%"));
-        TopTechnologies.Add(new TechDemandItem("JavaScript", 88, 0.61, "23%"));
-        TopTechnologies.Add(new TechDemandItem("Docker", 65, 0.45, "17%"));
-        TopTechnologies.Add(new TechDemandItem("PostgreSQL", 54, 0.37, "14%"));
+        _suppressFilterReload = true;
+        try
+        {
+            SelectedCategory = AllCategoriesOption;
+            SelectedPeriod = Periods[1];
+        }
+        finally
+        {
+            _suppressFilterReload = false;
+        }
 
-        Timeline.Clear();
-        Timeline.Add(new TimelinePoint("Серпень 2026", 98));
-        Timeline.Add(new TimelinePoint("Вересень 2026", 124));
-        Timeline.Add(new TimelinePoint("Жовтень 2026", 162));
+        await ApplyFiltersAsync();
+    }
 
-        if (SelectedCategory == "Python")
+    private void ClearCollections()
+    {
+        SalariesByGrade.Clear();
+        TopPayingTechnologies.Clear();
+        WorkFormats.Clear();
+        TopCities.Clear();
+        Sources.Clear();
+        TopCompanies.Clear();
+    }
+
+    private static void PopulateShares(ObservableCollection<AnalyticsShareItem> target, IReadOnlyList<CategoryShareDto> source)
+    {
+        foreach (CategoryShareDto item in source)
         {
-            AverageSalary = "$2 600";
-            TotalVacancies = 145;
-            DynamicsPercent = "+18% за 3 міс.";
+            string pct = item.SharePercent.ToString("0.#", CultureInfo.InvariantCulture);
+            target.Add(new AnalyticsShareItem(item.Name, item.Count, item.SharePercent, $"{item.Count} ({pct}%)"));
         }
-        else if (SelectedCategory.Contains(".NET"))
+    }
+
+    private void SyncCategories(IReadOnlyList<string> available)
+    {
+        string previous = SelectedCategory;
+        List<string> next = [AllCategoriesOption];
+        foreach (string cat in available)
         {
-            AverageSalary = "$2 850";
-            TotalVacancies = 112;
-            DynamicsPercent = "+9% за 3 міс.";
+            if (!string.IsNullOrWhiteSpace(cat) && !next.Contains(cat, StringComparer.OrdinalIgnoreCase))
+            {
+                next.Add(cat);
+            }
         }
-        else
+
+        if (next.SequenceEqual(Categories, StringComparer.Ordinal))
         {
-            AverageSalary = "$2 450";
-            TotalVacancies = 384;
-            DynamicsPercent = "+14.2% за 3 міс.";
+            return;
         }
+
+        _suppressFilterReload = true;
+        try
+        {
+            Categories.Clear();
+            foreach (string item in next)
+            {
+                Categories.Add(item);
+            }
+
+            SelectedCategory = next.Contains(previous, StringComparer.OrdinalIgnoreCase)
+                ? previous
+                : AllCategoriesOption;
+        }
+        finally
+        {
+            _suppressFilterReload = false;
+        }
+    }
+
+    private static int ParsePeriodMonths(string? period) => period switch
+    {
+        "Останній місяць" => 1,
+        "6 місяців" => 6,
+        "1 рік" => 12,
+        _ => 3
+    };
+
+    private static string FormatMoney(decimal amount, string? currency)
+    {
+        string symbol = currency?.ToUpperInvariant() switch
+        {
+            "USD" => "$",
+            "EUR" => "€",
+            "UAH" => "₴",
+            _ => string.Empty
+        };
+
+        string formatted = amount.ToString("N0", CultureInfo.InvariantCulture).Replace(',', ' ');
+        return string.IsNullOrEmpty(symbol)
+            ? $"{formatted} {currency}".Trim()
+            : $"{symbol}{formatted}";
     }
 }
