@@ -12,6 +12,10 @@
             ContentTemplate="{DataTemplate views:CatalogPage}"
             Route="catalog" />
         <ShellContent
+            Title="База вакансій"
+            ContentTemplate="{DataTemplate views:DatabasePage}"
+            Route="database" />
+        <ShellContent
             Title="Рекомендації"
             ContentTemplate="{DataTemplate views:RecommendationsPage}"
             Route="recommendations" />

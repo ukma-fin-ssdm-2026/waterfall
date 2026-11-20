@@ -42,25 +42,63 @@ package "Каталог вакансій" {
     }
 
     entity "Vacancy\nВакансія" as vacancy {
-        * id : bigint <<PK>>
+        * id : uuid <<PK>>
         --
-        * source_id : int <<FK>>
-        * external_id : string
-        * url : string
+        * source : string
+        external_id : string
+        * source_url : string
         * title : string
-        * company_name : string
+        * company : string
         description : text <<ПД третіх осіб>>
         category : string
-        city : string
-        * work_format : enum (Remote, Office, Hybrid, Unknown)
-        salary_min_usd : decimal
-        salary_max_usd : decimal
-        salary_raw : string
-        * dedup_hash : string
+        category_group : string
+        location : string
+        full_address : string
+        schedule : string
+        experience : string
+        experience_months : int
+        * work_format : flags (Remote, Hybrid, Office)
+        salary_min : decimal
+        salary_max : decimal
+        * currency : string
+        skills_json : json
+        search_text : text
         published_at : datetime
         * first_seen_at : datetime
         * last_seen_at : datetime
         * is_active : bool
+    }
+
+    entity "SiteSearchCache\nКеш пошуку на сайтах" as search_cache {
+        * id : uuid <<PK>>
+        --
+        * cache_key : string <<unique>>
+        * external_ids_json : json
+        * cached_at : datetime
+    }
+
+    entity "GeoLocationCache\nГеокеш адрес" as geo_cache {
+        * id : uuid <<PK>>
+        --
+        * normalized_address : string <<unique>>
+        * latitude : double
+        * longitude : double
+        * created_at : datetime
+    }
+
+    entity "UserPersonalData\nАдреса профілю" as personal_data <<ПД>> {
+        * id : uuid <<PK>>
+        --
+        * user_id : uuid <<unique>> <<FK>>
+        address : string
+        * updated_at : datetime
+    }
+
+    entity "ClientSyncState (SQLite)\nСтан синхронізації клієнта" as sync_state {
+        * key : string <<PK>>
+        --
+        last_synced_at : datetime
+        last_summary : string
     }
 
     entity "Technology\nТехнологія" as tech {
@@ -150,10 +188,13 @@ msg "m" -- "n" vacancy : посилається на
 
 note bottom of vacancy
   Одна вакансія — один запис.
-  Якщо парсер знову бачить ту саму вакансію
-  (той самий сайт + той самий номер на сайті,
-  тобто source_id + external_id), він оновлює
-  старий запис, а не створює копію.
+  Парсер та двостороння синхронізація (POST /api/v1/vacancies/sync)
+  дедуплікують за (source, external_id) → id → (source, source_url)
+  та розв'язують конфлікти за last_seen_at (Last-Write-Wins)
+  зі збереженням повнішого опису.
+
+  У клієнтській SQLite БД (ClientWaterfallDbContext) сутність
+  ClientVacancyDB розширює Vacancy полями is_synced та local_updated_at.
 
   Закриту вакансію не видаляємо, а ставимо
   is_active = false: інакше вона зникла б

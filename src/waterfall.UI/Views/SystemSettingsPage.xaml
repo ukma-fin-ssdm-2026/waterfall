@@ -202,6 +202,50 @@
                 </VerticalStackLayout>
             </Border>
 
+            <!-- ========================================================================= -->
+            <!-- СЕКЦІЯ 4: ДВОСТОРОННЯ СИНХРОНІЗАЦІЯ БАЗИ ВАКАНСІЙ (КЛІЄНТ ↔ СЕРВЕР)       -->
+            <!-- ========================================================================= -->
+            <Border Style="{StaticResource SettingsCard}">
+                <VerticalStackLayout Spacing="10">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                        <VerticalStackLayout Spacing="3">
+                            <Label Text="🔄 Синхронізація локальної бази даних (офлайн ↔ онлайн)" Style="{StaticResource SettingsSectionTitle}" />
+                            <Label Text="Двосторонній обмін вакансіями (та геокешем) між локальною SQLite БД клієнта й сервером після роботи офлайн."
+                                   Style="{StaticResource SettingsDescription}" />
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1"
+                                Text="Синхронізувати зараз 🔄"
+                                Command="{Binding SyncDatabasesNowCommand}"
+                                Style="{StaticResource CardActionPrimary}"
+                                FontSize="12"
+                                Padding="14,6"
+                                MinimumHeightRequest="36"
+                                VerticalOptions="Center" />
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+                        <Border Grid.Column="0" Style="{StaticResource InfoPill}">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Вакансій локально (SQLite)" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                                <Label Text="{Binding LocalVacanciesCount}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="1" Style="{StaticResource InfoPill}">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Очікують синхронізації" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                                <Label Text="{Binding UnsyncedVacanciesCount}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource Accent}" />
+                            </VerticalStackLayout>
+                        </Border>
+                        <Border Grid.Column="2" Style="{StaticResource InfoPill}">
+                            <VerticalStackLayout Spacing="2">
+                                <Label Text="Остання синхронізація" FontSize="11" TextColor="{StaticResource TextSecondary}" />
+                                <Label Text="{Binding LastVacancySyncText}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
+                            </VerticalStackLayout>
+                        </Border>
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
             <!-- Кнопки дій -->
             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" Margin="0,8,0,0">
                 <Button Grid.Column="1"

@@ -32,8 +32,13 @@ public static class MauiProgram
         builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddSingleton(SecureStorage.Default);
         builder.Services.AddSingleton<Waterfall.Client.Interfaces.IUrlLauncher, MauiUrlLauncher>();
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.IFileDialogService, MauiFileDialogService>();
         builder.Services.AddHttpClient();
         builder.Services.AddSingleton<Waterfall.Client.Interfaces.ILocalGeoCacheService, Waterfall.Client.Services.EfLocalGeoCacheService>();
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.ILocalVacancyStore>(_ =>
+            new Waterfall.Client.Services.EfLocalVacancyStore());
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.IOfflineSiteCollector>(sp =>
+            new Waterfall.Client.Services.OfflineSiteCollector(sp.GetRequiredService<IHttpClientFactory>().CreateClient()));
         builder.Services.AddSingleton<Waterfall.Client.Interfaces.IDistanceCalculatorService>(sp =>
             new Waterfall.Client.Services.GeoDistanceService(
                 sp.GetService<Waterfall.Client.Interfaces.IHttpGatewayService>(),
@@ -42,9 +47,12 @@ public static class MauiProgram
         builder.Services.AddSingleton<IMessenger>(WeakReferenceMessenger.Default);
         builder.Services.AddSingleton<Waterfall.Client.Interfaces.INavigationService, ShellNavigationService>();
         builder.Services.AddWaterfallClient<SecureStorageTokenStore>(new Uri(ApiBaseUrl));
+        builder.Services.AddSingleton<Waterfall.Client.Interfaces.IVacancySyncService, Waterfall.Client.Services.VacancySyncService>();
 
         builder.Services.AddTransient<CatalogViewModel>();
         builder.Services.AddTransient<CatalogPage>();
+        builder.Services.AddTransient<DatabaseViewModel>();
+        builder.Services.AddTransient<DatabasePage>();
         builder.Services.AddTransient<RecommendationsViewModel>();
         builder.Services.AddTransient<RecommendationsPage>();
         // Один екземпляр на застосунок: вкладку Shell створює ліниво, а запит на аналіз вакансії
@@ -57,7 +65,10 @@ public static class MauiProgram
         builder.Services.AddTransient<FavoritesPage>();
         builder.Services.AddTransient<LoginViewModel>();
         builder.Services.AddTransient<LoginPage>();
-        builder.Services.AddTransient<SystemSettingsViewModel>();
+        builder.Services.AddTransient(sp => new SystemSettingsViewModel(
+            sp.GetService<Waterfall.Client.Interfaces.ILocalVacancyStore>(),
+            sp.GetService<Waterfall.Client.Interfaces.IVacancySyncService>(),
+            sp.GetService<Waterfall.Client.Interfaces.IDistanceCalculatorService>()));
         builder.Services.AddTransient<SystemSettingsPage>();
 
 #if DEBUG

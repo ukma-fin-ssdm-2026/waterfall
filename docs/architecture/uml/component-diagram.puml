@@ -7,60 +7,64 @@ skinparam ranksep 60
 skinparam packagePadding 14
 
 package "Client Application (.NET MAUI)" {
-    [UI Components\n(Catalog, Dashboards, AI Chat)] as UI
+    [UI Components\n(Catalog, Database, Favorites,\nRecommendations, Analytics,\nAI Chat, Settings, Profile)] as UI
     [HTTP Gateway Service\n(HttpClient & Bearer Auth)] as HTTPGateway
+    [Local Vacancy Store & Sync\n(ClientWaterfallDbContext SQLite,\nVacancySyncService, OfflineSiteCollector)] as LocalStore
     UI -down-> HTTPGateway : SendRequestAsync()
+    UI -down-> LocalStore : Offline Read/Edit &\nDirect DOU/Djinni Collect
+    LocalStore -right-> HTTPGateway : POST /api/v1/vacancies/sync\nPOST /api/v1/geo/sync
 }
 
 package "Backend Services (C# .NET)" {
     package "Presentation Layer (ASP.NET Core Web API)" {
-        [Vacancies Controller\n(/api/v1/vacancies)] as VacanciesCtrl
+        [Vacancies Controller\n(/api/v1/vacancies, /sync,\n/categories, /recommendations)] as VacanciesCtrl
+        [Site Searches Controller\n(/api/v1/site-searches,\n/site-searches/batch)] as SiteSearchesCtrl
         [Saved Vacancies Controller\n(/api/v1/saved-vacancies)] as SavedVacanciesCtrl
-        [Auth & Users Controller\n(/api/v1/auth)] as AuthCtrl
-        [AI Consultant Controller\n(/api/v1/ai-consultant)] as AICtrl
+        [Auth, Profile & Geo Controllers\n(/api/v1/auth, /profile, /geo)] as AuthCtrl
+        [Analytics & AI Controllers\n(/api/v1/analytics,\n/api/v1/ai-consultant)] as AICtrl
     }
 
     package "Core Services Layer" {
-        [Authentication Service] as AuthService
-        [Storage Service\n(Vacancy & User Orchestration)] as StorageService
-        [Analytics & Statistics Service] as AnalyticsService
-        [AI Consultant Service\n(Prompt & Context Engine)] as AIService
-        [Security Service\n(Crypto & Hashing)] as SecurityService
-        [Cache Service\n(In-Memory / Cache-Aside)] as CacheService
+        [Authentication & Security Services\n(JWT, PBKDF2)] as AuthService
+        [Vacancy & Saved Services\n(CRUD, Category Update, Sync)] as StorageService
+        [Analytics, Recommendations &\nStats Services] as AnalyticsService
+        [AI Consultant & Analysis Services\n(SSE, Relevance, FallbackChatClient)] as AIService
+        [Geo Location Service\n(Photon / Wikipedia + Cache)] as GeoService
+        [Cache Service\n(In-Memory Cache-Aside + Stale)] as CacheService
 
-        AuthService -down-> SecurityService : HashPassword()\nVerifyPassword()
-        AuthService -right-> StorageService : GetUserByEmailAsync()\nCreateUserAsync()
-        
-        StorageService -down-> CacheService : GetAsync<T>()\nSetAsync<T>()\nRemoveByPrefixAsync()
-        
-        AnalyticsService -left-> StorageService : GetAggregatedDataAsync()
-        AnalyticsService -down-> CacheService : SetAsync("analytics:report", ttl)
-        
-        AIService -left-> StorageService : GetUserContextAsync()\nSaveChatHistoryAsync()
+        StorageService -down-> CacheService : GetAsync<T>()\nSetAsync<T>()\nInvalidateCatalogAsync()
+        AnalyticsService -left-> StorageService : Read Vacancies
+        AIService -left-> StorageService : Search / Analyze Vacancies
     }
 
-    package "External Ingestion (BackgroundService)" {
-        [Job Parser Service\n(HTML Scraper BackgroundService)] as ParserService
+    package "External Ingestion (Background & On-Demand)" {
+        [Job Parser Service\n(BackgroundService)] as ParserService
+        [Site Search Service\n(Single & Multi-Site Batch,\nSiteCrawler, PuppeteerSharp)] as SiteSearchSvc
     }
 
     package "Repository Layer (Data Access)" {
         [Job Ingestion &\nNormalization Service] as IngestionService
-        [Data Repositories\n(EF Core DbContext)] as Repo
+        [Data Repositories\n(EF Core WaterfallDbContext)] as Repo
 
         IngestionService -right-> Repo : BulkUpsertAsync(normalizedEntities)
     }
 
     ParserService -down-> IngestionService : ProcessRawVacanciesAsync(rawList)
+    SiteSearchSvc -down-> IngestionService : ProcessRawVacanciesAsync(rawList)
 
     ' Presentation to Core (Dependency Injection)
-    VacanciesCtrl -down-> StorageService : GetVacanciesAsync(filter)\nGetVacancyByIdAsync(id)
-    SavedVacanciesCtrl -down-> StorageService : GetSavedAsync(userId)\nSaveVacancyAsync(userId, id)\nDeleteSavedAsync(userId, id)
-    AuthCtrl -down-> AuthService : LoginAsync(dto)\nRegisterAsync(dto)
-    AICtrl -down-> AIService : AskConsultantAsync(userId, prompt)
-    
+    VacanciesCtrl -down-> StorageService : GetAll / Sync / PatchCategory
+    SiteSearchesCtrl -down-> SiteSearchSvc : Start / StartBatch / GetStatus
+    SavedVacanciesCtrl -down-> StorageService : Get / Save / Delete
+    AuthCtrl -down-> AuthService : Login / Register
+    AuthCtrl -down-> GeoService : Coordinates / GeoSync
+    AICtrl -down-> AIService : Messages / Analyze (SSE)
+    AICtrl -down-> AnalyticsService : GetMarketAnalytics
+
     ' Core to Repository Layer
-    StorageService -down-> Repo : GetPagedAsync(filter, page)\nAddSavedAsync(item)
-    StorageService -down-> IngestionService : TriggerIngestionAsync()
+    StorageService -down-> Repo : GetAll / SyncMerge / BulkUpdateCategory
+    GeoService -down-> Repo : GeoLocationCache
+    SiteSearchSvc -down-> Repo : SiteSearchCache
 }
 
 database "Data Storage" {
@@ -68,21 +72,23 @@ database "Data Storage" {
 }
 
 cloud "External Services" {
-    [LLM API\n(Google Gemini / OpenAI)] as AI
-    [Сайти пошуку роботи\n(Work.ua, Robota.ua, Djinni)] as JobSites
+    [LLM API\n(OpenRouter / OpenAI / Anthropic)] as AI
+    [Сайти пошуку роботи\n(Work.ua, Robota.ua, Djinni, DOU)] as JobSites
 }
 
 ' Client to Presentation Layer (HTTPS / REST)
-HTTPGateway -down-> VacanciesCtrl : GET /api/v1/vacancies\nGET /api/v1/vacancies/{id}
-HTTPGateway -down-> SavedVacanciesCtrl : GET, POST, DELETE\n/api/v1/saved-vacancies
-HTTPGateway -down-> AuthCtrl : POST /api/v1/auth/login\nPOST /api/v1/auth/register
-HTTPGateway -down-> AICtrl : POST /api/v1/ai-consultant/ask
+HTTPGateway -down-> VacanciesCtrl : GET/POST/PUT/PATCH/DELETE\n/api/v1/vacancies/*
+HTTPGateway -down-> SiteSearchesCtrl : POST/GET /api/v1/site-searches\n/api/v1/site-searches/batch
+HTTPGateway -down-> SavedVacanciesCtrl : GET/POST/DELETE\n/api/v1/saved-vacancies
+HTTPGateway -down-> AuthCtrl : /api/v1/auth, /profile, /geo
+HTTPGateway -down-> AICtrl : /api/v1/analytics\n/api/v1/ai-consultant (SSE)
 
 ' Repository to DB
 Repo -down-> DB : TDS / TCP (MSSQL) or\nLocal SQLite (EF Core)
 
 ' External Interactions
-ParserService -right-> JobSites : HTTPS GET (HTML Scraping\nRate-limited per-source)
-AIService -right-> AI : HTTPS POST /v1beta/models\n(Timeout 30s + Fallback)
+ParserService -right-> JobSites : HTTPS GET / Headless Chromium\n(Rate-limited per-source)
+SiteSearchSvc -right-> JobSites : On-demand 1..4 sites\n(Parallel with per-site gates)
+AIService -right-> AI : HTTPS POST (Microsoft.Extensions.AI\nTimeout 30s + Fallback Chain)
 
 @enduml

@@ -1,27 +1,40 @@
 # Тести клієнтського модуля (issue #60)
 
-Модуль `waterfall.Client` — це тестована частина застосунку MAUI: HTTP-шлюз до API, DTO і viewmodels вкладок «Каталог», «Обране» і «Вхід». Проєкт `waterfall.UI` (XAML, code-behind, `SecureStorageTokenStore`) лише прив'язує ці viewmodels до екрана і потребує MAUI-воркладів, тому модульними тестами не покривається (див. [стратегію тестування](../../docs/testing/testing-strategy.md)).
+Модуль `waterfall.Client` — це тестована частина застосунку MAUI: HTTP-шлюз до API, DTO, локальна офлайн-БД SQLite (`ClientWaterfallDbContext`, `EfLocalVacancyStore`, `VacancySyncService`, `OfflineSiteCollector`) і viewmodels усіх вкладок («Каталог», «База вакансій», «Обране», «Рекомендації», «Аналітика», «ШІ-консультант», «Системні налаштування», «Вхід / Профіль»). Проєкт `waterfall.UI` (XAML, code-behind, `SecureStorageTokenStore`) лише прив'язує ці viewmodels до екрана і потребує MAUI-воркладів, тому модульними тестами не покривається (див. [стратегію тестування](../../docs/testing/testing-strategy.md)).
 
 | Код | Що робить |
 | :--- | :--- |
-| [`Services/HttpGatewayService.cs`](../../src/waterfall.Client/Services/HttpGatewayService.cs) | запити до `/api/v1/*`; помилки мережі, тайм-аут, коди 4xx/5xx і зіпсовані відповіді перетворює на `ApiException` з повідомленням українською |
+| [`Services/HttpGatewayService.cs`](../../src/waterfall.Client/Services/HttpGatewayService.cs) | запити до `/api/v1/*` (зокрема `/site-searches/batch`, `/vacancies/sync`, SSE ШІ-консультанта); помилки мережі, тайм-аут, коди 4xx/5xx і зіпсовані відповіді → `ApiException` українською |
+| [`Services/EfLocalVacancyStore.cs`](../../src/waterfall.Client/Services/EfLocalVacancyStore.cs), [`VacancySyncService.cs`](../../src/waterfall.Client/Services/VacancySyncService.cs), [`OfflineSiteCollector.cs`](../../src/waterfall.Client/Services/OfflineSiteCollector.cs) | локальна SQLite БД (`ClientVacancyDB`, `ClientSyncStateDB`), ідемпотентний апгрейд legacy-схеми, пакетна двостороння синхронізація, прямий офлайн-збір DOU/Djinni |
 | [`Services/AuthHeaderHandler.cs`](../../src/waterfall.Client/Services/AuthHeaderHandler.cs) | додає `Authorization: Bearer` зі збереженого токена |
 | [`Models/Auth/AuthSession.cs`](../../src/waterfall.Client/Models/Auth/AuthSession.cs) | читає email, роль і термін дії зі збереженого JWT, щоб після перезапуску показати, хто увійшов |
-| [`ViewModels/`](../../src/waterfall.Client/ViewModels/) | каталог (пошук із debounce, підвантаження сторінок), «Обране», вхід і реєстрація, картка вакансії |
+| [`ViewModels/`](../../src/waterfall.Client/ViewModels/) | каталог (мультисайтовий парсинг 1–4 сайтів), «База вакансій» (`DatabaseViewModel`), «Обране», «Рекомендації», «Аналітика», «ШІ-консультант», «Системні налаштування», «Вхід / Профіль», картка вакансії |
 
 ## Тести
 
-106 тестових випадків у шести класах:
+296 тестових випадків у 19 класах (актуалізовано 20.11.2026):
 
 | Клас | Випадків | Що перевіряє |
 | :--- | :---: | :--- |
-| [`HttpGatewayServiceTests`](HttpGatewayServiceTests.cs) | 27 | URL і тіла запитів, адреса API з префіксом шляху, Bearer-заголовок, enum як рядки, розбір помилок сервера, порожня / зіпсована / HTML-відповідь, невідоме кодування, 401/403/404/5xx, обрив мережі й тайм-аут, скасування не стає помилкою |
-| [`LoginViewModelTests`](LoginViewModelTests.cs) | 29 | локальна перевірка email і пароля (межі 12 / 32 символи, цифра), вхід і реєстрація, кнопка заблокована на час запиту, причини відмови по полях, вихід, відновлення сесії з токена, прострочений, зіпсований і відсутній токен |
-| [`VacancyItemViewModelTests`](VacancyItemViewModelTests.cs) | 20 | зарплата («від», «до», діапазон, одне число, без зарплати), назва джерела, рядок «Компанія · Локація», статус, перемикач «Обраного» і його відкат при помилці |
-| [`CatalogViewModelTests`](CatalogViewModelTests.cs) | 29 | каталог без базового списку: фільтр джерела з Robota.ua, вайт-лист «Усі слова / Будь-яке», «Без переглянутих» (позначка сервера й перегляди сеансу), «Включно без ЗП» з межею зарплати; до «Знайти» порожній з підказкою і жодна дія не читає спільну БД; рядок пошуку з debounce, сортування, вайт- і бан-листи звужують знайдене локально (зокрема задані до пошуку) і шукають слова також в описі, крім режиму «лише в назві»; скидання фільтрів повертає весь результат; банер помилки й лічильник; синхронізація з «Обраним»; стан входу |
-| [`CatalogSiteSearchTests`](CatalogSiteSearchTests.cs) | 33 | пошук на сайтах із каталогу: англійська, тип компанії, домен, регіон і країна Djinni, мультивибір сфер, мов і зайнятості Work.ua («Обрати всі / Очистити»), «Включно без ЗП» для Work.ua (`nosalary=1`) і Robota.ua, стартова сторінка (крім DOU), кнопка Robota.ua в рядку «Парсинг:», фільтри панелей Djinni, DOU, Work.ua і Robota.ua → запит у кодах сайту (коди міст і сфер, фільтри адреси, межі зарплати Work.ua), перемикач «Відкривати кожну вакансію» Work.ua і його попередження, спільні ключові слова блоку 1, шкала прогресу під час обходу, результат замінює список, кешований результат, вхід для гостя, збій і невідома платформа |
-| [`FavoritesViewModelTests`](FavoritesViewModelTests.cs) | 7 | завантаження, видалення, стан «порожньо», скасоване застаріле завантаження, реакція на зміни з каталогу |
-| [`AuthSessionTests`](AuthSessionTests.cs) | 6 | регресійний тест із [журналу налагодження](../../docs/testing/debugging-log.md) і властивість (FsCheck) для розбору JWT |
+| [`LoginViewModelTests`](LoginViewModelTests.cs) | 41 | локальна перевірка email/пароля, вхід/реєстрація, сесія, адреса профілю, особиста статистика (Test-28…30) |
+| [`HttpGatewayServiceTests`](HttpGatewayServiceTests.cs) | 37 | URL і тіла всіх REST-ендпоінтів (зокрема `GetVacanciesAsync(VacancyQueryOptions)`, `StartMultiSiteSearchAsync`/`GetMultiSiteSearchAsync`, `SyncVacanciesAsync`), Bearer, enum-рядки, обробка помилок/кодувань/тайм-аутів |
+| [`VacancyItemViewModelTests`](VacancyItemViewModelTests.cs) | 36 | форматування зарплати/джерела/компанії/статусу, відстані, перемикач «Обраного» та реакція на повідомлення |
+| [`CatalogSiteSearchTests`](CatalogSiteSearchTests.cs) | 33 | пошук на 4 сайтах із каталогу (DOU, Djinni, Work.ua, Robota.ua), коди фільтрів, `fromPage`, `listOnly`, прогрес, кеш |
+| [`CatalogViewModelTests`](CatalogViewModelTests.cs) | 29 | локальна фільтрація каталогу, вайт-/бан-лист, «Без переглянутих», «Включно без ЗП», debounce, сортування, скидання фільтрів, банер помилок |
+| [`AIConsultantViewModelTests`](AIConsultantViewModelTests.cs) | 22 | чат ШІ-консультанта (SSE `meta`/`vacancies`/`delta`/`done`/`error`), аналіз вакансій (`relevance`), відновлення після помилки |
+| [`GeoDistanceServiceTests`](GeoDistanceServiceTests.cs) | 17 | геокодування, розрахунок відстані OSRM і формулою гаверсинів, офлайн-кешування |
+| [`AiConsultantGatewayTests`](AiConsultantGatewayTests.cs) | 14 | парсинг SSE-потоку `/messages` і `/analyze`, обробка 429/503 |
+| [`RecommendationsViewModelTests`](RecommendationsViewModelTests.cs) | 8 | завантаження персоналізованих рекомендацій, порожній стан, оновлення |
+| [`SystemSettingsViewModelTests`](SystemSettingsViewModelTests.cs) | 8 | читання/збереження `appsettings.json` (`Ingestion`), перемикання фонового збору, відображення статусу та запуск ручної синхронізації БД |
+| [`FavoritesViewModelTests`](FavoritesViewModelTests.cs) | 7 | завантаження, видалення, порожній стан, реакція на зміни з інших вкладок |
+| [`EfLocalGeoCacheServiceTests`](SqliteLocalGeoCacheServiceTests.cs) | 7 | локальний SQLite геокеш та двостороння синхронізація з сервером |
+| [`DatabaseViewModelTests`](DatabaseViewModelTests.cs) | 5 | повне багатосторінкове завантаження БД 4 сайтів, лічильники, крос-сайтові фільтри (джерела, категорії, формат, досвід, крос-валютна ЗП, свіжість, статус, слова, debounce), сортування, офлайн-фолбек + ручна синхронізація, JSON експорт/імпорт |
+| [`AnalyticsViewModelTests`](AnalyticsViewModelTests.cs) | 6 | рольовий доступ (`Analyst`), графіки зарплат/категорій/технологій, стан недостатності даних |
+| [`AuthSessionTests`](AuthSessionTests.cs) | 6 | регресійний тест розбору JWT і property-based тест (FsCheck) |
+| [`PhotonAddressAutocompleteServiceTests`](PhotonAddressAutocompleteServiceTests.cs) | 6 | автодоповнення адрес (Photon API + Wikipedia fallback) |
+| [`CatalogMultiSiteSearchTests`](CatalogMultiSiteSearchTests.cs) | 5 | прапорці вмикання/вимикання 4 сайтів («Усі 4»/«Жодного»), маршрутизація 1 сайту vs 2–4 сайти (`/batch`), незалежні `fromPage`/фільтри, живий прогрес, офлайн-фолбек `OfflineSiteCollector` |
+| [`VacancyItemSkillsTests`](VacancyItemSkillsTests.cs) | 5 | показ щонайбільше 3 навичок, чип `+N`, фільтрація порожніх і дублів |
+| [`VacancySyncTests`](VacancySyncTests.cs) | 4 | наскрізна двостороння синхронізація на реальній SQLite (клієнт ↔ сервер, дедуплікація, Last-Write-Wins), ідемпотентний апгрейд legacy SQLite без колонок синхронізації, парсинг DOU RSS + Djinni JSON-LD у `OfflineSiteCollector`, ручна синхронізація із `SystemSettingsViewModel` |
 
 ### Фікстури, заглушки, шпигуни
 

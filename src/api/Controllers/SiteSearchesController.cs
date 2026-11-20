@@ -17,7 +17,7 @@ namespace Waterfall.Api.Controllers;
 [Authorize]
 [Route("api/v1/site-searches")]
 [Produces("application/json")]
-[SwaggerTag("Пошук вакансій на Djinni і DOU за фільтрами на запит користувача")]
+[SwaggerTag("Пошук вакансій на Djinni, DOU, Work.ua та Robota.ua за фільтрами на запит користувача (один або кілька сайтів одночасно)")]
 public class SiteSearchesController : ApiControllerBase
 {
     public const string LimitErrorCode = "SITE_SEARCH_LIMIT";
@@ -40,11 +40,11 @@ public class SiteSearchesController : ApiControllerBase
     /// <response code="202">Пошук запущено (або результат уже готовий з кешу).</response>
     /// <response code="400">Невалідні фільтри.</response>
     /// <response code="401">Потрібно увійти.</response>
-    /// <response code="429">Попередній пошук ще триває або перевищено ліміт пошуків на годину.</response>
+    /// <response code="429">Попередній пошук ще триває.</response>
     [HttpPost]
     [SwaggerOperation(
         Summary = "Запустити пошук на сайті",
-        Description = "Сервер читає сторінки списку Djinni чи RSS DOU з фільтрами користувача, зберігає вакансії в каталог і повертає їх через GET.",
+        Description = "Сервер читає сторінки списку обраного сайту (Djinni, DOU, Work.ua або Robota.ua) з фільтрами користувача, зберігає вакансії в каталог і повертає їх через GET.",
         OperationId = "StartSiteSearch",
         Tags = ["SiteSearches"])]
     [ProducesResponseType(typeof(SiteSearchStatusDto), StatusCodes.Status202Accepted)]
@@ -91,6 +91,73 @@ public class SiteSearchesController : ApiControllerBase
         }
 
         SiteSearchStatusDto? status = await _siteSearch.GetAsync(id, userId, ct);
+        return status is null ? ErrorNotFound("Пошук не знайдено: можливо, він застарів. Запустіть його знову.") : Ok(status);
+    }
+
+    /// <summary>
+    /// Запустити одночасний пошук на кількох сайтах (1–4) з індивідуальними фільтрами для кожного сайту.
+    /// </summary>
+    /// <remarks>
+    /// Запускає паралельний обхід обраних сайтів (Djinni, DOU, Work.ua, Robota.ua).
+    /// Прогрес кожного сайту та об'єднаний результат доступні через GET /api/v1/site-searches/batch/{id}.
+    /// </remarks>
+    /// <param name="request">Перелік запитів (по одному на кожен обраний сайт із власними налаштуваннями).</param>
+    /// <response code="202">Пакетний пошук запущено (або всі результати вже готові з кешу).</response>
+    /// <response code="400">Невалідні фільтри або дублювання сайтів.</response>
+    /// <response code="401">Потрібно увійти.</response>
+    /// <response code="429">Попередній пошук ще триває.</response>
+    [HttpPost("batch")]
+    [SwaggerOperation(
+        Summary = "Запустити одночасний пошук на кількох сайтах",
+        Description = "Паралельно читає до 4 обраних сайтів (Djinni, DOU, Work.ua, Robota.ua) із власними фільтрами для кожного, зберігає знайдене в каталог і повертає об'єднаний результат через GET /batch/{id}.",
+        OperationId = "StartMultiSiteSearch",
+        Tags = ["SiteSearches"])]
+    [ProducesResponseType(typeof(MultiSiteSearchStatusDto), StatusCodes.Status202Accepted)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status429TooManyRequests)]
+    public ActionResult<MultiSiteSearchStatusDto> StartBatch([FromBody] MultiSiteSearchRequest request)
+    {
+        if (CurrentUserId is not { } userId)
+        {
+            return ErrorUnauthorized("Потрібно увійти, щоб шукати на сайтах.");
+        }
+
+        MultiSiteSearchStart start = _siteSearch.StartBatch(request, userId);
+        if (start.Status is null)
+        {
+            return StatusCode(StatusCodes.Status429TooManyRequests,
+                ApiErrorResponse.Create(code: LimitErrorCode, message: start.Rejection!, requestId: RequestId));
+        }
+
+        return AcceptedAtAction(nameof(GetBatch), new { id = start.Status.Id }, start.Status);
+    }
+
+    /// <summary>
+    /// Стан одночасного пошуку на кількох сайтах: загальний прогрес, прогрес кожного сайту та об'єднані вакансії.
+    /// </summary>
+    /// <param name="id">Ідентифікатор пакетного пошуку з POST /batch.</param>
+    /// <param name="ct">Токен скасування операції.</param>
+    /// <response code="200">Стан пакетного пошуку.</response>
+    /// <response code="401">Потрібно увійти.</response>
+    /// <response code="404">Пакетний пошук не знайдено.</response>
+    [HttpGet("batch/{id:guid}")]
+    [SwaggerOperation(
+        Summary = "Стан багатосайтового пошуку",
+        Description = "Повертає загальний прогрес (pagesDone / pagesTotal), стан кожного сайту в масиві sites та об'єднаний список vacancies після завершення.",
+        OperationId = "GetMultiSiteSearch",
+        Tags = ["SiteSearches"])]
+    [ProducesResponseType(typeof(MultiSiteSearchStatusDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<MultiSiteSearchStatusDto>> GetBatch(Guid id, CancellationToken ct = default)
+    {
+        if (CurrentUserId is not { } userId)
+        {
+            return ErrorUnauthorized("Потрібно увійти, щоб шукати на сайтах.");
+        }
+
+        MultiSiteSearchStatusDto? status = await _siteSearch.GetBatchAsync(id, userId, ct);
         return status is null ? ErrorNotFound("Пошук не знайдено: можливо, він застарів. Запустіть його знову.") : Ok(status);
     }
 }

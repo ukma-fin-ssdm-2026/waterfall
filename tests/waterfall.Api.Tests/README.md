@@ -8,22 +8,30 @@
 
 | Контролер | Файл реалізації | Що робить |
 | :--- | :--- | :--- |
-| `VacanciesController` | [`src/api/Controllers/VacanciesController.cs`](../../src/api/Controllers/VacanciesController.cs) | REST API каталогу вакансій: `GET /api/v1/vacancies`, `GET /api/v1/vacancies/{id}`, `POST /api/v1/vacancies`, `PUT /api/v1/vacancies/{id}`, `DELETE /api/v1/vacancies/{id}` |
-| `SavedVacanciesController` | [`src/api/Controllers/SavedVacanciesController.cs`](../../src/api/Controllers/SavedVacanciesController.cs) | REST API збережених вакансій (закладок): `GET /api/v1/saved-vacancies`, `GET /api/v1/saved-vacancies/{id}`, `POST /api/v1/saved-vacancies` (із захистом від повторного збереження 409 Conflict), `DELETE /api/v1/saved-vacancies/{id}` |
-| `ApiControllerBase` | [`src/api/Controllers/ApiControllerBase.cs`](../../src/api/Controllers/ApiControllerBase.cs) | спільний базовий контролер: вилучення `RequestId`, парсинг `CurrentUserId`, стандартизовані методи генерації помилок |
+| `VacanciesController` | [`src/api/Controllers/VacanciesController.cs`](../../src/api/Controllers/VacanciesController.cs) | REST API каталогу вакансій: CRUD, рекомендації (`/recommendations`) і двостороння синхронізація (`POST /sync`) |
+| `SiteSearchesController` | [`src/api/Controllers/SiteSearchesController.cs`](../../src/api/Controllers/SiteSearchesController.cs) | пошук на сайтах на запит: одиночний (`POST /api/v1/site-searches`, `GET /{id}`) та пакетний 1–4 сайти (`POST /batch`, `GET /batch/{id}`) |
+| `SavedVacanciesController` | [`src/api/Controllers/SavedVacanciesController.cs`](../../src/api/Controllers/SavedVacanciesController.cs) | REST API збережених вакансій (закладок) із захистом від дублювання (`409 Conflict`) |
+| `ProfileController`, `GeoController`, `AnalyticsController`, `AIConsultantController` | `src/api/Controllers/` | адреса й статистика профілю, геокодування й геосинхронізація, ринкова аналітика (`Analyst`), потоковий ШІ-консультант і аналіз вакансій (SSE) |
+| `ApiControllerBase` | [`src/api/Controllers/ApiControllerBase.cs`](../../src/api/Controllers/ApiControllerBase.cs) | спільний базовий контролер: `RequestId`, парсинг `CurrentUserId`, стандартизовані `ApiErrorResponse` |
 
 ---
 
 ## Опис набору тестів
 
-25 сфокусованих тестових випадків у 4 класах:
+82 тестових випадків у 10 класах (актуалізовано 20.11.2026):
 
 | Клас тесту | Кількість випадків | Що перевіряє |
 | :--- | :---: | :--- |
-| [`VacanciesControllerTests`](VacanciesControllerTests.cs) | 7 | `GetAll`: 200 OK з `PagedResult<VacancyDto>` та прокидання `CurrentUserId` для збагачення прапорцями; `GetById`: 200 OK при успіху та 404 NotFound з RFC/структурованим `ApiErrorResponse`; `Create`: 201 CreatedAtAction із правильним route value `id` і Location, 400 BadRequest при невалідному `ModelState` (сервіс не викликається); `Update`: 200 OK з оновленим DTO; `Delete`: 204 NoContent з викликом сервісу видалення |
-| [`SavedVacanciesControllerTests`](SavedVacanciesControllerTests.cs) | 6 | `GetAll`: 200 OK з фільтрацією за тенантом (`CurrentUserId`); `GetById`: 200 OK з даними закладки; `Save`: 404 NotFound якщо вакансії немає в каталозі; 409 Conflict при спробі повторного збереження (перевірка бізнес-правила); 201 CreatedAtAction з новим `SavedVacancyDto`; `Delete`: 204 NoContent із передачею ID користувача |
-| [`ApiControllerBaseTests`](ApiControllerBaseTests.cs) | 7 | пріоритет трасування: `X-Correlation-Id` перемагає `X-Request-Id`, який у свою чергу перемагає системний `TraceIdentifier`; парсинг claims: успішне зчитування `sub`, запасний варіант `userId`, повернення `null` для анонімних запитів або некоректного GUID; формування однакової структури `ApiErrorResponse` для 400, 401, 404, 409 |
-| [`SensitiveLoggingRegressionTests`](SensitiveLoggingRegressionTests.cs) | 5 | Регресійні тести безпеки CWE-532: перевірка відсутності витоку конфіденційних даних (email, пароль) у журнал логирования під час реєстрації та входу (`AuthController`, `AuthenticationService`) |
+| [`VacanciesControllerTests`](VacanciesControllerTests.cs) | 11 | CRUD (`GetAll`, `GetById`, `Create`, `Update`, `Delete`), `GetRecommendations`, `Sync` (`POST /sync`) |
+| [`SiteSearchesControllerTests`](SiteSearchesControllerTests.cs) | 8 | одиночний пошук (`POST`, `GET /{id}` — 202/401/404/429) та пакетний мультисайтовий пошук (`POST /batch`, `GET /batch/{id}` — 202/401/404/429) |
+| [`AIConsultantControllerTests`](AIConsultantControllerTests.cs) | 18 | SSE-потік `/messages` (`meta`→`vacancies`→`delta`→`done`, `error`, релаксація), `/analyze` (`relevance`→`delta`→`done`), `DELETE /sessions/{id}`, ліміт 429, 503 `LLM_UNAVAILABLE`, контроль ролі та власності |
+| [`ProfileControllerTests`](ProfileControllerTests.cs) | 17 | адреса профілю (`GET`/`PUT`), особиста статистика (`GET /stats`), запис і очищення історії пошуків, запис переглядів вакансій |
+| [`ApiControllerBaseTests`](ApiControllerBaseTests.cs) | 7 | пріоритет заголовків трасування (`X-Correlation-Id` → `X-Request-Id` → `TraceIdentifier`), парсинг JWT claims (`sub` / `userId`), єдина структура `ApiErrorResponse` |
+| [`SavedVacanciesControllerTests`](SavedVacanciesControllerTests.cs) | 6 | `GetAll`, `GetById`, `Save` (201 / 404 / 409 Conflict), `Delete` (204) з ізоляцією за `CurrentUserId` |
+| [`GeoControllerTests`](GeoControllerTests.cs) | 5 | `GET /geo/coordinates` (200 / 400 / 404) і `POST /geo/sync` (200 / 400) |
+| [`SensitiveLoggingRegressionTests`](SensitiveLoggingRegressionTests.cs) | 5 | Регресійні тести безпеки CWE-532: відсутність витоку email і паролів у логи автентифікації |
+| [`AnalyticsControllerTests`](AnalyticsControllerTests.cs) | 3 | доступ до `GET /api/v1/analytics` для ролі `Analyst`, відмова `403` для `JobSeeker`, `401` без токена |
+| [`BrowserCrawlerTests`](BrowserCrawlerTests.cs) | 2 | інтеграція браузерного краулера для Work.ua / Robota.ua |
 
 ---
 

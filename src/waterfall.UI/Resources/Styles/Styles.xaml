@@ -312,19 +312,68 @@
 
     <!-- PointOfSale Pill Buttons & Actions -->
     <Style x:Key="CardAction" TargetType="Button">
-        <Setter Property="BackgroundColor" Value="{StaticResource Secondary}" />
+        <Setter Property="BackgroundColor" Value="#34384B" />
         <Setter Property="TextColor" Value="{StaticResource White}" />
         <Setter Property="FontFamily" Value="OpenSansSemibold" />
         <Setter Property="FontSize" Value="12" />
         <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="BorderWidth" Value="0" />
+        <Setter Property="BorderColor" Value="#5B617A" />
+        <Setter Property="BorderWidth" Value="1" />
         <Setter Property="Padding" Value="12,6" />
         <Setter Property="MinimumHeightRequest" Value="34" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="#454B63" />
+                            <Setter Property="BorderColor" Value="{StaticResource Accent}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="#2B2E3E" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="Opacity" Value="0.45" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
     </Style>
 
     <Style x:Key="CardActionPrimary" TargetType="Button" BasedOn="{StaticResource CardAction}">
-        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+        <Setter Property="BackgroundColor" Value="#DF624D" />
+        <Setter Property="BorderColor" Value="#FF9F8E" />
+        <Setter Property="BorderWidth" Value="1" />
         <Setter Property="TextColor" Value="{StaticResource White}" />
+        <Setter Property="VisualStateManager.VisualStateGroups">
+            <VisualStateGroupList>
+                <VisualStateGroup x:Name="CommonStates">
+                    <VisualState x:Name="Normal" />
+                    <VisualState x:Name="PointerOver">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                            <Setter Property="BorderColor" Value="{StaticResource White}" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Pressed">
+                        <VisualState.Setters>
+                            <Setter Property="BackgroundColor" Value="#C7513D" />
+                        </VisualState.Setters>
+                    </VisualState>
+                    <VisualState x:Name="Disabled">
+                        <VisualState.Setters>
+                            <Setter Property="Opacity" Value="0.45" />
+                        </VisualState.Setters>
+                    </VisualState>
+                </VisualStateGroup>
+            </VisualStateGroupList>
+        </Setter>
     </Style>
 
     <Style x:Key="LinkButton" TargetType="Button">

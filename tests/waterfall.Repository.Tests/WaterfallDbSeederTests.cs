@@ -56,6 +56,73 @@ public class WaterfallDbSeederTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task SeedAsync_UpgradesLegacySqliteSchemaWithoutCategoryGroupAndBackfillsNormalizedFields()
+    {
+        // Імітуємо старий файл waterfall.db, створений до додавання CategoryGroup/ExperienceMonths/WorkFormat/SearchText
+        using (SqliteCommand cmd = _connection.CreateCommand())
+        {
+            cmd.CommandText = """
+                CREATE TABLE "Vacancies" (
+                    "Id" TEXT NOT NULL PRIMARY KEY,
+                    "Title" TEXT NOT NULL,
+                    "Company" TEXT NOT NULL,
+                    "Description" TEXT NOT NULL,
+                    "Category" TEXT NOT NULL,
+                    "Location" TEXT NOT NULL,
+                    "FullAddress" TEXT NULL,
+                    "Schedule" TEXT NULL,
+                    "Experience" TEXT NULL,
+                    "SalaryMin" decimal(18,2) NULL,
+                    "SalaryMax" decimal(18,2) NULL,
+                    "Currency" TEXT NOT NULL,
+                    "Source" TEXT NOT NULL,
+                    "SourceUrl" TEXT NOT NULL,
+                    "SkillsJson" TEXT NOT NULL,
+                    "PublishedAt" INTEGER NOT NULL,
+                    "FirstSeenAt" INTEGER NOT NULL,
+                    "LastSeenAt" INTEGER NOT NULL,
+                    "IsActive" INTEGER NOT NULL
+                );
+                CREATE TABLE "SavedVacancies" (
+                    "Id" TEXT NOT NULL PRIMARY KEY,
+                    "VacancyId" TEXT NOT NULL,
+                    "UserId" TEXT NULL,
+                    "Notes" TEXT NULL,
+                    "SavedAt" INTEGER NOT NULL
+                );
+                CREATE TABLE "Users" (
+                    "Id" TEXT NOT NULL PRIMARY KEY,
+                    "Email" TEXT NOT NULL,
+                    "PasswordHash" TEXT NOT NULL,
+                    "Role" TEXT NOT NULL,
+                    "CreatedAt" INTEGER NOT NULL
+                );
+                INSERT INTO "Vacancies"
+                    ("Id","Title","Company","Description","Category","Location","FullAddress","Schedule","Experience","Currency","Source","SourceUrl","SkillsJson","PublishedAt","FirstSeenAt","LastSeenAt","IsActive")
+                VALUES
+                    ('99999999-9999-9999-9999-999999999999','Senior C# Developer','LegacyCo','ASP.NET Core backend','C# / .NET','Київ (Віддалено)','Київ, Хрещатик 1','Повна зайнятість','3+ роки','USD','Djinni','https://djinni.co/jobs/legacy-1/','["C#"]',0,0,0,1);
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        using (WaterfallDbContext db = new(_options))
+        {
+            await WaterfallDbSeeder.SeedAsync(db);
+        }
+
+        using (WaterfallDbContext db = new(_options))
+        {
+            Waterfall.Repository.Entities.VacancyDB? upgraded = await db.Vacancies
+                .SingleOrDefaultAsync(v => v.Id == Guid.Parse("99999999-9999-9999-9999-999999999999"));
+            Assert.NotNull(upgraded);
+            Assert.Equal("Software Development", upgraded.CategoryGroup);
+            Assert.Equal(Waterfall.Repository.Entities.WorkFormat.Remote, upgraded.WorkFormat);
+            Assert.Equal(36, upgraded.ExperienceMonths);
+            Assert.Contains("senior c# developer", upgraded.SearchText, StringComparison.Ordinal);
+        }
+    }
+
     public void Dispose()
     {
         _connection.Dispose();

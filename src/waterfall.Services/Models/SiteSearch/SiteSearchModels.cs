@@ -177,3 +177,97 @@ public static class SiteSearchStates
     public const string Completed = "completed";
     public const string Failed = "failed";
 }
+
+/// <summary>
+/// Запит на одночасний парсинг кількох сайтів (від 1 до 4), кожен зі своїми налаштуваннями фільтрів та сторінок.
+/// </summary>
+public sealed class MultiSiteSearchRequest : IValidatableObject
+{
+    public const int MaxSites = 4;
+
+    /// <summary>Список окремих запитів для кожного обраного сайту (без дублювання джерел).</summary>
+    [Required(ErrorMessage = "Поле requests є обов'язковим")]
+    public IReadOnlyList<SiteSearchRequest> Requests { get; init; } = [];
+
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
+    {
+        if (Requests is null || Requests.Count == 0)
+        {
+            yield return new ValidationResult("Оберіть хоча б один сайт для парсингу", [nameof(Requests)]);
+            yield break;
+        }
+
+        if (Requests.Count > MaxSites)
+        {
+            yield return new ValidationResult($"Одночасно можна парсити не більше {MaxSites} сайтів", [nameof(Requests)]);
+        }
+
+        HashSet<JobSource> seenSources = [];
+        for (int i = 0; i < Requests.Count; i++)
+        {
+            SiteSearchRequest? item = Requests[i];
+            if (item is null)
+            {
+                yield return new ValidationResult($"Запит [{i}] не може бути порожнім", [$"{nameof(Requests)}[{i}]"]);
+                continue;
+            }
+
+            if (item.Source is { } source && !seenSources.Add(source))
+            {
+                yield return new ValidationResult($"Сайт {source} вказано більше одного разу", [$"{nameof(Requests)}[{i}].Source"]);
+            }
+
+            List<ValidationResult> nestedResults = [];
+            Validator.TryValidateObject(item, new ValidationContext(item), nestedResults, validateAllProperties: true);
+            foreach (ValidationResult nested in nestedResults)
+            {
+                string[] members = nested.MemberNames.Any()
+                    ? nested.MemberNames.Select(m => $"{nameof(Requests)}[{i}].{m}").ToArray()
+                    : [$"{nameof(Requests)}[{i}]"];
+                yield return new ValidationResult(nested.ErrorMessage, members);
+            }
+        }
+    }
+}
+
+/// <summary>Прогрес і стан одного сайту у межах пакетного багатосайтового пошуку.</summary>
+public sealed record SiteSearchItemStatusDto
+{
+    public JobSource Source { get; init; }
+    public string State { get; init; } = SiteSearchStates.Queued;
+    public int PagesDone { get; init; }
+    public int PagesTotal { get; init; }
+    public int Found { get; init; }
+    public bool FromCache { get; init; }
+    public string? Message { get; init; }
+}
+
+/// <summary>Агрегований стан одночасного пошуку на кількох сайтах.</summary>
+public sealed record MultiSiteSearchStatusDto
+{
+    public Guid Id { get; init; }
+
+    /// <summary>queued, running, completed або failed.</summary>
+    public string State { get; init; } = SiteSearchStates.Queued;
+
+    /// <summary>Загальна кількість прочитаних сторінок по всіх обраних сайтах.</summary>
+    public int PagesDone { get; init; }
+
+    /// <summary>Загальна планова кількість сторінок по всіх обраних сайтах.</summary>
+    public int PagesTotal { get; init; }
+
+    /// <summary>Загальна кількість знайдених вакансій по всіх обраних сайтах.</summary>
+    public int Found { get; init; }
+
+    /// <summary>true, якщо всі обрані сайти віддали результат із 3-годинного кешу.</summary>
+    public bool AllFromCache { get; init; }
+
+    /// <summary>Підсумкове пояснення (зокрема попередження, якщо частина сайтів не відповіла).</summary>
+    public string? Message { get; init; }
+
+    /// <summary>Деталізація прогресу по кожному обраному сайту.</summary>
+    public IReadOnlyList<SiteSearchItemStatusDto> Sites { get; init; } = [];
+
+    /// <summary>Об'єднаний дедуплікований список знайдених вакансій з усіх успішних сайтів (лише коли state = completed).</summary>
+    public IReadOnlyList<VacancyDto>? Vacancies { get; init; }
+}

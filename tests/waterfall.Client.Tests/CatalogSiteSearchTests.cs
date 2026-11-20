@@ -247,23 +247,23 @@ public class CatalogSiteSearchTests
     }
 
     [Fact]
-    public async Task WorkUaJobPages_OnByDefault_SwitchOffSendsListOnly_AndHintWarns()
+    public async Task WorkUaJobPages_OffByDefault_SwitchOnSendsFullSearch_AndHintWarns()
     {
         _vm.SelectedPlatform = "WorkUa";
         _vm.WorkUaPagesToParse = "2";
-        Assert.True(_vm.WorkUaOpenJobPages);
-        Assert.Contains("близько 2 хв", _vm.WorkUaJobPagesHint, StringComparison.Ordinal);
-
-        await RunSearchAsync();
-        Assert.False(_gateway.SiteSearchRequests[^1].ListOnly);
-
-        _vm.WorkUaOpenJobPages = false;
+        Assert.False(_vm.WorkUaOpenJobPages);
         Assert.Contains("1–2 рядки", _vm.WorkUaJobPagesHint, StringComparison.Ordinal);
+
         await RunSearchAsync();
         Assert.True(_gateway.SiteSearchRequests[^1].ListOnly);
 
+        _vm.WorkUaOpenJobPages = true;
+        Assert.Contains("близько 2 хв", _vm.WorkUaJobPagesHint, StringComparison.Ordinal);
+        await RunSearchAsync();
+        Assert.False(_gateway.SiteSearchRequests[^1].ListOnly);
+
         await _vm.ResetFiltersCommand.ExecuteAsync(null);
-        Assert.True(_vm.WorkUaOpenJobPages);
+        Assert.False(_vm.WorkUaOpenJobPages);
     }
 
     [Fact]

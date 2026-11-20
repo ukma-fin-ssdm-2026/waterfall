@@ -211,4 +211,38 @@ public class VacanciesController : ApiControllerBase
 
         return NoContent();
     }
+
+    /// <summary>
+    /// Двостороння синхронізація бази вакансій між локальною БД клієнта та сервером.
+    /// </summary>
+    /// <remarks>
+    /// Клієнт надсилає вакансії, зібрані або змінені в офлайні; сервер об'єднує їх зі своєю базою
+    /// (дедуплікація за Source+ExternalId / Id / SourceUrl, Last-Write-Wins за LastSeenAt) та повертає
+    /// всі актуальні вакансії сервера (або зміни з моменту LastSyncedAt).
+    /// </remarks>
+    /// <param name="request">Несинхронізовані локальні вакансії клієнта та мітка часу останньої синхронізації.</param>
+    /// <param name="ct">Токен скасування операції.</param>
+    /// <response code="200">Синхронізація успішна.</response>
+    /// <response code="400">Порожній або невалідний запит синхронізації.</response>
+    [HttpPost("sync")]
+    [AllowAnonymous]
+    [SwaggerOperation(
+        Summary = "Синхронізувати базу вакансій",
+        Description = "Двосторонній обмін вакансіями між локальною БД клієнта (офлайн-збір і правки) та серверною БД.",
+        OperationId = "SyncVacancies",
+        Tags = ["Vacancies"])]
+    [ProducesResponseType(typeof(VacancySyncResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<VacancySyncResponseDto>> Sync(
+        [FromBody] VacancySyncRequestDto? request,
+        CancellationToken ct = default)
+    {
+        if (request is null || !ModelState.IsValid)
+        {
+            return ErrorBadRequest("Тіло запиту синхронізації вакансій не може бути порожнім або невалідним.");
+        }
+
+        VacancySyncResponseDto response = await _vacancyService.SyncVacanciesAsync(request, ct);
+        return Ok(response);
+    }
 }

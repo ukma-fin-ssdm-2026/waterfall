@@ -41,7 +41,7 @@
   - `POST /api/v1/ai-consultant/messages` спершу витягує структурований фільтр через LLM і лише потім відкриває SSE-потік, тож відмова провайдера (таймаут, `429`, `5xx`, відсутній ключ) повертається звичайним `503` з кодом `LLM_UNAVAILABLE` і порадою скористатися звичайним пошуком — до першого байта потоку;
   - ланцюжок провайдерів обмежений 30 с на весь виклик (`Llm:TotalTimeout`, REL-003): далі `LlmUnavailableException` перетворюється на `503` у `AIConsultantController`;
   - якщо провайдер відмовив **після** події `vacancies`, вакансії вже показані й лишаються валідними, а стрім завершується термінальною подією `error` з кодом `LLM_UNAVAILABLE`;
-  - ліміт запитів на користувача (`AiConsultant:MessagesPerHour`, 20 на годину) віддає `429` з кодом `RATE_LIMITED` і тим самим текстом про звичайний пошук; політика спільна для `/messages` і майбутнього `/analyze`.
+  - ліміт запитів на користувача (`AiConsultant:MessagesPerHour`, 20 на годину) віддає `429` з кодом `RATE_LIMITED` і тим самим текстом про звичайний пошук; політика спільна для `/messages` і `/analyze`.
 - **Вимірювання:** інтеграційні тести `waterfall.Api.Tests` з підміненим сервісом ШІ (мережа не потрібна): `AIConsultantControllerTests.SendMessage_LlmUnavailable_Returns503BeforeStreaming`, `SendMessage_SummaryFailsAfterVacancies_SendsTerminalErrorEvent`, `SendMessage_AfterLimit_Returns429RateLimited`, `SendMessage_RateLimit_IsPerUser`; юніт-тести сервісу `AIConsultantServiceTests.PrepareAsync_ExtractionFailure_PropagatesLlmUnavailableAndCreatesNoSession`. Додатково — ручний прогін зі свіжою БД і **без жодного ключа LLM**: API стартує, каталог працює, а `POST /messages` повертає `503 LLM_UNAVAILABLE` за 0,29 с, тобто значно раніше за 30 с (результат прогону наведено у звіті PR).
 
 ## 3. Безпека
@@ -54,8 +54,8 @@
   - **Валідація діапазонів** — повний перелік правил у таблиці нижче.
   - **Санітизація вхідних даних:** сервіс обрізає пробіли на краях рядків; валюта приймається лише з переліку `USD`, `EUR`, `UAH`; довжина кожного рядка й розмір кожного списку обмежені. Тексти зберігаються й повертаються як дані: клієнт .NET MAUI показує їх як текст, а не як розмітку.
   - **Приховування внутрішнього стану:** `AllowInputFormatterExceptionMessages = false`, тож текст винятків десеріалізатора не потрапляє до клієнта; замість нього повертається «Некоректне значення або формат поля».
-  - **Заплановано:** обмеження частоти (100 запитів на хвилину з однієї IP-адреси), JWT для `/saved-vacancies`, лише HTTPS у продакшні.
-- **Вимірювання:** прогін розділу 6; надалі — статичний аналізатор безпеки для C# і перевірка вразливих залежностей (`dotnet list package --vulnerable`) у Лабораторній 5.
+  - **Захист і реалізація:** JWT Bearer для `/saved-vacancies`, `/profile`, `/vacancies/recommendations`, `/site-searches`, `/analytics` (роль `Analyst`) і `/ai-consultant` (роль `JobSeeker`); ліміт частоти для ШІ-консультанта (`20/год`) та захист від паралельного запуску для пошуку на сайтах (`1` активний пошук на користувача, без погодинної квоти); статичний аналізатор `SecurityCodeScan.VS2019` активний у CI; лише HTTPS у продакшні.
+- **Вимірювання:** автоматичні інтеграційні та модульні тести в CI (7 наборів xUnit), ручний прогін розділу 6; `SecurityCodeScan.VS2019` і `gitleaks`.
 
 | Поле або параметр | Правило |
 | --- | --- |
@@ -78,6 +78,8 @@
 | `vacancyId` | обов'язковий, непорожній GUID |
 | `notes` | до 500 символів |
 | `{id}` у шляху | GUID |
+| `requests` (`POST /site-searches/batch`) | 1–4 унікальні `source` (`Dou`, `WorkUa`, `Djinni`, `RobotaUa`), рекурсивна валідація кожного `SiteSearchRequest` |
+| `clientVacancies` (`POST /vacancies/sync`) | до 500 записів за пакет (клієнт автоматично розбиває на чанки по 500) |
 
 Під час створення вакансії (`POST`) поля `title`, `company`, `description`, `category`, `location`, `currency`, `source` і `sourceUrl` обов'язкові. У `PUT` усі поля необов'язкові: відсутнє поле або `null` означає «не змінювати», а правила з таблиці діють для переданих значень.
 

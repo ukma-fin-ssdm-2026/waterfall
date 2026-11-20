@@ -135,6 +135,11 @@ public record VacancyDto
     public DateTimeOffset LastSeenAt { get; init; }
 
     /// <summary>
+    /// Зовнішній ідентифікатор вакансії на сайті-джерелі (для дедуплікації та синхронізації).
+    /// </summary>
+    public string? ExternalId { get; init; }
+
+    /// <summary>
     /// Ознака активності (true — активна, false — закрита/архівна).
     /// </summary>
     public bool IsActive { get; init; }

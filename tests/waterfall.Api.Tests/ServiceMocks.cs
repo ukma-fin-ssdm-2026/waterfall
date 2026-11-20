@@ -117,11 +117,24 @@ public sealed class FakeVacancyService : IVacancyService
         return Task.FromResult<VacancyDto?>(updated);
     }
 
+    public List<VacancySyncRequestDto> SyncCalls { get; } = [];
+    public VacancySyncResponseDto? NextSyncResponse { get; set; }
+
     public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
     {
         DeleteCalls.Add(id);
         int removed = Vacancies.RemoveAll(v => v.Id == id);
         return Task.FromResult(removed > 0);
+    }
+
+    public Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default)
+    {
+        SyncCalls.Add(request);
+        return Task.FromResult(NextSyncResponse ?? new VacancySyncResponseDto
+        {
+            ReceivedFromClient = request.ClientVacancies.Count,
+            TotalServerVacancies = Vacancies.Count
+        });
     }
 }
 
