@@ -231,6 +231,19 @@ public partial class CatalogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(RobotaUaButtonText))]
     public partial bool IsFilterPanelVisible { get; set; }
 
+    /// <summary>Показувати блок налаштувань парсингу сайтів.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ParsePanelToggleText))]
+    public partial bool IsParsePanelVisible { get; set; } = true;
+
+    /// <summary>Показувати блок локальних фільтрів знайдених вакансій.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LocalFilterPanelToggleText))]
+    public partial bool IsLocalFilterPanelVisible { get; set; }
+
+    public string ParsePanelToggleText => IsParsePanelVisible ? "🌐 Парсинг сайтів ▲" : "🌐 Парсинг сайтів ▼";
+    public string LocalFilterPanelToggleText => IsLocalFilterPanelVisible ? "⚡ Фільтри списку ▲" : "⚡ Фільтри списку ▼";
+
     /// <summary>
     /// Обрана платформа у панелі фільтрів: "DOU", "WorkUa", "Djinni" або "RobotaUa".
     /// </summary>
@@ -703,7 +716,7 @@ public partial class CatalogViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(WorkUaJobPagesHint))]
-    public partial bool WorkUaOpenJobPages { get; set; } = true;
+    public partial bool WorkUaOpenJobPages { get; set; } = false;
 
     /// <summary>Попередження під перемикачем: скільки чекати і що втрачаємо без сторінок вакансій.</summary>
     public string WorkUaJobPagesHint => WorkUaOpenJobPages
@@ -1333,6 +1346,12 @@ public partial class CatalogViewModel : ObservableObject
     private void ToggleFilterPanel() => IsFilterPanelVisible = !IsFilterPanelVisible;
 
     [RelayCommand]
+    private void ToggleParsePanel() => IsParsePanelVisible = !IsParsePanelVisible;
+
+    [RelayCommand]
+    private void ToggleLocalFilterPanel() => IsLocalFilterPanelVisible = !IsLocalFilterPanelVisible;
+
+    [RelayCommand]
     private void SelectPlatform(string? platform)
     {
         if (string.IsNullOrWhiteSpace(platform))
@@ -1639,7 +1658,17 @@ public partial class CatalogViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanFetchFromSites))]
     private async Task FetchFromSitesAsync()
     {
-        List<SiteSearchRequest> requests = BuildSiteSearchRequests();
+        List<SiteSearchRequest> requests;
+        try
+        {
+            requests = BuildSiteSearchRequests();
+        }
+        catch (Exception ex)
+        {
+            StaleCacheText = $"⚠️ Помилка формування запиту: {ex.Message}";
+            return;
+        }
+
         if (requests.Count == 0)
         {
             StaleCacheText = "🌐 Оберіть сайт: DOU, Work.ua, Djinni або Robota.ua.";
@@ -1682,6 +1711,10 @@ public partial class CatalogViewModel : ObservableObject
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
             // Запущено новий пошук або користувач пішов зі сторінки
+        }
+        catch (Exception ex)
+        {
+            StaleCacheText = $"⚠️ Помилка парсингу: {ex.Message}";
         }
         finally
         {
@@ -2064,11 +2097,11 @@ public partial class CatalogViewModel : ObservableObject
             options["nosalary"] = "1";
         }
 
-        if (WorkUaSelectedWordMatch.Contains("anyword=1", StringComparison.Ordinal))
+        if (WorkUaSelectedWordMatch?.Contains("anyword=1", StringComparison.Ordinal) == true)
         {
             options["anyword"] = "1";
         }
-        else if (WorkUaSelectedWordMatch.Contains("nosynonym=1", StringComparison.Ordinal))
+        else if (WorkUaSelectedWordMatch?.Contains("nosynonym=1", StringComparison.Ordinal) == true)
         {
             options["nosynonym"] = "1";
         }
@@ -2127,6 +2160,11 @@ public partial class CatalogViewModel : ObservableObject
         Dictionary<string, string> options = new(StringComparer.Ordinal);
         foreach (string option in selected)
         {
+            if (string.IsNullOrEmpty(option))
+            {
+                continue;
+            }
+
             Match match = OptionCode().Match(option);
             int equals = match.Success ? match.Groups[1].Value.IndexOf('=', StringComparison.Ordinal) : -1;
             if (equals > 0)
@@ -2399,7 +2437,7 @@ public partial class CatalogViewModel : ObservableObject
 
         // Скидання фільтрів Work.ua
         WorkUaPagesToParse = "3";
-        WorkUaOpenJobPages = true;
+        WorkUaOpenJobPages = false;
         WorkUaSearchQuery = string.Empty;
         WorkUaSelectedWordMatch = WorkUaWordMatchOptions[0];
         WorkUaTitleOnly = false;
