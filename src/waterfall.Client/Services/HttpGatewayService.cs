@@ -50,6 +50,35 @@ public sealed class HttpGatewayService : IHttpGatewayService
         return SendAsync(new HttpRequestMessage(HttpMethod.Get, url), Json.PagedResultVacancyDto, ct);
     }
 
+    public Task<PagedResult<VacancyDto>> GetVacanciesAsync(VacancyQueryOptions options, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        List<string> query =
+        [
+            $"page={options.Page}",
+            $"pageSize={options.PageSize}",
+            $"onlyActive={(options.OnlyActive ? "true" : "false")}"
+        ];
+
+        if (!string.IsNullOrWhiteSpace(options.Search)) query.Add("search=" + Uri.EscapeDataString(options.Search.Trim()));
+        if (!string.IsNullOrWhiteSpace(options.Category)) query.Add("category=" + Uri.EscapeDataString(options.Category.Trim()));
+        if (!string.IsNullOrWhiteSpace(options.CategoryGroup)) query.Add("categoryGroup=" + Uri.EscapeDataString(options.CategoryGroup.Trim()));
+        if (!string.IsNullOrWhiteSpace(options.Location)) query.Add("location=" + Uri.EscapeDataString(options.Location.Trim()));
+        if (options.Source is { } source && source != JobSource.Unknown) query.Add("source=" + Uri.EscapeDataString(source.ToString()));
+        if (options.WorkFormat is { } wf && wf != Waterfall.Repository.Entities.WorkFormat.None) query.Add("workFormat=" + (int)wf);
+        if (options.MaxExperienceMonths is { } maxExp) query.Add("maxExperienceMonths=" + maxExp.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (options.MinSalary is { } minSal) query.Add("minSalary=" + minSal.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (options.MaxSalary is { } maxSal) query.Add("maxSalary=" + maxSal.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        if (!string.IsNullOrWhiteSpace(options.SortBy)) query.Add("sortBy=" + Uri.EscapeDataString(options.SortBy.Trim()));
+        if (!string.IsNullOrWhiteSpace(options.SortOrder)) query.Add("sortOrder=" + Uri.EscapeDataString(options.SortOrder.Trim()));
+
+        string url = "api/v1/vacancies?" + string.Join('&', query);
+        return SendAsync(new HttpRequestMessage(HttpMethod.Get, url), Json.PagedResultVacancyDto, ct);
+    }
+
+    public Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default) =>
+        SendAsync(Post("api/v1/vacancies/sync", request, Json.VacancySyncRequestDto), Json.VacancySyncResponseDto, ct);
+
     public Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default) =>
         SendAsync(
             new HttpRequestMessage(HttpMethod.Get, $"api/v1/vacancies/recommendations?limit={limit}"),
@@ -75,6 +104,12 @@ public sealed class HttpGatewayService : IHttpGatewayService
 
     public Task<SiteSearchStatusDto> GetSiteSearchAsync(Guid id, CancellationToken ct = default) =>
         SendAsync(new HttpRequestMessage(HttpMethod.Get, $"api/v1/site-searches/{id}"), Json.SiteSearchStatusDto, ct);
+
+    public Task<MultiSiteSearchStatusDto> StartMultiSiteSearchAsync(MultiSiteSearchRequest request, CancellationToken ct = default) =>
+        SendAsync(Post("api/v1/site-searches/batch", request, Json.MultiSiteSearchRequest), Json.MultiSiteSearchStatusDto, ct);
+
+    public Task<MultiSiteSearchStatusDto> GetMultiSiteSearchAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync(new HttpRequestMessage(HttpMethod.Get, $"api/v1/site-searches/batch/{id}"), Json.MultiSiteSearchStatusDto, ct);
 
     public async Task<IReadOnlyList<SavedVacancyDto>> GetSavedVacanciesAsync(CancellationToken ct = default) =>
         await SendAsync(new HttpRequestMessage(HttpMethod.Get, "api/v1/saved-vacancies"), Json.ListSavedVacancyDto, ct);
