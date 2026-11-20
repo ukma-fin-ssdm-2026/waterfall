@@ -202,6 +202,9 @@ public sealed class FakeCatalogService : IVacancyService
     public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
         => throw new NotSupportedException("Каталог у тестах ШІ-консультанта доступний лише для читання.");
 
+    public Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default)
+        => throw new NotSupportedException("Каталог у тестах ШІ-консультанта доступний лише для читання.");
+
     private static bool Matches(VacancyDto vacancy, VacancyFilterParameters filter)
     {
         if (!string.IsNullOrWhiteSpace(filter.Search)

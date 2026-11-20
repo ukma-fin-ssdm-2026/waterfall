@@ -145,6 +145,56 @@ public sealed class FakeVacancyRepository : IVacancyRepository
 
         return Task.FromResult(count);
     }
+
+    public Task<IReadOnlyList<VacancyDB>> GetAllForSyncAsync(
+        DateTimeOffset? since = null,
+        IReadOnlyCollection<Guid>? includeIds = null,
+        CancellationToken ct = default)
+    {
+        IEnumerable<VacancyDB> query = Vacancies;
+        if (since.HasValue)
+        {
+            DateTimeOffset threshold = since.Value;
+            query = query.Where(v => v.LastSeenAt >= threshold || v.FirstSeenAt >= threshold || (includeIds?.Contains(v.Id) ?? false));
+        }
+
+        return Task.FromResult<IReadOnlyList<VacancyDB>>(query.ToList());
+    }
+
+    public Task<int> CountAllAsync(CancellationToken ct = default) =>
+        Task.FromResult(Vacancies.Count);
+
+    public Task<VacancySyncMergeResult> SyncMergeAsync(IReadOnlyList<VacancyDB> vacancies, CancellationToken ct = default)
+    {
+        int created = 0;
+        int updated = 0;
+        List<Guid> ids = [];
+        foreach (VacancyDB incoming in vacancies)
+        {
+            VacancyDB? existing = Vacancies.FirstOrDefault(v =>
+                (!string.IsNullOrWhiteSpace(incoming.ExternalId) && v.Source == incoming.Source && v.ExternalId == incoming.ExternalId)
+                || v.Id == incoming.Id
+                || (!string.IsNullOrWhiteSpace(incoming.SourceUrl) && string.Equals(v.SourceUrl, incoming.SourceUrl, StringComparison.OrdinalIgnoreCase)));
+            if (existing is null)
+            {
+                Vacancies.Add(incoming);
+                ids.Add(incoming.Id);
+                created++;
+            }
+            else
+            {
+                ids.Add(existing.Id);
+                if (incoming.LastSeenAt > existing.LastSeenAt)
+                {
+                    existing.Category = incoming.Category;
+                    existing.LastSeenAt = incoming.LastSeenAt;
+                    updated++;
+                }
+            }
+        }
+
+        return Task.FromResult(new VacancySyncMergeResult(created, updated, ids));
+    }
 }
 
 public sealed class FakeSavedVacancyRepository : ISavedVacancyRepository
