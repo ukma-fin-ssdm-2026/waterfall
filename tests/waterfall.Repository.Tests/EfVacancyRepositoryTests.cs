@@ -2,6 +2,7 @@
 
 using Waterfall.Repository.Data;
 using Waterfall.Repository.Entities;
+using Waterfall.Repository.Interfaces;
 using Waterfall.Repository.Repositories;
 
 namespace Waterfall.Repository.Tests;
@@ -634,5 +635,95 @@ public sealed class EfVacancyRepositoryTests : IDisposable
         VacancyDB? freshReloaded = await db.Vacancies.FindAsync(fresh.Id);
         Assert.False(expiredReloaded!.IsActive);
         Assert.True(freshReloaded!.IsActive);
+    }
+
+    [Fact]
+    public async Task SyncMergeAsync_InsertsNew_DeduplicatesByExternalIdAndUrl_AndResolvesConflictByLastSeenAt()
+    {
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        DateTimeOffset t0 = new(2026, 11, 10, 10, 0, 0, TimeSpan.Zero);
+        VacancyDB serverOlder = CreateVacancy(title: "Old Title", source: "Djinni");
+        serverOlder.ExternalId = "dj-100";
+        serverOlder.SourceUrl = "https://djinni.co/jobs/100/";
+        serverOlder.Category = "Інше";
+        serverOlder.LastSeenAt = t0;
+        serverOlder.FirstSeenAt = t0;
+
+        VacancyDB serverNewer = CreateVacancy(title: "Fresh Server Title", source: "Dou");
+        serverNewer.ExternalId = "dou-200";
+        serverNewer.SourceUrl = "https://jobs.dou.ua/vacancies/200/";
+        serverNewer.Category = "Python";
+        serverNewer.FullAddress = null;
+        serverNewer.LastSeenAt = t0.AddHours(5);
+
+        db.Vacancies.AddRange(serverOlder, serverNewer);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        VacancyDB incomingNewerEdit = CreateVacancy(title: "Updated Offline Title", source: "Djinni");
+        incomingNewerEdit.ExternalId = "dj-100";
+        incomingNewerEdit.SourceUrl = "https://djinni.co/jobs/100/";
+        incomingNewerEdit.Category = "AI / ML";
+        incomingNewerEdit.LastSeenAt = t0.AddHours(2);
+
+        VacancyDB incomingStaleWithAddress = CreateVacancy(title: "Stale Client Title", source: "Dou");
+        incomingStaleWithAddress.ExternalId = null; // Має зіставитися за SourceUrl
+        incomingStaleWithAddress.SourceUrl = "https://jobs.dou.ua/vacancies/200/";
+        incomingStaleWithAddress.Category = "Інше";
+        incomingStaleWithAddress.FullAddress = "Київ, вул. Мечникова 2";
+        incomingStaleWithAddress.LastSeenAt = t0.AddHours(1);
+
+        VacancyDB incomingBrandNew = CreateVacancy(title: "Brand New Offline Job", source: "WorkUa");
+        incomingBrandNew.ExternalId = "wu-300";
+        incomingBrandNew.SourceUrl = "https://www.work.ua/jobs/300/";
+        incomingBrandNew.Category = "Finance";
+        incomingBrandNew.LastSeenAt = t0.AddHours(3);
+
+        VacancySyncMergeResult result = await repo.SyncMergeAsync([incomingNewerEdit, incomingStaleWithAddress, incomingBrandNew]);
+
+        Assert.Equal(1, result.Created);
+        Assert.Equal(2, result.Updated);
+        Assert.Equal(3, result.CanonicalIds.Count);
+
+        VacancyDB reloadedOlder = (await repo.GetByIdAsync(serverOlder.Id))!;
+        Assert.Equal("Updated Offline Title", reloadedOlder.Title);
+        Assert.Equal("AI / ML", reloadedOlder.Category);
+        Assert.Equal("AI / ML", reloadedOlder.CategoryGroup);
+
+        VacancyDB reloadedNewer = (await repo.GetByIdAsync(serverNewer.Id))!;
+        Assert.Equal("Fresh Server Title", reloadedNewer.Title);
+        Assert.Equal("Python", reloadedNewer.Category);
+        Assert.Equal("Київ, вул. Мечникова 2", reloadedNewer.FullAddress);
+
+        Assert.Equal(3, await repo.CountAllAsync());
+    }
+
+    [Fact]
+    public async Task GetAllForSyncAsync_SupportsFullAndDeltaQueries()
+    {
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        DateTimeOffset t0 = new(2026, 11, 10, 10, 0, 0, TimeSpan.Zero);
+        VacancyDB oldVac = CreateVacancy(title: "Old");
+        oldVac.FirstSeenAt = t0;
+        oldVac.LastSeenAt = t0;
+        VacancyDB newVac = CreateVacancy(title: "New");
+        newVac.FirstSeenAt = t0.AddHours(3);
+        newVac.LastSeenAt = t0.AddHours(3);
+
+        db.Vacancies.AddRange(oldVac, newVac);
+        await db.SaveChangesAsync();
+
+        IReadOnlyList<VacancyDB> all = await repo.GetAllForSyncAsync(since: null);
+        IReadOnlyList<VacancyDB> delta = await repo.GetAllForSyncAsync(since: t0.AddHours(1));
+        IReadOnlyList<VacancyDB> deltaWithInclude = await repo.GetAllForSyncAsync(since: t0.AddHours(1), includeIds: [oldVac.Id]);
+
+        Assert.Equal(2, all.Count);
+        Assert.Single(delta);
+        Assert.Equal(newVac.Id, delta[0].Id);
+        Assert.Equal(2, deltaWithInclude.Count);
     }
 }
