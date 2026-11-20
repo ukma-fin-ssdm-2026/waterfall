@@ -261,4 +261,265 @@ public class EfVacancyRepository : IVacancyRepository
         await _context.SaveChangesAsync(ct);
         return expired.Count;
     }
+
+    public async Task<IReadOnlyList<VacancyDB>> GetAllForSyncAsync(
+        DateTimeOffset? since = null,
+        IReadOnlyCollection<Guid>? includeIds = null,
+        CancellationToken ct = default)
+    {
+        IQueryable<VacancyDB> query = _context.Vacancies.AsNoTracking();
+
+        if (since.HasValue)
+        {
+            DateTimeOffset threshold = since.Value;
+            if (includeIds is { Count: > 0 })
+            {
+                query = query.Where(v => v.LastSeenAt >= threshold || v.FirstSeenAt >= threshold || includeIds.Contains(v.Id));
+            }
+            else
+            {
+                query = query.Where(v => v.LastSeenAt >= threshold || v.FirstSeenAt >= threshold);
+            }
+        }
+
+        return await query
+            .OrderByDescending(v => v.LastSeenAt)
+            .ThenByDescending(v => v.PublishedAt)
+            .ToListAsync(ct);
+    }
+
+    public Task<int> CountAllAsync(CancellationToken ct = default) =>
+        _context.Vacancies.AsNoTracking().CountAsync(ct);
+
+    public async Task<VacancySyncMergeResult> SyncMergeAsync(IReadOnlyList<VacancyDB> vacancies, CancellationToken ct = default)
+    {
+        if (vacancies.Count == 0)
+        {
+            return new VacancySyncMergeResult(0, 0, []);
+        }
+
+        List<Guid> incomingIds = vacancies.Where(v => v.Id != Guid.Empty).Select(v => v.Id).Distinct().ToList();
+        List<string> incomingExternalIds = vacancies
+            .Where(v => !string.IsNullOrWhiteSpace(v.ExternalId))
+            .Select(v => v.ExternalId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        List<string> incomingUrls = vacancies
+            .Where(v => !string.IsNullOrWhiteSpace(v.SourceUrl))
+            .Select(v => v.SourceUrl)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        List<VacancyDB> existing = await _context.Vacancies
+            .Where(v =>
+                incomingIds.Contains(v.Id)
+                || (v.ExternalId != null && incomingExternalIds.Contains(v.ExternalId))
+                || incomingUrls.Contains(v.SourceUrl))
+            .ToListAsync(ct);
+
+        int created = 0;
+        int updated = 0;
+        HashSet<Guid> canonicalIds = [];
+
+        foreach (VacancyDB incoming in vacancies)
+        {
+            VacancyDB? current = FindMatchingVacancy(existing, incoming);
+            if (current is null)
+            {
+                if (incoming.Id == Guid.Empty)
+                {
+                    incoming.Id = Guid.NewGuid();
+                }
+
+                _context.Vacancies.Add(incoming);
+                existing.Add(incoming);
+                canonicalIds.Add(incoming.Id);
+                created++;
+                continue;
+            }
+
+            canonicalIds.Add(current.Id);
+            if (MergeIntoExisting(current, incoming))
+            {
+                updated++;
+            }
+        }
+
+        if (created > 0 || updated > 0)
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+
+        return new VacancySyncMergeResult(created, updated, canonicalIds.ToList());
+    }
+
+    private static VacancyDB? FindMatchingVacancy(List<VacancyDB> existing, VacancyDB incoming)
+    {
+        if (!string.IsNullOrWhiteSpace(incoming.ExternalId))
+        {
+            VacancyDB? byExternal = existing.FirstOrDefault(v =>
+                string.Equals(v.Source, incoming.Source, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(v.ExternalId, incoming.ExternalId, StringComparison.Ordinal));
+            if (byExternal is not null)
+            {
+                return byExternal;
+            }
+        }
+
+        if (incoming.Id != Guid.Empty)
+        {
+            VacancyDB? byId = existing.FirstOrDefault(v => v.Id == incoming.Id);
+            if (byId is not null)
+            {
+                return byId;
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(incoming.SourceUrl))
+        {
+            return existing.FirstOrDefault(v =>
+                string.Equals(v.SourceUrl, incoming.SourceUrl, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(v.Source, incoming.Source, StringComparison.OrdinalIgnoreCase)
+                && (string.IsNullOrWhiteSpace(incoming.ExternalId)
+                    || string.IsNullOrWhiteSpace(v.ExternalId)
+                    || string.Equals(v.ExternalId, incoming.ExternalId, StringComparison.Ordinal)));
+        }
+
+        return null;
+    }
+
+    private static bool MergeIntoExisting(VacancyDB current, VacancyDB incoming)
+    {
+        bool changed = false;
+
+        if (incoming.FirstSeenAt != default && (current.FirstSeenAt == default || incoming.FirstSeenAt < current.FirstSeenAt))
+        {
+            current.FirstSeenAt = incoming.FirstSeenAt;
+            changed = true;
+        }
+
+        if (incoming.LastSeenAt > current.LastSeenAt)
+        {
+            if (!string.IsNullOrWhiteSpace(incoming.Title))
+            {
+                current.Title = incoming.Title;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Company))
+            {
+                current.Company = incoming.Company;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Description) && incoming.Description.Length >= current.Description.Length)
+            {
+                current.Description = incoming.Description;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Category))
+            {
+                current.Category = incoming.Category;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Location))
+            {
+                current.Location = incoming.Location;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.FullAddress))
+            {
+                current.FullAddress = incoming.FullAddress;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Schedule))
+            {
+                current.Schedule = incoming.Schedule;
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.Experience))
+            {
+                current.Experience = incoming.Experience;
+            }
+
+            if (incoming.ExperienceMonths.HasValue)
+            {
+                current.ExperienceMonths = incoming.ExperienceMonths;
+            }
+
+            if (incoming.SalaryMin.HasValue || incoming.SalaryMax.HasValue)
+            {
+                current.SalaryMin = incoming.SalaryMin;
+                current.SalaryMax = incoming.SalaryMax;
+                if (!string.IsNullOrWhiteSpace(incoming.Currency))
+                {
+                    current.Currency = incoming.Currency;
+                }
+            }
+
+            if (!string.IsNullOrWhiteSpace(incoming.SkillsJson) && incoming.SkillsJson != "[]")
+            {
+                current.SkillsJson = incoming.SkillsJson;
+            }
+
+            if (string.IsNullOrWhiteSpace(current.ExternalId) && !string.IsNullOrWhiteSpace(incoming.ExternalId))
+            {
+                current.ExternalId = incoming.ExternalId;
+            }
+
+            current.IsActive = incoming.IsActive;
+            current.LastSeenAt = incoming.LastSeenAt;
+            return true;
+        }
+
+        // Серверний запис новіший або такий самий — доповнюємо лише порожні необов'язкові поля
+        if (string.IsNullOrWhiteSpace(current.ExternalId) && !string.IsNullOrWhiteSpace(incoming.ExternalId))
+        {
+            current.ExternalId = incoming.ExternalId;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(current.FullAddress) && !string.IsNullOrWhiteSpace(incoming.FullAddress))
+        {
+            current.FullAddress = incoming.FullAddress;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(current.Schedule) && !string.IsNullOrWhiteSpace(incoming.Schedule))
+        {
+            current.Schedule = incoming.Schedule;
+            changed = true;
+        }
+
+        if (string.IsNullOrWhiteSpace(current.Experience) && !string.IsNullOrWhiteSpace(incoming.Experience))
+        {
+            current.Experience = incoming.Experience;
+            changed = true;
+        }
+
+        if (!current.ExperienceMonths.HasValue && incoming.ExperienceMonths.HasValue)
+        {
+            current.ExperienceMonths = incoming.ExperienceMonths;
+            changed = true;
+        }
+
+        if ((current.SkillsJson == "[]" || string.IsNullOrWhiteSpace(current.SkillsJson))
+            && !string.IsNullOrWhiteSpace(incoming.SkillsJson) && incoming.SkillsJson != "[]")
+        {
+            current.SkillsJson = incoming.SkillsJson;
+            changed = true;
+        }
+
+        if (!current.SalaryMin.HasValue && !current.SalaryMax.HasValue
+            && (incoming.SalaryMin.HasValue || incoming.SalaryMax.HasValue))
+        {
+            current.SalaryMin = incoming.SalaryMin;
+            current.SalaryMax = incoming.SalaryMax;
+            if (!string.IsNullOrWhiteSpace(incoming.Currency))
+            {
+                current.Currency = incoming.Currency;
+            }
+            changed = true;
+        }
+
+        return changed;
+    }
 }
