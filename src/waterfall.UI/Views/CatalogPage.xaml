@@ -147,57 +147,109 @@
                        VerticalOptions="Center" />
 
                 <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
-                    <Button Text="{Binding DouButtonText}"
-                            Command="{Binding SelectDouFilterCommand}"
-                            Style="{StaticResource CardAction}"
-                            FontSize="11"
-                            Padding="10,4"
-                            MinimumHeightRequest="32">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding IsDouPanelVisible}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                    <!-- DOU: галочка вмикає/вимикає парсинг, кнопка відкриває налаштування сайту -->
+                    <Border StrokeShape="RoundRectangle 8" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg2}" Padding="4,1">
+                        <Border.Triggers>
+                            <DataTrigger TargetType="Border" Binding="{Binding IsDouParseEnabled}" Value="True">
+                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
                             </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
+                        </Border.Triggers>
+                        <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                            <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding IsDouParseEnabled}" SemanticProperties.Hint="Парсити DOU" />
+                            <Button Text="{Binding DouButtonText}"
+                                    Command="{Binding SelectDouFilterCommand}"
+                                    Style="{StaticResource CardAction}"
+                                    FontSize="11"
+                                    Padding="8,4"
+                                    MinimumHeightRequest="30">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button" Binding="{Binding IsDouPanelVisible}" Value="True">
+                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+                        </HorizontalStackLayout>
+                    </Border>
 
-                    <Button Text="{Binding WorkUaButtonText}"
-                            Command="{Binding SelectWorkUaFilterCommand}"
-                            Style="{StaticResource CardAction}"
-                            FontSize="11"
-                            Padding="10,4"
-                            MinimumHeightRequest="32">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding IsWorkUaPanelVisible}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                    <!-- Work.ua -->
+                    <Border StrokeShape="RoundRectangle 8" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg2}" Padding="4,1">
+                        <Border.Triggers>
+                            <DataTrigger TargetType="Border" Binding="{Binding IsWorkUaParseEnabled}" Value="True">
+                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
                             </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
+                        </Border.Triggers>
+                        <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                            <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding IsWorkUaParseEnabled}" SemanticProperties.Hint="Парсити Work.ua" />
+                            <Button Text="{Binding WorkUaButtonText}"
+                                    Command="{Binding SelectWorkUaFilterCommand}"
+                                    Style="{StaticResource CardAction}"
+                                    FontSize="11"
+                                    Padding="8,4"
+                                    MinimumHeightRequest="30">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button" Binding="{Binding IsWorkUaPanelVisible}" Value="True">
+                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+                        </HorizontalStackLayout>
+                    </Border>
 
-                    <Button Text="{Binding DjinniButtonText}"
-                            Command="{Binding SelectDjinniFilterCommand}"
-                            Style="{StaticResource CardAction}"
-                            FontSize="11"
-                            Padding="10,4"
-                            MinimumHeightRequest="32">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding IsDjinniPanelVisible}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                    <!-- Djinni -->
+                    <Border StrokeShape="RoundRectangle 8" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg2}" Padding="4,1">
+                        <Border.Triggers>
+                            <DataTrigger TargetType="Border" Binding="{Binding IsDjinniParseEnabled}" Value="True">
+                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
                             </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
+                        </Border.Triggers>
+                        <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                            <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding IsDjinniParseEnabled}" SemanticProperties.Hint="Парсити Djinni" />
+                            <Button Text="{Binding DjinniButtonText}"
+                                    Command="{Binding SelectDjinniFilterCommand}"
+                                    Style="{StaticResource CardAction}"
+                                    FontSize="11"
+                                    Padding="8,4"
+                                    MinimumHeightRequest="30">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button" Binding="{Binding IsDjinniPanelVisible}" Value="True">
+                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+                        </HorizontalStackLayout>
+                    </Border>
 
-                    <Button Text="{Binding RobotaUaButtonText}"
-                            Command="{Binding SelectRobotaUaFilterCommand}"
-                            Style="{StaticResource CardAction}"
-                            FontSize="11"
-                            Padding="10,4"
-                            MinimumHeightRequest="32">
-                        <Button.Triggers>
-                            <DataTrigger TargetType="Button" Binding="{Binding IsRobotaUaPanelVisible}" Value="True">
-                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                    <!-- Robota.ua -->
+                    <Border StrokeShape="RoundRectangle 8" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg2}" Padding="4,1">
+                        <Border.Triggers>
+                            <DataTrigger TargetType="Border" Binding="{Binding IsRobotaUaParseEnabled}" Value="True">
+                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
                             </DataTrigger>
-                        </Button.Triggers>
-                    </Button>
+                        </Border.Triggers>
+                        <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                            <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding IsRobotaUaParseEnabled}" SemanticProperties.Hint="Парсити Robota.ua" />
+                            <Button Text="{Binding RobotaUaButtonText}"
+                                    Command="{Binding SelectRobotaUaFilterCommand}"
+                                    Style="{StaticResource CardAction}"
+                                    FontSize="11"
+                                    Padding="8,4"
+                                    MinimumHeightRequest="30">
+                                <Button.Triggers>
+                                    <DataTrigger TargetType="Button" Binding="{Binding IsRobotaUaPanelVisible}" Value="True">
+                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                    </DataTrigger>
+                                </Button.Triggers>
+                            </Button>
+                        </HorizontalStackLayout>
+                    </Border>
+
+                    <Button Text="Усі 4"
+                            Command="{Binding SelectAllParseSitesCommand}"
+                            Style="{StaticResource CardAction}"
+                            FontSize="10"
+                            Padding="8,4"
+                            MinimumHeightRequest="30"
+                            SemanticProperties.Hint="Увімкнути всі 4 сайти для одночасного парсингу" />
                 </HorizontalStackLayout>
 
                 <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
@@ -315,67 +367,124 @@
                     <!-- ЧАСТИНА 1: ЗАПИТ НА САЙТ (специфічні фільтри DOU / Work.ua / Djinni)      -->
                     <!-- ========================================================================= -->
                     <VerticalStackLayout Spacing="6">
-                            <!-- Компактна шапка запиту на сайт + перемикач платформ + кнопка «Знайти 🔍» -->
+                            <!-- Компактна шапка запиту на сайт + перемикач платформ з галочками + кнопка «Спарсити» -->
                             <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
                                 <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
-                                    <Label Text="🌐 1. Запит на сайт (додає вакансії):"
+                                    <Label Text="🌐 1. Багатосайтовий парсинг:"
                                            FontFamily="OpenSansSemibold"
                                            FontSize="12"
                                            TextColor="{StaticResource Primary}"
                                            VerticalOptions="Center" />
-                                    <Button Text="🔵 DOU"
-                                            Command="{Binding SelectDouFilterCommand}"
-                                            Style="{StaticResource CardAction}"
-                                            FontSize="11"
-                                            Padding="10,4"
-                                            MinimumHeightRequest="30">
-                                        <Button.Triggers>
-                                            <DataTrigger TargetType="Button" Binding="{Binding IsDouSelected}" Value="True">
-                                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+
+                                    <Border StrokeShape="RoundRectangle 8" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg2}" Padding="4,1">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding IsDouParseEnabled}" Value="True">
+                                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
                                             </DataTrigger>
-                                        </Button.Triggers>
-                                    </Button>
-                                    <Button Text="🟠 Work.ua"
-                                            Command="{Binding SelectWorkUaFilterCommand}"
-                                            Style="{StaticResource CardAction}"
-                                            FontSize="11"
-                                            Padding="10,4"
-                                            MinimumHeightRequest="30">
-                                        <Button.Triggers>
-                                            <DataTrigger TargetType="Button" Binding="{Binding IsWorkUaSelected}" Value="True">
-                                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                        </Border.Triggers>
+                                        <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                                            <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding IsDouParseEnabled}" />
+                                            <Button Text="🔵 DOU"
+                                                    Command="{Binding SelectDouFilterCommand}"
+                                                    Style="{StaticResource CardAction}"
+                                                    FontSize="11"
+                                                    Padding="8,3"
+                                                    MinimumHeightRequest="28">
+                                                <Button.Triggers>
+                                                    <DataTrigger TargetType="Button" Binding="{Binding IsDouSelected}" Value="True">
+                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                    </DataTrigger>
+                                                </Button.Triggers>
+                                            </Button>
+                                        </HorizontalStackLayout>
+                                    </Border>
+
+                                    <Border StrokeShape="RoundRectangle 8" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg2}" Padding="4,1">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding IsWorkUaParseEnabled}" Value="True">
+                                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
                                             </DataTrigger>
-                                        </Button.Triggers>
-                                    </Button>
-                                    <Button Text="🟣 Djinni"
-                                            Command="{Binding SelectDjinniFilterCommand}"
-                                            Style="{StaticResource CardAction}"
-                                            FontSize="11"
-                                            Padding="10,4"
-                                            MinimumHeightRequest="30">
-                                        <Button.Triggers>
-                                            <DataTrigger TargetType="Button" Binding="{Binding IsDjinniSelected}" Value="True">
-                                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                        </Border.Triggers>
+                                        <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                                            <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding IsWorkUaParseEnabled}" />
+                                            <Button Text="🟠 Work.ua"
+                                                    Command="{Binding SelectWorkUaFilterCommand}"
+                                                    Style="{StaticResource CardAction}"
+                                                    FontSize="11"
+                                                    Padding="8,3"
+                                                    MinimumHeightRequest="28">
+                                                <Button.Triggers>
+                                                    <DataTrigger TargetType="Button" Binding="{Binding IsWorkUaSelected}" Value="True">
+                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                    </DataTrigger>
+                                                </Button.Triggers>
+                                            </Button>
+                                        </HorizontalStackLayout>
+                                    </Border>
+
+                                    <Border StrokeShape="RoundRectangle 8" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg2}" Padding="4,1">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding IsDjinniParseEnabled}" Value="True">
+                                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
                                             </DataTrigger>
-                                        </Button.Triggers>
-                                    </Button>
-                                    <Button Text="🔴 Robota.ua"
-                                            Command="{Binding SelectRobotaUaFilterCommand}"
-                                            Style="{StaticResource CardAction}"
-                                            FontSize="11"
-                                            Padding="10,4"
-                                            MinimumHeightRequest="30">
-                                        <Button.Triggers>
-                                            <DataTrigger TargetType="Button" Binding="{Binding IsRobotaUaSelected}" Value="True">
-                                                <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                        </Border.Triggers>
+                                        <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                                            <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding IsDjinniParseEnabled}" />
+                                            <Button Text="🟣 Djinni"
+                                                    Command="{Binding SelectDjinniFilterCommand}"
+                                                    Style="{StaticResource CardAction}"
+                                                    FontSize="11"
+                                                    Padding="8,3"
+                                                    MinimumHeightRequest="28">
+                                                <Button.Triggers>
+                                                    <DataTrigger TargetType="Button" Binding="{Binding IsDjinniSelected}" Value="True">
+                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                    </DataTrigger>
+                                                </Button.Triggers>
+                                            </Button>
+                                        </HorizontalStackLayout>
+                                    </Border>
+
+                                    <Border StrokeShape="RoundRectangle 8" Stroke="{StaticResource Secondary}" BackgroundColor="{StaticResource DarkBg2}" Padding="4,1">
+                                        <Border.Triggers>
+                                            <DataTrigger TargetType="Border" Binding="{Binding IsRobotaUaParseEnabled}" Value="True">
+                                                <Setter Property="Stroke" Value="{StaticResource Accent}" />
                                             </DataTrigger>
-                                        </Button.Triggers>
-                                    </Button>
+                                        </Border.Triggers>
+                                        <HorizontalStackLayout Spacing="2" VerticalOptions="Center">
+                                            <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding IsRobotaUaParseEnabled}" />
+                                            <Button Text="🔴 Robota.ua"
+                                                    Command="{Binding SelectRobotaUaFilterCommand}"
+                                                    Style="{StaticResource CardAction}"
+                                                    FontSize="11"
+                                                    Padding="8,3"
+                                                    MinimumHeightRequest="28">
+                                                <Button.Triggers>
+                                                    <DataTrigger TargetType="Button" Binding="{Binding IsRobotaUaSelected}" Value="True">
+                                                        <Setter Property="BackgroundColor" Value="{StaticResource Primary}" />
+                                                    </DataTrigger>
+                                                </Button.Triggers>
+                                            </Button>
+                                        </HorizontalStackLayout>
+                                    </Border>
+
+                                    <Button Text="Усі"
+                                            Command="{Binding SelectAllParseSitesCommand}"
+                                            Style="{StaticResource CardAction}"
+                                            FontSize="10"
+                                            Padding="6,3"
+                                            MinimumHeightRequest="28" />
+                                    <Button Text="Жодного"
+                                            Command="{Binding ClearParseSitesCommand}"
+                                            Style="{StaticResource CardAction}"
+                                            FontSize="10"
+                                            Padding="6,3"
+                                            MinimumHeightRequest="28" />
                                 </HorizontalStackLayout>
 
                                 <!-- Кількість сторінок для обраної платформи -->
                                 <HorizontalStackLayout Grid.Column="1" Spacing="6" VerticalOptions="Center">
-                                    <!-- Стартова сторінка: щоб дочитати наступні сторінки без повторного обходу першої (DOU — одна стрічка) -->
+                                    <!-- Стартова сторінка: індивідуальна для кожного сайту зі сторінками (DOU — одна стрічка) -->
                                     <Label Text="📄 З стор.:" FontSize="11" TextColor="{StaticResource Accent}" VerticalOptions="Center">
                                         <Label.Triggers>
                                             <DataTrigger TargetType="Label" Binding="{Binding IsDouSelected}" Value="True">
@@ -412,7 +521,7 @@
                                 </HorizontalStackLayout>
 
                                 <Button Grid.Column="2"
-                                        Text="Спарсити з сайту 🌐"
+                                        Text="{Binding FetchButtonText}"
                                         Command="{Binding FetchFromSitesCommand}"
                                         Style="{StaticResource CardActionPrimary}"
                                         FontSize="12"
@@ -420,6 +529,12 @@
                                         MinimumHeightRequest="32"
                                         VerticalOptions="Center" />
                             </Grid>
+
+                            <!-- Підсумок обраних для парсингу сайтів (один або кілька одночасно) -->
+                            <Label Text="{Binding SelectedParseSitesSummary}"
+                                   FontSize="11"
+                                   TextColor="{StaticResource Accent}"
+                                   LineBreakMode="WordWrap" />
 
                             <!-- Ключові слова для пошуку на будь-якому сайті -->
                             <Border Style="{StaticResource CompactFieldBorder}">
@@ -528,39 +643,45 @@
                                 </Grid>
                             </VerticalStackLayout>
 
-                            <!-- Параметри сайту Robota.ua (1 компактний рядок) -->
-                            <Grid IsVisible="{Binding IsRobotaUaSelected}" ColumnDefinitions="*,*,*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
+                            <!-- Параметри сайту Robota.ua -->
+                            <Grid IsVisible="{Binding IsRobotaUaSelected}" ColumnDefinitions="*,*,*,*,*" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="6" RowSpacing="4">
                                 <VerticalStackLayout Grid.Row="0" Grid.Column="0">
+                                    <Label Text="Ключові слова Robota.ua" Style="{StaticResource CompactFieldLabel}" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Entry Style="{StaticResource CompactEntry}" Text="{Binding RobotaUaSearchQuery}" Placeholder="Напр. QA, Python..." />
+                                    </Border>
+                                </VerticalStackLayout>
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="1">
                                     <Label Text="Місто" Style="{StaticResource CompactFieldLabel}" />
                                     <Border Style="{StaticResource CompactFieldBorder}">
                                         <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding RobotaUaCityOptions}" SelectedItem="{Binding RobotaUaSelectedCity}" />
                                     </Border>
                                 </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Row="0" Grid.Column="1">
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="2">
                                     <Label Text="Тип зайнятості" Style="{StaticResource CompactFieldLabel}" />
                                     <Border Style="{StaticResource CompactFieldBorder}">
                                         <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding RobotaUaEmploymentOptions}" SelectedItem="{Binding RobotaUaSelectedEmployment}" />
                                     </Border>
                                 </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Row="0" Grid.Column="2">
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="3">
                                     <Label Text="Зарплата від" Style="{StaticResource CompactFieldLabel}" />
                                     <Border Style="{StaticResource CompactFieldBorder}">
                                         <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding RobotaUaSalaryOptions}" SelectedItem="{Binding RobotaUaSelectedSalary}" />
                                     </Border>
                                 </VerticalStackLayout>
-                                <VerticalStackLayout Grid.Row="0" Grid.Column="3">
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="4">
                                     <Label Text="Досвід роботи" Style="{StaticResource CompactFieldLabel}" />
                                     <Border Style="{StaticResource CompactFieldBorder}">
                                         <Picker Style="{StaticResource CompactPicker}" ItemsSource="{Binding RobotaUaExperienceOptions}" SelectedItem="{Binding RobotaUaSelectedExperience}" />
                                     </Border>
                                 </VerticalStackLayout>
                                 <!-- «Зарплата від» на Robota.ua за замовчуванням приховує вакансії без зарплати -->
-                                <HorizontalStackLayout Grid.Row="1" Grid.ColumnSpan="4" Spacing="6">
+                                <HorizontalStackLayout Grid.Row="1" Grid.ColumnSpan="5" Spacing="6">
                                     <CheckBox Style="{StaticResource CompactCheckBox}" IsChecked="{Binding RobotaUaIncludeNoSalary}" />
                                     <Label Text="Включно без ЗП (із «Зарплата від» сайт інакше їх приховує)" FontSize="12" TextColor="{StaticResource White}" VerticalOptions="Center" />
                                 </HorizontalStackLayout>
                                 <!-- У списку Robota.ua лише назви: кожну вакансію сервер відкриває окремо -->
-                                <Label Grid.Row="2" Grid.ColumnSpan="4" Text="⏱ У списку Robota.ua лише назви, тож кожну вакансію відкриваємо окремо: близько 1–2 хв на сторінку списку." FontSize="11" TextColor="{StaticResource TextSecondary}" LineBreakMode="WordWrap" />
+                                <Label Grid.Row="2" Grid.ColumnSpan="5" Text="⏱ У списку Robota.ua лише назви, тож кожну вакансію відкриваємо окремо: близько 1–2 хв на сторінку списку." FontSize="11" TextColor="{StaticResource TextSecondary}" LineBreakMode="WordWrap" />
                             </Grid>
 
                             <!-- Параметри сайту Djinni (2 компактні рядки) -->
@@ -1039,11 +1160,11 @@
                             <Label Text="🌐"
                                    FontSize="36"
                                    HorizontalOptions="Center" />
-                            <Label Text="Оберіть сайт і фільтри, потім натисніть «Спарсити з сайту»"
+                            <Label Text="Оберіть один або кілька сайтів і фільтри, потім натисніть «Спарсити»"
                                    HorizontalOptions="Center"
                                    HorizontalTextAlignment="Center"
                                    Style="{StaticResource CardTitle}" />
-                            <Label Text="Вакансії з'являться тут після парсингу обраного сайту: DOU, Djinni, Work.ua чи Robota.ua. Пошук потребує входу в обліковий запис."
+                            <Label Text="Позначте галочками потрібні платформи (DOU, Djinni, Work.ua, Robota.ua), налаштуйте фільтри кожної та спарсіть їх одночасно. Повний список збереженої бази доступний у вкладці «База вакансій»."
                                    HorizontalOptions="Center"
                                    HorizontalTextAlignment="Center"
                                    Style="{StaticResource MutedLabel}" />
