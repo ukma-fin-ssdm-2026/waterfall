@@ -27,9 +27,17 @@ public interface ISiteSearchService
 
     /// <summary>Стан пошуку; знайдені вакансії — коли він завершився. null — такого пошуку цього користувача немає.</summary>
     Task<SiteSearchStatusDto?> GetAsync(Guid id, Guid userId, CancellationToken ct = default);
+
+    /// <summary>Запускає одночасний пошук на кількох сайтах (1–4) з індивідуальними фільтрами кожного сайту.</summary>
+    MultiSiteSearchStart StartBatch(MultiSiteSearchRequest request, Guid userId);
+
+    /// <summary>Агрегований стан і прогрес багатосайтового пошуку (плюс об'єднані вакансії після завершення).</summary>
+    Task<MultiSiteSearchStatusDto?> GetBatchAsync(Guid id, Guid userId, CancellationToken ct = default);
 }
 
 public sealed record SiteSearchStart(SiteSearchStatusDto? Status, string? Rejection);
+
+public sealed record MultiSiteSearchStart(MultiSiteSearchStatusDto? Status, string? Rejection);
 
 /// <summary>
 /// Пошук на запит (issue #62): користувач обрав сайт і фільтри — сервер читає сторінки списку з цими фільтрами
@@ -42,7 +50,6 @@ public sealed record SiteSearchStart(SiteSearchStatusDto? Status, string? Reject
 public sealed class SiteSearchService : ISiteSearchService
 {
     public static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(3);
-    public const int SearchesPerHour = 20;
 
     // Скільки тримаємо в пам'яті завершений пошук, щоб клієнт встиг забрати результат
     private static readonly TimeSpan JobLifetime = TimeSpan.FromMinutes(30);
@@ -56,9 +63,10 @@ public sealed class SiteSearchService : ISiteSearchService
     private readonly CancellationToken _stopping;
 
     private readonly ConcurrentDictionary<Guid, SearchJob> _jobs = new();
+    private readonly ConcurrentDictionary<Guid, BatchSearchJob> _batchJobs = new();
     private readonly ConcurrentDictionary<string, (DateTimeOffset At, IReadOnlyList<string> Ids)> _cache = new();
-    private readonly ConcurrentDictionary<Guid, List<DateTimeOffset>> _userSearches = new();
     private readonly ConcurrentDictionary<JobSource, SemaphoreSlim> _siteGates = new();
+    private readonly SemaphoreSlim _dbCacheLock = new(1, 1);
 
     public SiteSearchService(
         IServiceScopeFactory scopeFactory,
@@ -93,29 +101,68 @@ public sealed class SiteSearchService : ISiteSearchService
             return new SiteSearchStart(fromCache.Snapshot(), null);
         }
 
-        if (_jobs.Values.Any(job => job.UserId == userId && job.IsActive))
+        if (HasActiveJob(userId))
         {
             return new SiteSearchStart(null, "Попередній пошук ще триває: дочекайтеся його завершення.");
         }
 
-        List<DateTimeOffset> recent = _userSearches.GetOrAdd(userId, _ => []);
-        lock (recent)
-        {
-            recent.RemoveAll(at => now - at > TimeSpan.FromHours(1));
-            if (recent.Count >= SearchesPerHour)
-            {
-                return new SiteSearchStart(null, $"Не більше {SearchesPerHour} пошуків на сайтах на годину. Спробуйте пізніше або скористайтеся фільтрами каталогу.");
-            }
-
-            recent.Add(now);
-        }
-
-        SearchJob job = new(userId, source, key, request.Pages, now);
+        SearchJob job = new(userId, source, key, PagesFor(request), now);
         _jobs[job.Id] = job;
         // Скасування при зупинці сервера RunAsync обробляє сам через _stopping: так завдання встигне позначити пошук як невдалий
         _ = Task.Run(() => RunAsync(job, request), CancellationToken.None);
         return new SiteSearchStart(job.Snapshot(), null);
     }
+
+    public MultiSiteSearchStart StartBatch(MultiSiteSearchRequest request, Guid userId)
+    {
+        DateTimeOffset now = _time.GetUtcNow();
+        ForgetOldJobs(now);
+
+        List<(SiteSearchRequest Request, SearchJob Job, bool Cached)> items = [];
+        foreach (SiteSearchRequest sub in request.Requests)
+        {
+            JobSource source = sub.Source!.Value;
+            string key = CacheKey(sub);
+            if (TryGetCachedIds(key, now, out IReadOnlyList<string>? cachedIds))
+            {
+                SearchJob cachedJob = new(userId, source, key, PagesFor(sub), now) { FromCache = true };
+                cachedJob.Complete(cachedIds, cachedIds.Count);
+                items.Add((sub, cachedJob, true));
+            }
+            else
+            {
+                SearchJob liveJob = new(userId, source, key, PagesFor(sub), now);
+                items.Add((sub, liveJob, false));
+            }
+        }
+
+        List<(SiteSearchRequest Request, SearchJob Job)> uncached = items
+            .Where(item => !item.Cached)
+            .Select(item => (item.Request, item.Job))
+            .ToList();
+
+        if (uncached.Count > 0 && HasActiveJob(userId))
+        {
+            return new MultiSiteSearchStart(null, "Попередній пошук ще триває: дочекайтеся його завершення.");
+        }
+
+        BatchSearchJob batch = new(userId, items.Select(item => item.Job).ToList(), now);
+        _batchJobs[batch.Id] = batch;
+
+        if (uncached.Count > 0)
+        {
+            _ = Task.Run(() => RunBatchAsync(uncached), CancellationToken.None);
+        }
+
+        return new MultiSiteSearchStart(batch.Snapshot(), null);
+    }
+
+    private bool HasActiveJob(Guid userId) =>
+        _jobs.Values.Any(job => job.UserId == userId && job.IsActive)
+        || _batchJobs.Values.Any(batch => batch.UserId == userId && batch.IsActive);
+
+    private Task RunBatchAsync(IReadOnlyList<(SiteSearchRequest Request, SearchJob Job)> uncached) =>
+        Task.WhenAll(uncached.Select(pair => RunAsync(pair.Job, pair.Request)));
 
     private bool TryGetCachedIds(string key, DateTimeOffset now, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IReadOnlyList<string>? ids)
     {
@@ -163,6 +210,7 @@ public sealed class SiteSearchService : ISiteSearchService
         DateTimeOffset cachedAt,
         CancellationToken ct)
     {
+        await _dbCacheLock.WaitAsync(ct);
         try
         {
             WaterfallDbContext? db = services.GetService<WaterfallDbContext>();
@@ -197,6 +245,10 @@ public sealed class SiteSearchService : ISiteSearchService
         {
             _logger.LogWarning(ex, "Не вдалося зберегти кеш пошуку на сайтах у БД.");
         }
+        finally
+        {
+            _dbCacheLock.Release();
+        }
     }
 
     public async Task<SiteSearchStatusDto?> GetAsync(Guid id, Guid userId, CancellationToken ct = default)
@@ -213,6 +265,64 @@ public sealed class SiteSearchService : ISiteSearchService
         }
 
         return status with { Vacancies = await LoadVacanciesAsync(job.Source, job.ExternalIds, userId, ct) };
+    }
+
+    public async Task<MultiSiteSearchStatusDto?> GetBatchAsync(Guid id, Guid userId, CancellationToken ct = default)
+    {
+        if (!_batchJobs.TryGetValue(id, out BatchSearchJob? batch) || batch.UserId != userId)
+        {
+            return null;
+        }
+
+        MultiSiteSearchStatusDto status = batch.Snapshot();
+        if (status.State != SiteSearchStates.Completed)
+        {
+            return status;
+        }
+
+        return status with { Vacancies = await LoadBatchVacanciesAsync(batch.Jobs, userId, ct) };
+    }
+
+    private async Task<IReadOnlyList<VacancyDto>> LoadBatchVacanciesAsync(IReadOnlyList<SearchJob> jobs, Guid userId, CancellationToken ct)
+    {
+        await using AsyncServiceScope scope = _scopeFactory.CreateAsyncScope();
+        IVacancyRepository vacancyRepo = scope.ServiceProvider.GetRequiredService<IVacancyRepository>();
+        List<VacancyDB> allFound = [];
+        HashSet<Guid> seenIds = [];
+
+        foreach (SearchJob job in jobs)
+        {
+            if (job.Snapshot().State != SiteSearchStates.Completed || job.ExternalIds.Count == 0)
+            {
+                continue;
+            }
+
+            IReadOnlyList<VacancyDB> found = await vacancyRepo.GetBySourceIdsAsync(job.Source.ToString(), job.ExternalIds, ct);
+            foreach (VacancyDB vacancy in found)
+            {
+                if (seenIds.Add(vacancy.Id))
+                {
+                    allFound.Add(vacancy);
+                }
+            }
+        }
+
+        if (allFound.Count == 0)
+        {
+            return [];
+        }
+
+        List<Guid> ids = allFound.Select(v => v.Id).ToList();
+        HashSet<Guid> saved = await scope.ServiceProvider.GetRequiredService<ISavedVacancyRepository>()
+            .GetSavedVacancyIdsAsync(ids, userId, ct);
+        HashSet<Guid> viewed = await scope.ServiceProvider.GetRequiredService<IVacancyViewRepository>()
+            .GetViewedVacancyIdsAsync(ids, userId, ct);
+
+        return allFound
+            .OrderByDescending(v => v.PublishedAt)
+            .ThenByDescending(v => v.LastSeenAt)
+            .Select(v => VacancyService.MapToDto(v, saved.Contains(v.Id)) with { IsViewed = viewed.Contains(v.Id) })
+            .ToList();
     }
 
     /// <summary>
@@ -481,6 +591,104 @@ public sealed class SiteSearchService : ISiteSearchService
                 _jobs.TryRemove(id, out _);
             }
         }
+
+        foreach ((Guid id, BatchSearchJob batch) in _batchJobs)
+        {
+            if (!batch.IsActive && now - batch.CreatedAt > JobLifetime)
+            {
+                _batchJobs.TryRemove(id, out _);
+            }
+        }
+    }
+
+    /// <summary>Пакетний пошук на кількох сайтах одночасно: агрегує стан і прогрес усіх підзавдань.</summary>
+    private sealed class BatchSearchJob(Guid userId, IReadOnlyList<SearchJob> jobs, DateTimeOffset createdAt)
+    {
+        public Guid Id { get; } = Guid.NewGuid();
+        public Guid UserId { get; } = userId;
+        public IReadOnlyList<SearchJob> Jobs { get; } = jobs;
+        public DateTimeOffset CreatedAt { get; } = createdAt;
+
+        public bool IsActive => Jobs.Any(job => job.IsActive);
+
+        public MultiSiteSearchStatusDto Snapshot()
+        {
+            List<SiteSearchItemStatusDto> siteSnapshots = Jobs
+                .Select(job =>
+                {
+                    SiteSearchStatusDto s = job.Snapshot();
+                    return new SiteSearchItemStatusDto
+                    {
+                        Source = job.Source,
+                        State = s.State,
+                        PagesDone = s.PagesDone,
+                        PagesTotal = s.PagesTotal,
+                        Found = s.Found,
+                        FromCache = s.FromCache,
+                        Message = s.Message
+                    };
+                })
+                .ToList();
+
+            int pagesDone = siteSnapshots.Sum(s => s.PagesDone);
+            int pagesTotal = siteSnapshots.Sum(s => s.PagesTotal);
+            int found = siteSnapshots.Sum(s => s.Found);
+            bool allFromCache = siteSnapshots.Count > 0 && siteSnapshots.All(s => s.FromCache);
+
+            string state;
+            string? message = null;
+            if (siteSnapshots.Any(s => s.State == SiteSearchStates.Running))
+            {
+                state = SiteSearchStates.Running;
+            }
+            else if (siteSnapshots.Any(s => s.State == SiteSearchStates.Queued))
+            {
+                state = siteSnapshots.Any(s => s.State is SiteSearchStates.Completed or SiteSearchStates.Failed)
+                    ? SiteSearchStates.Running
+                    : SiteSearchStates.Queued;
+            }
+            else if (siteSnapshots.All(s => s.State == SiteSearchStates.Failed))
+            {
+                state = SiteSearchStates.Failed;
+                message = string.Join(" ", siteSnapshots
+                    .Where(s => !string.IsNullOrWhiteSpace(s.Message))
+                    .Select(s => $"{SourceDisplayName(s.Source)}: {s.Message}"));
+            }
+            else
+            {
+                state = SiteSearchStates.Completed;
+                List<SiteSearchItemStatusDto> failed = siteSnapshots.Where(s => s.State == SiteSearchStates.Failed).ToList();
+                if (failed.Count > 0)
+                {
+                    message = "Частина сайтів не відповіла: " + string.Join(", ", failed.Select(s => SourceDisplayName(s.Source))) + ".";
+                }
+                else if (found == 0)
+                {
+                    message = "За заданими фільтрами на обраних сайтах нічого не знайдено.";
+                }
+            }
+
+            return new MultiSiteSearchStatusDto
+            {
+                Id = Id,
+                State = state,
+                PagesDone = pagesDone,
+                PagesTotal = pagesTotal,
+                Found = found,
+                AllFromCache = allFromCache,
+                Message = message,
+                Sites = siteSnapshots
+            };
+        }
+
+        private static string SourceDisplayName(JobSource source) => source switch
+        {
+            JobSource.Djinni => "Djinni",
+            JobSource.WorkUa => "Work.ua",
+            JobSource.RobotaUa => "Robota.ua",
+            JobSource.Dou => "DOU",
+            _ => source.ToString()
+        };
     }
 
     /// <summary>Один пошук: стан змінює фонове завдання, читає контролер, тож усе під блокуванням.</summary>
