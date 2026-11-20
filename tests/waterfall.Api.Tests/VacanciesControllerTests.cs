@@ -222,6 +222,36 @@ public sealed class VacanciesControllerTests
         Assert.IsType<UnauthorizedObjectResult>(result.Result);
     }
 
+    [Fact]
+    public async Task Sync_ValidRequest_ReturnsOkWithSyncResponse()
+    {
+        VacancySyncRequestDto req = new()
+        {
+            ClientVacancies = [new VacancySyncItemDto { Title = "Offline Dev", Company = "LocalCo", Source = JobSource.Dou }],
+            FullSync = true
+        };
+        _vacancyService.NextSyncResponse = new VacancySyncResponseDto
+        {
+            ReceivedFromClient = 1,
+            CreatedOnServer = 1,
+            TotalServerVacancies = 5
+        };
+
+        ActionResult<VacancySyncResponseDto> result = await _controller.Sync(req, CancellationToken.None);
+
+        OkObjectResult ok = Assert.IsType<OkObjectResult>(result.Result);
+        VacancySyncResponseDto payload = Assert.IsType<VacancySyncResponseDto>(ok.Value);
+        Assert.Equal((1, 1, 5), (payload.ReceivedFromClient, payload.CreatedOnServer, payload.TotalServerVacancies));
+        Assert.Single(_vacancyService.SyncCalls);
+    }
+
+    [Fact]
+    public async Task Sync_NullRequest_Returns400()
+    {
+        ActionResult<VacancySyncResponseDto> result = await _controller.Sync(null, CancellationToken.None);
+        Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
     private sealed class FakeRecommendationService : IRecommendationService
     {
         public RecommendationsResultDto Result { get; set; } = new();
