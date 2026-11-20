@@ -373,4 +373,138 @@ public sealed class DatabaseViewModelTests : IDisposable
             }
         }
     }
+
+    [Fact]
+    public async Task TogglesWordListsMessagesDistanceSortAndDispose_WorkAsExpected()
+    {
+        List<VacancyDto> items = SampleFourSiteVacancies();
+        items[0] = items[0] with { Currency = "EUR", SalaryMin = 2000m, SalaryMax = 3000m, FullAddress = "Київ, Хрещатик 1" };
+        items[1] = items[1] with { Location = "Віддалено", FullAddress = null };
+        SetupPagedServer(items, pageSize: 10);
+
+        StubDistanceService distanceService = new() { UserAddress = "Київ, Політехнічна 1" };
+        using DatabaseViewModel vm = new(_gateway, _messenger, _time, distanceService: distanceService, localStore: _localStore);
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+
+        // Toggle-команди панелі й джерел
+        vm.ToggleFilterPanelCommand.Execute(null);
+        Assert.True(vm.IsFilterPanelVisible);
+
+        vm.ToggleDouFilterCommand.Execute(null);
+        Assert.False(vm.IncludeDou);
+        vm.ToggleWorkUaFilterCommand.Execute(null);
+        vm.ToggleDjinniFilterCommand.Execute(null);
+        vm.ToggleRobotaUaFilterCommand.Execute(null);
+        Assert.Equal(0, vm.FilteredCount);
+
+        vm.SelectAllSourcesCommand.Execute(null);
+        Assert.Equal(4, vm.FilteredCount);
+
+        // Вайт-лист і бан-лист команди
+        vm.NewWhiteListWord = "Senior, ML";
+        vm.AddWhiteListWordCommand.Execute(null);
+        Assert.True(vm.HasWhiteListWords);
+        vm.ToggleWhiteListMatchAllCommand.Execute(null);
+        Assert.Equal(0, vm.FilteredCount);
+        vm.RemoveWhiteListWordCommand.Execute("ML");
+        Assert.Equal(1, vm.FilteredCount);
+        vm.ClearWhiteListWordsCommand.Execute(null);
+        Assert.False(vm.HasWhiteListWords);
+
+        vm.NewBanListWord = "QA";
+        vm.AddBanListWordCommand.Execute(null);
+        Assert.Equal(3, vm.FilteredCount);
+        vm.RemoveBanListWordCommand.Execute("QA");
+        Assert.Equal(4, vm.FilteredCount);
+        vm.NewBanListWord = "QA";
+        vm.AddBanListWordCommand.Execute(null);
+        vm.ClearBanListWordsCommand.Execute(null);
+        Assert.False(vm.HasBanListWords);
+
+        // Зарплатні тогли (EUR -> USD/UAH) + верхня межа + без ЗП
+        vm.SelectedSalaryCurrency = "€ EUR";
+        vm.MaxSalaryFilter = "2500";
+        vm.ToggleIncludeNoSalaryCommand.Execute(null);
+        vm.ApplyFiltersCommand.Execute(null);
+        Assert.True(vm.FilteredCount >= 1);
+        vm.ToggleOnlyWithSalaryCommand.Execute(null);
+        vm.ResetFiltersCommand.Execute(null);
+
+        // Повідомлення про збереження/перегляд і перемикачі
+        _messenger.Send(new VacancySaveChangedMessage(items[0].Id, true));
+        vm.ToggleOnlySavedCommand.Execute(null);
+        Assert.Single(vm.Vacancies);
+        vm.ToggleOnlySavedCommand.Execute(null);
+
+        _messenger.Send(new VacancyViewedMessage(items[1].Id));
+        vm.ToggleHideViewedCommand.Execute(null);
+        Assert.DoesNotContain(vm.Vacancies, v => v.Id == items[1].Id);
+        vm.ToggleHideViewedCommand.Execute(null);
+
+        // Сортування (усі гілки)
+        foreach (string sortOption in vm.SortOptions)
+        {
+            vm.SelectedSortOption = sortOption;
+        }
+
+        _messenger.Send(new UserAddressChangedMessage("Київ, Солом'янка"));
+        await Task.Yield();
+
+        // Refresh + Error dismiss
+        await vm.RefreshCommand.ExecuteAsync(null);
+        vm.ErrorMessage = "Тест";
+        vm.DismissErrorCommand.Execute(null);
+        Assert.Null(vm.ErrorMessage);
+    }
+
+    [Fact]
+    public void VacancyFilterEngine_CoversAllSortingAndCurrencyConversions()
+    {
+        VacancyDto eur = SampleFourSiteVacancies()[0] with { Currency = "EUR", SalaryMin = 1000m, SalaryMax = 2000m };
+        VacancyDto usd = SampleFourSiteVacancies()[1] with { Currency = "USD", SalaryMin = 1000m, SalaryMax = 1500m };
+        VacancyDto uah = SampleFourSiteVacancies()[2] with { Currency = "UAH", SalaryMin = 20000m, SalaryMax = 30000m };
+        VacancyDto none = SampleFourSiteVacancies()[3] with { SalaryMin = null, SalaryMax = null };
+
+        Assert.True(VacancyFilterEngine.ConvertSalary(eur, "$ USD") > 0m);
+        Assert.True(VacancyFilterEngine.ConvertSalary(usd, "€ EUR") > 0m);
+        Assert.True(VacancyFilterEngine.ConvertSalary(uah, "₴ ГРН") > 0m);
+        Assert.Equal(0m, VacancyFilterEngine.ConvertSalary(none, "$ USD"));
+        Assert.False(VacancyFilterEngine.MatchesSalary(none, false, "100", "", "$ USD", includeNoSalary: false));
+        Assert.True(VacancyFilterEngine.MatchesSalary(none, false, "100", "", "$ USD", includeNoSalary: true));
+        Assert.False(VacancyFilterEngine.MatchesSalary(usd, false, "", "500", "$ USD", includeNoSalary: false));
+
+        List<VacancyDto> all = [eur, usd, uah, none];
+        string[] sorts =
+        [
+            "За датою (спочатку старі)",
+            "За датою додавання в БД (спочатку нові)",
+            "За зарплатою (від найвищої ↓)",
+            "За зарплатою (від найнижчої ↑)",
+            "За досвідом (від меншого ↑)",
+            "За досвідом (від більшого ↓)",
+            "За відстанню (спочатку ближчі)",
+            "За відстанню (спочатку дальші)",
+            "За назвою посади (А → Я)",
+            "За назвою посади (Я → А)",
+            "За компанією (А → Я)",
+            "За категорією (А → Я)",
+            "За замовчуванням"
+        ];
+
+        foreach (string s in sorts)
+        {
+            List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(all, s, v => v.Id == eur.Id ? 5.0 : null).ToList();
+            Assert.Equal(4, sorted.Count);
+        }
+
+        Assert.False(VacancyFilterEngine.TryAddWords("   ", []));
+    }
+
+    private sealed class StubDistanceService : IDistanceCalculatorService
+    {
+        public string? UserAddress { get; set; }
+
+        public Task<double?> CalculateDistanceKmAsync(string targetAddress, CancellationToken ct = default) =>
+            Task.FromResult<double?>(targetAddress.Contains("Київ", StringComparison.OrdinalIgnoreCase) ? 3.5 : 400.0);
+    }
 }
