@@ -12,6 +12,7 @@ using Waterfall.Client.Extensions;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
+using Waterfall.Client.Models.SiteSearch;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Tests;
@@ -474,6 +475,78 @@ public class HttpGatewayServiceTests
         Assert.True(result);
         Assert.Equal(HttpMethod.Post, _server.Requests[^1].Method);
         Assert.Contains(vacancyId.ToString(), _server.Requests[^1].Body);
+    }
+
+    [Fact]
+    public async Task StartAndGetMultiSiteSearch_PostsToBatchEndpoint_AndParsesSites()
+    {
+        Guid batchId = Guid.NewGuid();
+        _server.Respond(HttpStatusCode.Accepted, $$"""
+            { "id": "{{batchId}}", "state": "running", "pagesDone": 1, "pagesTotal": 3, "found": 10,
+              "sites": [{ "source": "Dou", "state": "completed", "pagesDone": 1, "pagesTotal": 1, "found": 10 }] }
+            """);
+
+        MultiSiteSearchStatusDto started = await _gateway.StartMultiSiteSearchAsync(new MultiSiteSearchRequest
+        {
+            Requests = [new SiteSearchRequest { Source = JobSource.Dou }, new SiteSearchRequest { Source = JobSource.Djinni, Pages = 2 }]
+        });
+
+        Assert.Equal(HttpMethod.Post, _server.Requests[^1].Method);
+        Assert.EndsWith("/api/v1/site-searches/batch", _server.Requests[^1].Uri, StringComparison.Ordinal);
+        Assert.Equal(batchId, started.Id);
+        Assert.Single(started.Sites);
+
+        _server.Respond(HttpStatusCode.OK, $$"""
+            { "id": "{{batchId}}", "state": "completed", "pagesDone": 3, "pagesTotal": 3, "found": 2,
+              "vacancies": [{ "id": "11111111-1111-1111-1111-111111111111", "title": "Dev", "source": "Djinni" }] }
+            """);
+        MultiSiteSearchStatusDto polled = await _gateway.GetMultiSiteSearchAsync(batchId);
+        Assert.EndsWith($"/api/v1/site-searches/batch/{batchId}", _server.Requests[^1].Uri, StringComparison.Ordinal);
+        Assert.Single(polled.Vacancies!);
+    }
+
+    [Fact]
+    public async Task GetVacanciesWithQueryOptions_SerializesAllFiltersInUrl()
+    {
+        _server.Respond(HttpStatusCode.OK, """
+            { "items": [], "totalCount": 0, "page": 2, "pageSize": 50, "totalPages": 1, "hasPreviousPage": true, "hasNextPage": false }
+            """);
+
+        await _gateway.GetVacanciesAsync(new VacancyQueryOptions
+        {
+            Page = 2,
+            PageSize = 50,
+            Search = "C#",
+            CategoryGroup = "Software Development",
+            Source = JobSource.Djinni,
+            OnlyActive = false,
+            MinSalary = 2000,
+            SortBy = "publishedAt",
+            SortOrder = "desc"
+        });
+
+        string uri = _server.Requests[^1].Uri;
+        Assert.Contains("page=2", uri);
+        Assert.Contains("pageSize=50", uri);
+        Assert.Contains("onlyActive=false", uri);
+        Assert.Contains("source=Djinni", uri);
+        Assert.Contains("minSalary=2000", uri);
+    }
+
+    [Fact]
+    public async Task SyncVacancies_CallsCorrectEndpoint()
+    {
+        _server.Respond(HttpStatusCode.OK, """
+            { "serverVacancies": [], "receivedFromClient": 1, "createdOnServer": 1, "updatedOnServer": 0, "totalServerVacancies": 1 }
+            """);
+        VacancySyncResponseDto sync = await _gateway.SyncVacanciesAsync(new VacancySyncRequestDto
+        {
+            ClientVacancies = [new VacancySyncItemDto { Title = "Offline", Source = JobSource.Dou }],
+            FullSync = true
+        });
+        Assert.Equal(HttpMethod.Post, _server.Requests[^1].Method);
+        Assert.EndsWith("/api/v1/vacancies/sync", _server.Requests[^1].Uri, StringComparison.Ordinal);
+        Assert.Equal(1, sync.CreatedOnServer);
     }
 
     /// <summary>
