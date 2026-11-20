@@ -731,7 +731,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
         '429':
-          description: Попередній пошук ще триває або перевищено ліміт пошуків на годину.
+          description: Попередній пошук ще триває.
           content:
             application/json:
               schema:
@@ -760,6 +760,84 @@ paths:
                 $ref: '#/components/schemas/SiteSearchStatusDto'
         '404':
           description: 'Пошуку немає (чужий, застарілий або сервер перезапускався).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/site-searches/batch:
+    post:
+      tags:
+        - SiteSearches
+      summary: Запустити одночасний пошук на кількох сайтах (1–4) з індивідуальними фільтрами для кожного сайту.
+      description: "Запускає паралельний обхід обраних сайтів (Djinni, DOU, Work.ua, Robota.ua).\r\nПрогрес кожного сайту та об'єднаний результат доступні через GET /api/v1/site-searches/batch/{id}."
+      operationId: StartMultiSiteSearch
+      requestBody:
+        description: Перелік запитів (по одному на кожен обраний сайт із власними налаштуваннями).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MultiSiteSearchRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/MultiSiteSearchRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/MultiSiteSearchRequest'
+      responses:
+        '202':
+          description: Пакетний пошук запущено (або всі результати вже готові з кешу).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MultiSiteSearchStatusDto'
+        '400':
+          description: Невалідні фільтри або дублювання сайтів.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Потрібно увійти.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '429':
+          description: Попередній пошук ще триває.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  '/api/v1/site-searches/batch/{id}':
+    get:
+      tags:
+        - SiteSearches
+      summary: 'Стан одночасного пошуку на кількох сайтах: загальний прогрес, прогрес кожного сайту та об''єднані вакансії.'
+      description: 'Повертає загальний прогрес (pagesDone / pagesTotal), стан кожного сайту в масиві sites та об''єднаний список vacancies після завершення.'
+      operationId: GetMultiSiteSearch
+      parameters:
+        - name: id
+          in: path
+          description: Ідентифікатор пакетного пошуку з POST /batch.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Стан пакетного пошуку.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MultiSiteSearchStatusDto'
+        '401':
+          description: Потрібно увійти.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '404':
+          description: Пакетний пошук не знайдено.
           content:
             application/json:
               schema:
@@ -1073,6 +1151,38 @@ paths:
           description: Вакансію успішно видалено.
         '404':
           description: Вакансію не знайдено.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+  /api/v1/vacancies/sync:
+    post:
+      tags:
+        - Vacancies
+      summary: Двостороння синхронізація бази вакансій між локальною БД клієнта та сервером.
+      description: "Клієнт надсилає вакансії, зібрані або змінені в офлайні; сервер об'єднує їх зі своєю базою\r\n(дедуплікація за Source+ExternalId / Id / SourceUrl, Last-Write-Wins за LastSeenAt) та повертає\r\nвсі актуальні вакансії сервера (або зміни з моменту LastSyncedAt)."
+      operationId: SyncVacancies
+      requestBody:
+        description: Несинхронізовані локальні вакансії клієнта та мітка часу останньої синхронізації.
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VacancySyncRequestDto'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/VacancySyncRequestDto'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/VacancySyncRequestDto'
+      responses:
+        '200':
+          description: Синхронізація успішна.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VacancySyncResponseDto'
+        '400':
+          description: Порожній або невалідний запит синхронізації.
           content:
             application/json:
               schema:
@@ -1455,6 +1565,61 @@ components:
           nullable: true
       additionalProperties: false
       description: 'Агрегована ринкова аналітика вакансій (FR-003, FR-008, US-006, US-007).'
+    MultiSiteSearchRequest:
+      required:
+        - requests
+      type: object
+      properties:
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteSearchRequest'
+          description: Список окремих запитів для кожного обраного сайту (без дублювання джерел).
+      additionalProperties: false
+      description: 'Запит на одночасний парсинг кількох сайтів (від 1 до 4), кожен зі своїми налаштуваннями фільтрів та сторінок.'
+    MultiSiteSearchStatusDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          description: 'queued, running, completed або failed.'
+          nullable: true
+        pagesDone:
+          type: integer
+          description: Загальна кількість прочитаних сторінок по всіх обраних сайтах.
+          format: int32
+        pagesTotal:
+          type: integer
+          description: Загальна планова кількість сторінок по всіх обраних сайтах.
+          format: int32
+        found:
+          type: integer
+          description: Загальна кількість знайдених вакансій по всіх обраних сайтах.
+          format: int32
+        allFromCache:
+          type: boolean
+          description: 'true, якщо всі обрані сайти віддали результат із 3-годинного кешу.'
+        message:
+          type: string
+          description: 'Підсумкове пояснення (зокрема попередження, якщо частина сайтів не відповіла).'
+          nullable: true
+        sites:
+          type: array
+          items:
+            $ref: '#/components/schemas/SiteSearchItemStatusDto'
+          description: Деталізація прогресу по кожному обраному сайту.
+          nullable: true
+        vacancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/VacancyDto'
+          description: Об'єднаний дедуплікований список знайдених вакансій з усіх успішних сайтів (лише коли state = completed).
+          nullable: true
+      additionalProperties: false
+      description: Агрегований стан одночасного пошуку на кількох сайтах.
     RecommendationsResultDto:
       type: object
       properties:
@@ -1576,6 +1741,30 @@ components:
           format: date-time
       additionalProperties: false
       description: DTO представлення збереженої вакансії («лайку» / закладки) для клієнтів API.
+    SiteSearchItemStatusDto:
+      type: object
+      properties:
+        source:
+          $ref: '#/components/schemas/JobSource'
+        state:
+          type: string
+          nullable: true
+        pagesDone:
+          type: integer
+          format: int32
+        pagesTotal:
+          type: integer
+          format: int32
+        found:
+          type: integer
+          format: int32
+        fromCache:
+          type: boolean
+        message:
+          type: string
+          nullable: true
+      additionalProperties: false
+      description: Прогрес і стан одного сайту у межах пакетного багатосайтового пошуку.
     SiteSearchRequest:
       required:
         - source
@@ -1969,6 +2158,10 @@ components:
           type: string
           description: Дата та час останнього підтвердження актуальності вакансії парсером.
           format: date-time
+        externalId:
+          type: string
+          description: Зовнішній ідентифікатор вакансії на сайті-джерелі (для дедуплікації та синхронізації).
+          nullable: true
         isActive:
           type: boolean
           description: 'Ознака активності (true — активна, false — закрита/архівна).'
@@ -2020,6 +2213,132 @@ components:
           readOnly: true
       additionalProperties: false
       description: "Стандартизована обгортка для пагінованих відповідей списків (вимога курсу SSDM-2026).\r\nМістить сторінку елементів та метадані пагінації."
+    VacancySyncItemDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        externalId:
+          type: string
+          nullable: true
+        title:
+          type: string
+          nullable: true
+        company:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+        category:
+          type: string
+          nullable: true
+        categoryGroup:
+          type: string
+          nullable: true
+        location:
+          type: string
+          nullable: true
+        fullAddress:
+          type: string
+          nullable: true
+        schedule:
+          type: string
+          nullable: true
+        experience:
+          type: string
+          nullable: true
+        experienceMonths:
+          type: integer
+          format: int32
+          nullable: true
+        workFormat:
+          $ref: '#/components/schemas/WorkFormat'
+        salaryMin:
+          type: number
+          format: double
+          nullable: true
+        salaryMax:
+          type: number
+          format: double
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        source:
+          $ref: '#/components/schemas/JobSource'
+        sourceUrl:
+          type: string
+          nullable: true
+        skills:
+          type: array
+          items:
+            type: string
+          nullable: true
+        publishedAt:
+          type: string
+          format: date-time
+        firstSeenAt:
+          type: string
+          format: date-time
+        lastSeenAt:
+          type: string
+          format: date-time
+        isActive:
+          type: boolean
+      additionalProperties: false
+      description: Повний запис вакансії для двосторонньої синхронізації між локальною БД клієнта та сервером.
+    VacancySyncRequestDto:
+      type: object
+      properties:
+        clientVacancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/VacancySyncItemDto'
+          description: 'Вакансії, зібрані або змінені клієнтом локально (офлайн).'
+          nullable: true
+        lastSyncedAt:
+          type: string
+          description: Момент останньої успішної синхронізації клієнта (UTC); null — повернути всю базу сервера.
+          format: date-time
+          nullable: true
+        fullSync:
+          type: boolean
+          description: true — повернути повний зліпок бази сервера незалежно від LastSyncedAt.
+      additionalProperties: false
+      description: "Запит двосторонньої синхронізації бази вакансій: клієнт передає локально зібрані або змінені\r\nв офлайні вакансії, а сервер об'єднує їх зі своєю БД і повертає актуальні серверні записи."
+    VacancySyncResponseDto:
+      type: object
+      properties:
+        serverVacancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/VacancySyncItemDto'
+          description: Актуальні вакансії сервера (усі або змінені з моменту LastSyncedAt + об'єднані записи).
+          nullable: true
+        serverTime:
+          type: string
+          description: 'Час сервера (UTC), який клієнт зберігає як LastSyncedAt для наступної дельта-синхронізації.'
+          format: date-time
+        receivedFromClient:
+          type: integer
+          description: Скільки валідних записів отримано від клієнта у цьому запиті.
+          format: int32
+        createdOnServer:
+          type: integer
+          description: Скільки нових вакансій додано до серверної БД.
+          format: int32
+        updatedOnServer:
+          type: integer
+          description: Скільки існуючих вакансій оновлено на сервері.
+          format: int32
+        totalServerVacancies:
+          type: integer
+          description: Загальна кількість вакансій у серверній базі даних після синхронізації.
+          format: int32
+      additionalProperties: false
+      description: 'Відповідь двосторонньої синхронізації вакансій: об''єднані дані сервера та статистика обміну.'
     ValidationErrorDetail:
       type: object
       properties:
@@ -2064,6 +2383,6 @@ tags:
   - name: SavedVacancies
     description: Керування вподобаними («лайкнутими») вакансіями для рекомендацій та статистики
   - name: SiteSearches
-    description: Пошук вакансій на Djinni і DOU за фільтрами на запит користувача
+    description: 'Пошук вакансій на Djinni, DOU, Work.ua та Robota.ua за фільтрами на запит користувача (один або кілька сайтів одночасно)'
   - name: Vacancies
     description: Керування агрегованими вакансіями платформи Waterfall (CRUD)
