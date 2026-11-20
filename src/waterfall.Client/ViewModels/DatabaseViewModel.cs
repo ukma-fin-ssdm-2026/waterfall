@@ -592,7 +592,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         ErrorMessage = null;
         try
         {
-            VacancySyncResult result = await _syncService.SyncWithServerAsync(fullSync: true);
+            VacancySyncResult result = await _syncService.SyncWithServerAsync(fullSync: true, CancellationToken.None);
             if (result.Succeeded)
             {
                 IsOfflineMode = false;
@@ -838,7 +838,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     public async Task ExportDatabaseAsync()
     {
         string? path = _fileDialog is not null
-            ? await _fileDialog.PickJsonFileToSaveAsync("waterfall_db_export.json")
+            ? await _fileDialog.PickJsonFileToSaveAsync("waterfall_db_export.json", CancellationToken.None)
             : DefaultExportPath();
 
         if (string.IsNullOrWhiteSpace(path))
@@ -861,7 +861,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
             List<VacancyDto> toExport = Vacancies.Select(v => v.Vacancy).ToList();
             string json = JsonSerializer.Serialize(toExport, ClientJsonContext.Default.ListVacancyDto);
-            await File.WriteAllTextAsync(path, json);
+            await File.WriteAllTextAsync(path, json, CancellationToken.None);
             StatusBannerText = $"📥 Експортовано {toExport.Count} вакансій у {path}";
         }
         catch (Exception ex)
@@ -874,7 +874,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     public async Task ImportDatabaseAsync()
     {
         string? path = _fileDialog is not null
-            ? await _fileDialog.PickJsonFileToOpenAsync()
+            ? await _fileDialog.PickJsonFileToOpenAsync(CancellationToken.None)
             : DefaultExportPath();
 
         if (string.IsNullOrWhiteSpace(path))
@@ -895,7 +895,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            string json = await File.ReadAllTextAsync(path);
+            string json = await File.ReadAllTextAsync(path, CancellationToken.None);
             List<VacancyDto>? imported = JsonSerializer.Deserialize(json, ClientJsonContext.Default.ListVacancyDto);
             if (imported is null || imported.Count == 0)
             {
@@ -905,8 +905,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
             if (_localStore is not null)
             {
-                await _localStore.SaveVacanciesAsync(imported, isSynced: false);
-                IReadOnlyList<VacancyDto> merged = await _localStore.GetAllAsync();
+                await _localStore.SaveVacanciesAsync(imported, isSynced: false, CancellationToken.None);
+                IReadOnlyList<VacancyDto> merged = await _localStore.GetAllAsync(CancellationToken.None);
                 SetDatabaseVacancies(merged.ToList());
                 await RefreshLocalStatsAsync(CancellationToken.None);
             }

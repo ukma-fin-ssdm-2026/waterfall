@@ -2516,7 +2516,7 @@ public partial class CatalogViewModel : ObservableObject
     {
         ErrorMessage = null;
         string? path = _fileDialog is not null
-            ? await _fileDialog.PickJsonFileToSaveAsync("vacancies_export.json")
+            ? await _fileDialog.PickJsonFileToSaveAsync("vacancies_export.json", CancellationToken.None)
             : DefaultExportFilePath();
 
         if (string.IsNullOrWhiteSpace(path))
@@ -2540,7 +2540,7 @@ public partial class CatalogViewModel : ObservableObject
 
             List<VacancyDto> toExport = Vacancies.Select(v => v.Vacancy).ToList();
             string json = JsonSerializer.Serialize(toExport, ClientJsonContext.Default.ListVacancyDto);
-            await File.WriteAllTextAsync(path, json);
+            await File.WriteAllTextAsync(path, json, CancellationToken.None);
             StaleCacheText = $"📥 Експорт списку ({toExport.Count} вакансій) виконано успішно у файл {path}";
         }
         catch (Exception ex)
@@ -2554,7 +2554,7 @@ public partial class CatalogViewModel : ObservableObject
     {
         ErrorMessage = null;
         string? path = _fileDialog is not null
-            ? await _fileDialog.PickJsonFileToOpenAsync()
+            ? await _fileDialog.PickJsonFileToOpenAsync(CancellationToken.None)
             : DefaultExportFilePath();
 
         if (string.IsNullOrWhiteSpace(path))
@@ -2576,7 +2576,7 @@ public partial class CatalogViewModel : ObservableObject
                 return;
             }
 
-            string json = await File.ReadAllTextAsync(path);
+            string json = await File.ReadAllTextAsync(path, CancellationToken.None);
             List<VacancyDto>? imported = JsonSerializer.Deserialize(json, ClientJsonContext.Default.ListVacancyDto);
             if (imported is null || imported.Count == 0)
             {
