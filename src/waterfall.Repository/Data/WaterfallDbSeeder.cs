@@ -1,9 +1,11 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: сід-вакансії отримують числовий досвід, решта похідних полів рахується нормалізатором; перевірено: тести WaterfallDbSeederTests
 
+using System.Data.Common;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Entities;
+using Waterfall.Repository.Normalization;
 
 namespace Waterfall.Repository.Data;
 
@@ -163,6 +165,21 @@ public static class WaterfallDbSeeder
                         : (loc.Contains("remote") || loc.Contains("віддалено") ? "Віддалено" : "Локація")))));
                     v.FullAddress = $"{city}, не вказано точну адресу";
                 }
+                await context.SaveChangesAsync();
+            }
+
+            // Якщо БД оновлено зі старішої схеми, дозаповнюємо нормалізовані поля (CategoryGroup, WorkFormat, SearchText, ExperienceMonths)
+            List<VacancyDB> unnormalized = await context.Vacancies
+                .Where(v => v.CategoryGroup == null || v.CategoryGroup == "" || v.SearchText == "")
+                .ToListAsync();
+            if (unnormalized.Count > 0)
+            {
+                foreach (VacancyDB v in unnormalized)
+                {
+                    v.ExperienceMonths ??= VacancyExperienceParser.ParseMonths(v.Experience, v.Description);
+                    VacancyNormalizer.Apply(v);
+                }
+
                 await context.SaveChangesAsync();
             }
         }
@@ -343,7 +360,57 @@ public static class WaterfallDbSeeder
                     ""CachedAt"" INTEGER NOT NULL
                 );
                 CREATE UNIQUE INDEX IF NOT EXISTS ""IX_SiteSearchCache_CacheKey"" ON ""SiteSearchCache"" (""CacheKey"");
+
+                CREATE TABLE IF NOT EXISTS ""SearchQueries"" (
+                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_SearchQueries"" PRIMARY KEY,
+                    ""UserId"" TEXT NOT NULL,
+                    ""QueryText"" TEXT NOT NULL,
+                    ""SearchedAt"" INTEGER NOT NULL,
+                    CONSTRAINT ""FK_SearchQueries_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_SearchQueries_UserId_SearchedAt"" ON ""SearchQueries"" (""UserId"", ""SearchedAt"");
+
+                CREATE TABLE IF NOT EXISTS ""VacancyViews"" (
+                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_VacancyViews"" PRIMARY KEY,
+                    ""UserId"" TEXT NOT NULL,
+                    ""VacancyId"" TEXT NOT NULL,
+                    ""ViewedAt"" INTEGER NOT NULL,
+                    CONSTRAINT ""FK_VacancyViews_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE,
+                    CONSTRAINT ""FK_VacancyViews_Vacancies_VacancyId"" FOREIGN KEY (""VacancyId"") REFERENCES ""Vacancies"" (""Id"") ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_VacancyViews_UserId_VacancyId"" ON ""VacancyViews"" (""UserId"", ""VacancyId"");
+                CREATE INDEX IF NOT EXISTS ""IX_VacancyViews_UserId_ViewedAt"" ON ""VacancyViews"" (""UserId"", ""ViewedAt"");
+
+                CREATE TABLE IF NOT EXISTS ""ChatSessions"" (
+                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_ChatSessions"" PRIMARY KEY,
+                    ""UserId"" TEXT NOT NULL,
+                    ""ContextFilterJson"" TEXT NOT NULL,
+                    ""StartedAt"" INTEGER NOT NULL,
+                    ""LastActivityAt"" INTEGER NOT NULL,
+                    CONSTRAINT ""FK_ChatSessions_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_ChatSessions_UserId"" ON ""ChatSessions"" (""UserId"");
+
+                CREATE TABLE IF NOT EXISTS ""ChatMessages"" (
+                    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_ChatMessages"" PRIMARY KEY AUTOINCREMENT,
+                    ""SessionId"" TEXT NOT NULL,
+                    ""Author"" TEXT NOT NULL,
+                    ""Content"" TEXT NOT NULL,
+                    ""CreatedAt"" INTEGER NOT NULL,
+                    CONSTRAINT ""FK_ChatMessages_ChatSessions_SessionId"" FOREIGN KEY (""SessionId"") REFERENCES ""ChatSessions"" (""Id"") ON DELETE CASCADE
+                );
+                CREATE INDEX IF NOT EXISTS ""IX_ChatMessages_SessionId"" ON ""ChatMessages"" (""SessionId"");
+
+                CREATE TABLE IF NOT EXISTS ""ChatMessageVacancy"" (
+                    ""MessageId"" INTEGER NOT NULL,
+                    ""VacancyId"" TEXT NOT NULL,
+                    CONSTRAINT ""PK_ChatMessageVacancy"" PRIMARY KEY (""MessageId"", ""VacancyId""),
+                    CONSTRAINT ""FK_ChatMessageVacancy_ChatMessages_MessageId"" FOREIGN KEY (""MessageId"") REFERENCES ""ChatMessages"" (""Id"") ON DELETE CASCADE,
+                    CONSTRAINT ""FK_ChatMessageVacancy_Vacancies_VacancyId"" FOREIGN KEY (""VacancyId"") REFERENCES ""Vacancies"" (""Id"") ON DELETE RESTRICT
+                );
             ");
+
+            await EnsureSqliteVacancyColumnsAsync(context);
         }
         else if (context.Database.IsSqlServer())
         {
@@ -376,7 +443,81 @@ public static class WaterfallDbSeeder
                 );
                 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_SiteSearchCache_CacheKey')
                 CREATE UNIQUE INDEX [IX_SiteSearchCache_CacheKey] ON [SiteSearchCache] ([CacheKey]);
+
+                IF OBJECT_ID('Vacancies', 'U') IS NOT NULL
+                BEGIN
+                    IF COL_LENGTH('Vacancies', 'CategoryGroup') IS NULL ALTER TABLE [Vacancies] ADD [CategoryGroup] nvarchar(100) NULL;
+                    IF COL_LENGTH('Vacancies', 'FullAddress') IS NULL ALTER TABLE [Vacancies] ADD [FullAddress] nvarchar(300) NULL;
+                    IF COL_LENGTH('Vacancies', 'Schedule') IS NULL ALTER TABLE [Vacancies] ADD [Schedule] nvarchar(100) NULL;
+                    IF COL_LENGTH('Vacancies', 'Experience') IS NULL ALTER TABLE [Vacancies] ADD [Experience] nvarchar(100) NULL;
+                    IF COL_LENGTH('Vacancies', 'ExperienceMonths') IS NULL ALTER TABLE [Vacancies] ADD [ExperienceMonths] int NULL;
+                    IF COL_LENGTH('Vacancies', 'WorkFormat') IS NULL ALTER TABLE [Vacancies] ADD [WorkFormat] int NOT NULL CONSTRAINT [DF_Vacancies_WorkFormat] DEFAULT 0;
+                    IF COL_LENGTH('Vacancies', 'SearchText') IS NULL ALTER TABLE [Vacancies] ADD [SearchText] nvarchar(max) NOT NULL CONSTRAINT [DF_Vacancies_SearchText] DEFAULT N'';
+                    IF COL_LENGTH('Vacancies', 'ExternalId') IS NULL ALTER TABLE [Vacancies] ADD [ExternalId] nvarchar(100) NULL;
+                END
             ");
+        }
+    }
+
+    /// <summary>
+    /// Ідемпотентно додає відсутні колонки в уже існуючу SQLite-таблицю Vacancies (міграція старих waterfall.db без видалення даних).
+    /// </summary>
+    private static async Task EnsureSqliteVacancyColumnsAsync(WaterfallDbContext context)
+    {
+        DbConnection connection = context.Database.GetDbConnection();
+        bool shouldClose = connection.State != System.Data.ConnectionState.Open;
+        if (shouldClose)
+        {
+            await connection.OpenAsync();
+        }
+
+        try
+        {
+            HashSet<string> existingColumns = new(StringComparer.OrdinalIgnoreCase);
+            await using (DbCommand pragma = connection.CreateCommand())
+            {
+                pragma.CommandText = "PRAGMA table_info('Vacancies');";
+                await using DbDataReader reader = await pragma.ExecuteReaderAsync();
+                while (await reader.ReadAsync())
+                {
+                    existingColumns.Add(reader.GetString(1));
+                }
+            }
+
+            if (existingColumns.Count == 0)
+            {
+                return;
+            }
+
+            (string Column, string Sql)[] requiredColumns =
+            [
+                ("CategoryGroup", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""CategoryGroup"" TEXT NULL;"),
+                ("FullAddress", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""FullAddress"" TEXT NULL;"),
+                ("Schedule", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""Schedule"" TEXT NULL;"),
+                ("Experience", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""Experience"" TEXT NULL;"),
+                ("ExperienceMonths", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""ExperienceMonths"" INTEGER NULL;"),
+                ("WorkFormat", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""WorkFormat"" INTEGER NOT NULL DEFAULT 0;"),
+                ("SearchText", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""SearchText"" TEXT NOT NULL DEFAULT '';"),
+                ("ExternalId", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""ExternalId"" TEXT NULL;")
+            ];
+
+            foreach ((string column, string sql) in requiredColumns)
+            {
+                if (!existingColumns.Contains(column))
+                {
+                    await context.Database.ExecuteSqlRawAsync(sql);
+                }
+            }
+
+            await context.Database.ExecuteSqlRawAsync(
+                @"CREATE INDEX IF NOT EXISTS ""IX_Vacancies_CategoryGroup"" ON ""Vacancies"" (""CategoryGroup"");");
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
+            }
         }
     }
 }
