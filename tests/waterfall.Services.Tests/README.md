@@ -16,13 +16,31 @@
 
 ## Опис набору тестів
 
-35 сфокусованих тестових випадків у 3 класах:
+206 тестових випадків у 21 класі (205 виконуються у CI + 1 опційний `LlmLiveSmokeTests` за `WATERFALL_LLM_LIVE=1`; актуалізовано 20.11.2026):
 
 | Клас тесту | Кількість випадків | Що перевіряє |
 | :--- | :---: | :--- |
-| [`VacancyCacheServiceTests`](VacancyCacheServiceTests.cs) | 7 | поведінка Cache-Aside на реальному `IMemoryCache`: Miss повертає null і збільшує лічильник промахів, Hit повертає кешовані дані й збільшує влучання; фіксація базового каталогу для Stale-Cache (лише для 1-ї сторінки за замовчуванням); фільтровані пошукові сторінки не перезаписують Stale-Cache; каскадна інвалідація каталогу через `CancellationTokenSource`; інвалідація конкретної вакансії та збір метрик |
-| [`VacancyServiceTests`](VacancyServiceTests.cs) | 23 | Cache HIT повертає DTO без звернення до сховища; Cache MISS звертається до репозиторію та оновлює кеш; анонімні запити використовують публічний кеш; автентифіковані запити оминають кеш, щоб уникнути витоку персонального `IsSaved`; перевірка стійкості (REL-001): при винятку в БД метод повертає Stale-Cache, якщо він доступний, або повторно кидає виняток, якщо кеш порожній; мапінг полів та обрізка пробілів при `CreateAsync` / `UpdateAsync`; каскадна інвалідація кешу при зміні чи видаленні; стійкість до невалідного JSON у `SkillsJson` (порожні рядки, malformed JSON не викликають падіння); парсинг `JobSource` (Djinni, WorkUa, RobotaUa, Dou, Unknown); точна трансляція `Source` у фільтрі |
-| [`SavedVacancyServiceTests`](SavedVacancyServiceTests.cs) | 5 | отримання закладок із мапінгом вкладеної сутності вакансії та прапорцем `IsSaved = true`; пошук за ID; збереження закладки з тримінгом нотаток та обов'язковою інвалідацією кешу деталізації вакансії; безпечне видалення з інвалідацією |
+| [`VacancyServiceTests`](VacancyServiceTests.cs) | 28 | Cache-Aside HIT/MISS, Stale-Cache fallback (REL-001), ізоляція `IsSaved`/`IsViewed`, CRUD + інвалідація кешу, стійкість `ParseSkills`, `SyncVacanciesAsync` (двосторонній обмін з інвалідацією кешу) |
+| [`AIConsultantServiceTests`](AIConsultantServiceTests.cs) | 22 | витяг фільтра, збереження контексту діалогу (FR-009), релаксація критеріїв, заборона вигаданих вакансій (FUNC-001), обробка недоступності LLM |
+| [`FallbackChatClientTests`](FallbackChatClientTests.cs) | 18 | ланцюжок резервування LLM-провайдерів, таймаути спроби/загальний, поведінка на 429/5xx vs 400/401/403 |
+| [`SensitiveTextMaskerTests`](SensitiveTextMaskerTests.cs) | 15 | маскування email і телефонів перед відправкою до LLM (THR-06) |
+| [`LlmOptionsValidatorTests`](LlmOptionsValidatorTests.cs) | 12 | валідація конфігурації `Llm` на старті (ADR-004) |
+| [`UserStatsServiceTests`](UserStatsServiceTests.cs) | 12 | підрахунок особистої статистики активності, історії пошуків і переглядів (FR-007) |
+| [`VacancyAnalysisServiceTests`](VacancyAnalysisServiceTests.cs) | 10 | ШІ-аналіз 1–3 обраних вакансій за профілем користувача (FR-010) |
+| [`VacancyFilterParametersTests`](VacancyFilterParametersTests.cs) | 10 | валідація параметрів фільтрації та пагінації каталогу |
+| [`GeoLocationServiceTests`](GeoLocationServiceTests.cs) | 9 | геокодування (кеш → Photon → Wikipedia), санітизація й синхронізація геокешу |
+| [`LlmGatewayHttpTests`](LlmGatewayHttpTests.cs) | 9 | HTTP-взаємодія офіційних SDK у `LlmClientFactory` |
+| [`PreferenceProfileBuilderTests`](PreferenceProfileBuilderTests.cs) | 9 | побудова профілю вподобань шукача зі збережених вакансій |
+| [`SalaryRangeParserTests`](SalaryRangeParserTests.cs) | 9 | розбір текстових діапазонів зарплат і перевірка меж |
+| [`VacancyCacheServiceTests`](VacancyCacheServiceTests.cs) | 9 | реальний `IMemoryCache`: Cache-Aside, Stale-Cache, каскадна інвалідація, метрики |
+| [`SavedVacancyServiceTests`](SavedVacancyServiceTests.cs) | 8 | збереження/видалення закладок, guard clauses (FIND-06), інвалідація кешу |
+| [`RecommendationServiceTests`](RecommendationServiceTests.cs) | 6 | ранжування персоналізованих рекомендацій із виключенням збережених (FR-006) |
+| [`RelevanceScorerTests`](RelevanceScorerTests.cs) | 6 | обчислення релевантності вакансій профілю користувача |
+| [`VacancyTextTokenizerTests`](VacancyTextTokenizerTests.cs) | 4 | токенізація текстів вакансій для скорингу |
+| [`AnalyticsServiceTests`](AnalyticsServiceTests.cs) | 3 | агрегація ринкової аналітики (зарплати, технології, частки категорій) |
+| [`LlmClientProviderTests`](LlmClientProviderTests.cs) | 3 | розв'язання клієнтів за ролями `Extract`/`Chat`/`Analyze` |
+| [`UserProfileServiceTests`](UserProfileServiceTests.cs) | 3 | читання/оновлення адреси користувача |
+| [`LlmLiveSmokeTests`](LlmLiveSmokeTests.cs) | 1 (skip) | опційний живий димовий тест реальних LLM-провайдерів (`WATERFALL_LLM_LIVE=1`) |
 
 ---
 
