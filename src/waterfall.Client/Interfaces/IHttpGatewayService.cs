@@ -1,6 +1,7 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using Waterfall.Client.Models.Ai;
+using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SavedVacancies;
@@ -23,6 +24,11 @@ public interface IHttpGatewayService
     /// Персоналізовані рекомендації на основі збережених вакансій та історії пошуків.
     /// </summary>
     Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default);
+
+    /// <summary>
+    /// Ринкова аналітика вакансій (FR-003, FR-008); доступна лише для ролі Analyst.
+    /// </summary>
+    Task<MarketAnalyticsDto> GetMarketAnalyticsAsync(string? category = null, int months = 3, CancellationToken ct = default);
 
     Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default);
 

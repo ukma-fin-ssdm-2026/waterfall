@@ -91,7 +91,7 @@ public sealed class VacancyExpirationServiceTests : IDisposable
             new FixedTimeProvider(now));
 
         await worker.StartAsync(CancellationToken.None);
-        await Task.Delay(50);
+        await _cache.Invalidated.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await worker.StopAsync(CancellationToken.None);
 
         await using AsyncServiceScope scope = _services.CreateAsyncScope();
@@ -130,6 +130,7 @@ public sealed class VacancyExpirationServiceTests : IDisposable
     private sealed class StubVacancyCacheService : IVacancyCacheService
     {
         public int InvalidateCatalogCalls { get; private set; }
+        public TaskCompletionSource Invalidated { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public DateTimeOffset? LastCatalogRefreshedAt => null;
         public Task<PagedResult<VacancyDto>?> GetPagedVacanciesAsync(VacancyFilterParameters filter, CancellationToken ct = default) => Task.FromResult<PagedResult<VacancyDto>?>(null);
         public Task SetPagedVacanciesAsync(VacancyFilterParameters filter, PagedResult<VacancyDto> result, TimeSpan? ttl = null, CancellationToken ct = default) => Task.CompletedTask;
@@ -142,6 +143,7 @@ public sealed class VacancyExpirationServiceTests : IDisposable
         public Task InvalidateCatalogAsync(CancellationToken ct = default)
         {
             InvalidateCatalogCalls++;
+            Invalidated.TrySetResult();
             return Task.CompletedTask;
         }
     }

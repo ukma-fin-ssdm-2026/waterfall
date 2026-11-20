@@ -29,6 +29,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IVacancyService, VacancyService>();
         services.AddScoped<ISavedVacancyService, SavedVacancyService>();
         services.AddScoped<IRecommendationService, RecommendationService>();
+        services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IVacancyIngestionService, VacancyIngestionService>();
         services.AddScoped<IUserProfileService, UserProfileService>();
         services.AddScoped<IGeoLocationService, GeoLocationService>();

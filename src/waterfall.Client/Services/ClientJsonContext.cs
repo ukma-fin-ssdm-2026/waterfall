@@ -3,6 +3,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Waterfall.Client.Models.Ai;
+using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Geo;
@@ -22,6 +23,10 @@ namespace Waterfall.Client.Services;
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web, Converters = [typeof(JsonStringEnumConverter)])]
 [JsonSerializable(typeof(PagedResult<VacancyDto>))]
 [JsonSerializable(typeof(RecommendationsResultDto))]
+[JsonSerializable(typeof(MarketAnalyticsDto))]
+[JsonSerializable(typeof(GradeSalaryDto))]
+[JsonSerializable(typeof(TechSalaryDto))]
+[JsonSerializable(typeof(CategoryShareDto))]
 [JsonSerializable(typeof(VacancyDto))]
 [JsonSerializable(typeof(SiteSearchRequest))]
 [JsonSerializable(typeof(SiteSearchStatusDto))]
