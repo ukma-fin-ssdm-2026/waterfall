@@ -1,4 +1,5 @@
 // AI: контракт нормалізації та збереження сирих вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, самоперевірка автора (§8)
+// AI: позначка ListOnly — дані лише зі списку не затирають повніші (issue #62); перевірено: тести VacancyIngestionServiceTests, самоперевірка автора (§8)
 
 using System.Text.Json.Serialization;
 using Waterfall.Services.Models.Vacancies;
@@ -47,6 +48,14 @@ public sealed record RawVacancy
 
     /// <summary>Навички з окремого поля на сайті через кому; null, якщо роботодавець його не заповнив.</summary>
     public string? Tags { get; init; }
+
+    /// <summary>
+    /// Сторінку вакансії не читали (швидкий пошук або сторінка не відкрилася): опис може бути скороченим,
+    /// а навичок, досвіду, графіка чи категорії — не бути. Такі дані не затирають повніші, уже збережені в БД.
+    /// Задає обхід, а не дані з сайту, тож із JSON-дампу не читається.
+    /// </summary>
+    [JsonIgnore]
+    public bool ListOnly { get; init; }
 }
 
 /// <summary>Скільки вакансій додано, оновлено й відкинуто за один виклик.</summary>

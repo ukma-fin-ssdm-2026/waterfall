@@ -1,6 +1,7 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: метод BulkUpsertAsync для фонового збору вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests на SQLite, самоперевірка автора (§8)
 // AI: пошук по SearchText і фільтри формату роботи, досвіду в місяцях, широкої категорії та навичок; перевірено: тести EfVacancyRepositoryTests на SQLite
+// AI: метод GetBySourceIdsAsync для пошуку на сайтах на запит (issue #62); перевірено: тест EfVacancyRepositoryTests на SQLite, самоперевірка автора (§8)
 
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Data;
@@ -163,6 +164,19 @@ public class EfVacancyRepository : IVacancyRepository
             .FirstOrDefaultAsync(v => v.Id == id, ct);
     }
 
+    public async Task<IReadOnlyList<VacancyDB>> GetBySourceIdsAsync(string source, IReadOnlyCollection<string> externalIds, CancellationToken ct = default)
+    {
+        if (externalIds.Count == 0)
+        {
+            return [];
+        }
+
+        return await _context.Vacancies
+            .AsNoTracking()
+            .Where(v => v.Source == source && v.ExternalId != null && externalIds.Contains(v.ExternalId))
+            .ToListAsync(ct);
+    }
+
     public async Task<(int Created, int Updated)> BulkUpsertAsync(IReadOnlyList<VacancyDB> vacancies, CancellationToken ct = default)
     {
         // Уже збережені вакансії шукаємо одним запитом, а не по одній
@@ -226,5 +240,25 @@ public class EfVacancyRepository : IVacancyRepository
         _context.Vacancies.Remove(entity);
         await _context.SaveChangesAsync(ct);
         return true;
+    }
+
+    public async Task<int> DeactivateExpiredAsync(DateTimeOffset publishedBefore, CancellationToken ct = default)
+    {
+        List<VacancyDB> expired = await _context.Vacancies
+            .Where(v => v.IsActive && v.PublishedAt < publishedBefore)
+            .ToListAsync(ct);
+
+        if (expired.Count == 0)
+        {
+            return 0;
+        }
+
+        foreach (VacancyDB vacancy in expired)
+        {
+            vacancy.IsActive = false;
+        }
+
+        await _context.SaveChangesAsync(ct);
+        return expired.Count;
     }
 }

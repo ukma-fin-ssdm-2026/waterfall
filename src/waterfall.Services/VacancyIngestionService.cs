@@ -1,5 +1,6 @@
 // AI: нормалізація сирих вакансій і збереження в БД (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests, ручний запуск API, самоперевірка автора (§8)
 // AI: досвід у місяцях із джерела з запасним розбором тексту; перевірено: тести VacancyIngestionServiceTests
+// AI: дані лише зі списку не затирають повніші збережені (KeepStoredDetails) (issue #62); перевірено: тести VacancyIngestionServiceTests на SQLite, самоперевірка автора (§8)
 
 using System.Globalization;
 using System.Net;
@@ -47,6 +48,10 @@ public class VacancyIngestionService : IVacancyIngestionService
     // що шукає підрядок у SkillsJson. Це безпечно, бо цей JSON не вставляється в HTML: API віддає навички окремим масивом.
     private static readonly JsonSerializerOptions SkillsJsonOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
+    private const string UnknownCategory = "Інше";
+    private const string UnknownValue = "Не вказано";
+    private const string EmptySkillsJson = "[]";
+
     private readonly IVacancyRepository _repository;
     private readonly ILogger<VacancyIngestionService> _logger;
 
@@ -60,6 +65,7 @@ public class VacancyIngestionService : IVacancyIngestionService
     {
         DateTimeOffset now = DateTimeOffset.UtcNow;
         List<VacancyDB> vacancies = [];
+        List<VacancyDB> listOnly = [];
 
         foreach (RawVacancy raw in rawItems)
         {
@@ -71,8 +77,13 @@ public class VacancyIngestionService : IVacancyIngestionService
             }
 
             vacancies.Add(vacancy);
+            if (raw.ListOnly)
+            {
+                listOnly.Add(vacancy);
+            }
         }
 
+        await KeepStoredDetailsAsync(listOnly, ct);
         (int created, int updated) = await _repository.BulkUpsertAsync(vacancies, ct);
         IngestionResult result = new(created, updated, rawItems.Count - vacancies.Count);
 
@@ -80,6 +91,79 @@ public class VacancyIngestionService : IVacancyIngestionService
             "Збережено вакансії: нових {Created}, оновлених {Updated}, пропущено {Skipped}.",
             result.Created, result.Updated, result.Skipped);
         return result;
+    }
+
+    /// <summary>
+    /// Вакансії, по яких не читали сторінку, доповнюємо тим, що вже є в БД: інакше швидкий пошук Work.ua затер би
+    /// повний опис уривком із картки, а навички, досвід і графік — порожнечею, для всіх користувачів.
+    /// </summary>
+    private async Task KeepStoredDetailsAsync(List<VacancyDB> listOnly, CancellationToken ct)
+    {
+        foreach (IGrouping<string, VacancyDB> bySource in listOnly.GroupBy(v => v.Source))
+        {
+            IReadOnlyList<VacancyDB> stored = await _repository.GetBySourceIdsAsync(
+                bySource.Key, bySource.Select(v => v.ExternalId!).Distinct().ToList(), ct);
+            Dictionary<string, VacancyDB> byId = stored
+                .Where(v => v.ExternalId is not null)
+                .GroupBy(v => v.ExternalId!)
+                .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+            foreach (VacancyDB vacancy in bySource)
+            {
+                if (byId.TryGetValue(vacancy.ExternalId!, out VacancyDB? existing))
+                {
+                    KeepStoredDetails(vacancy, existing);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Поля, яких у списку немає або які там скорочені, беремо зі збереженого запису, якщо він повніший.
+    /// Назву, зарплату, компанію й місто список дає повністю, тож їх оновлюємо як завжди (крім порожніх).
+    /// </summary>
+    public static void KeepStoredDetails(VacancyDB fromList, VacancyDB stored)
+    {
+        // Уривок із картки коротший за повний опис зі сторінки вакансії
+        if (fromList.Description.Length < stored.Description.Length)
+        {
+            fromList.Description = stored.Description;
+        }
+
+        if (fromList.SkillsJson == EmptySkillsJson && stored.SkillsJson != EmptySkillsJson)
+        {
+            fromList.SkillsJson = stored.SkillsJson;
+        }
+
+        if (fromList.Experience is null && stored.Experience is not null)
+        {
+            fromList.Experience = stored.Experience;
+            fromList.ExperienceMonths = stored.ExperienceMonths;
+        }
+
+        fromList.ExperienceMonths ??= stored.ExperienceMonths;
+        fromList.Schedule ??= stored.Schedule;
+        fromList.FullAddress ??= stored.FullAddress;
+
+        // Категорія зі списку — щонайбільше та, що в запиті (DOU, Work.ua); зі сторінки вакансії вона точніша
+        if (stored.Category != UnknownCategory)
+        {
+            fromList.Category = stored.Category;
+        }
+
+        if (fromList.Company == UnknownValue)
+        {
+            fromList.Company = stored.Company;
+        }
+
+        if (fromList.Location == UnknownValue)
+        {
+            fromList.Location = stored.Location;
+        }
+
+        if (fromList.SalaryMin is null && fromList.SalaryMax is null)
+        {
+            (fromList.SalaryMin, fromList.SalaryMax, fromList.Currency) = (stored.SalaryMin, stored.SalaryMax, stored.Currency);
+        }
     }
 
     /// <summary>
@@ -132,10 +216,10 @@ public class VacancyIngestionService : IVacancyIngestionService
             ExternalId = Cut(raw.Id.Trim(), 100),
             SourceUrl = url,
             Title = Cut(title, 200),
-            Company = Cut(OrDefault(CleanText(raw.Company), "Не вказано"), 200),
+            Company = Cut(OrDefault(CleanText(raw.Company), UnknownValue), 200),
             Description = description,
-            Category = Cut(OrDefault(CleanText(raw.Category), "Інше"), 100),
-            Location = Cut(OrDefault(CleanText(raw.Location), "Не вказано"), 200),
+            Category = Cut(OrDefault(CleanText(raw.Category), UnknownCategory), 100),
+            Location = Cut(OrDefault(CleanText(raw.Location), UnknownValue), 200),
             FullAddress = fullAddress,
             Schedule = NullIfEmpty(Cut(CleanText(raw.Employment), 100)),
             Experience = experience,

@@ -1,4 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: позначка «переглянуто» для знайдених на сайтах вакансій (issue #62, на прохання Дениса); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Data;
@@ -47,5 +48,22 @@ public class EfVacancyViewRepository : IVacancyViewRepository
             .Where(v => v.UserId == userId)
             .OrderByDescending(v => v.ViewedAt)
             .ToListAsync(ct);
+    }
+
+    public async Task<HashSet<Guid>> GetViewedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, Guid userId, CancellationToken ct = default)
+    {
+        List<Guid> ids = vacancyIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        List<Guid> viewed = await _context.VacancyViews
+            .AsNoTracking()
+            .Where(v => v.UserId == userId && ids.Contains(v.VacancyId))
+            .Select(v => v.VacancyId)
+            .Distinct()
+            .ToListAsync(ct);
+        return [.. viewed];
     }
 }

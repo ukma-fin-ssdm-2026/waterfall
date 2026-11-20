@@ -28,6 +28,8 @@ public static class ServiceCollectionExtensions
         // 2. Сервіси бізнес-логіки (працюють з DTO та кешем)
         services.AddScoped<IVacancyService, VacancyService>();
         services.AddScoped<ISavedVacancyService, SavedVacancyService>();
+        services.AddScoped<IRecommendationService, RecommendationService>();
+        services.AddScoped<IAnalyticsService, AnalyticsService>();
         services.AddScoped<IVacancyIngestionService, VacancyIngestionService>();
         services.AddScoped<IUserProfileService, UserProfileService>();
         services.AddScoped<IGeoLocationService, GeoLocationService>();

@@ -1,4 +1,5 @@
 using Waterfall.Api.Workers;
+using Waterfall.Services;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Vacancies;
 using Xunit;
@@ -157,13 +158,67 @@ public sealed class RobotaUaParserTests
     }
 
     [Fact]
-    public void ParseJobPage_EmptyHtml_ReturnsFallbackDescription()
+    public void ParseJobPage_EmptyHtml_HasNoDescription_SoNoPlaceholderIsSaved()
     {
         string html = "<html><body></body></html>";
 
         RawVacancy details = _parser.ParseJobPage(html);
 
         Assert.Null(details.Title);
-        Assert.Equal("Опис вакансії на сайті robota.ua", details.DescriptionHtml);
+        Assert.Null(details.DescriptionHtml);
+    }
+
+    /// <summary>Фрагмент справжньої сторінки вакансії robota.ua (14.11.2026): без JSON-LD і без &lt;main&gt;.</summary>
+    internal const string RealJobPage = """
+        <html><head><title>Robota.ua</title></head><body>
+        <alliance-jobseeker-vacancy-page><div class="vacancy-page-container"><lib-content>
+          <div class="santa-min-w-0">
+            <h1 class="santa-typo-h3" data-id="vacancy-title">Junior QA engineer</h1>
+            <span class="santa-typo-secondary">1 день тому</span>
+            <span data-id="vacancy-salary-from-to">40 000 — 50 000 ₴</span>
+            <span data-id="vacancy-city">Дніпро</span><span data-id="vacancy-address">вул. Володимира Мономаха, 5</span>
+            <div class="santa-typo-regular santa-flex"><a href="/company1774349"><span>РАДАБАНК, АБ, АТ</span></a></div>
+          </div>
+          <div class="full-desc"><div id="description-wrap" class="santa-plain-markup vacancy-content-markup">
+            <p><b>Завдання:</b></p><ul><li>Тестування бізнес-вимог</li></ul>
+          </div></div>
+        </lib-content></div></alliance-jobseeker-vacancy-page>
+        </body></html>
+        """;
+
+    [Fact]
+    public void ParseJobPage_RealMarkup_ReadsDescriptionAndFieldsByDataId()
+    {
+        RawVacancy details = _parser.ParseJobPage(RealJobPage);
+
+        Assert.Equal("Junior QA engineer", details.Title);
+        Assert.Contains("Тестування бізнес-вимог", details.DescriptionHtml);
+        Assert.DoesNotContain("1 день тому", details.DescriptionHtml);
+        Assert.Equal(("40 000 — 50 000 ₴", "Дніпро", "РАДАБАНК, АБ, АТ"), (details.Salary, details.Location, details.Company));
+        Assert.Equal("Дніпро, вул. Володимира Мономаха, 5", details.FullAddress);
+
+        // Дані сторінки разом зі списком проходять нормалізацію: зарплата з «—» і «₴» стає 40–50 тис. грн
+        RawVacancy fromList = new() { Source = JobSource.RobotaUa, Id = "11407352", Url = "https://robota.ua/company1774349/vacancy11407352", Title = "Junior QA engineer" };
+        var vacancy = VacancyIngestionService.Normalize(SiteCrawler.WithJobPage(fromList, details), DateTimeOffset.UtcNow).Vacancy!;
+        Assert.Equal((40000m, 50000m, "UAH"), (vacancy.SalaryMin, vacancy.SalaryMax, vacancy.Currency));
+    }
+
+    [Theory]
+    [InlineData("<html><head><title>Трохи зачекайте…</title></head><body><h1>robota.ua</h1></body></html>")]
+    [InlineData("<html><head><title>Just a moment...</title></head><body><h1>robota.ua</h1></body></html>")]
+    [InlineData("<html><head><title>robota.ua</title></head><body><h1>robota.ua</h1><div id=\"challenge-stage\"></div></body></html>")]
+    public void ParseJobPage_CloudflareCheck_GivesNoTitleOrDescription(string html)
+    {
+        RawVacancy details = _parser.ParseJobPage(html);
+
+        // Інакше назва вакансії стала б «robota.ua», а опис — заглушкою
+        Assert.Null(details.Title);
+        Assert.Null(details.DescriptionHtml);
+    }
+
+    [Fact]
+    public void BotCheckPage_DoesNotMistakeRealPageForCheck()
+    {
+        Assert.False(BotCheckPage.Is(Html.Load(RealJobPage).DocumentNode));
     }
 }

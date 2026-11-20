@@ -3,6 +3,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Waterfall.Api.Controllers;
 using Waterfall.Api.Models.Common;
+using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Common;
 using Waterfall.Services.Models.Vacancies;
 
@@ -228,5 +229,60 @@ public sealed class VacanciesControllerTests
         Assert.Equal("NOT_FOUND", error.Error.Code);
         Assert.Contains(missingId.ToString(), error.Error.Message);
         Assert.Contains(missingId, _vacancyService.DeleteCalls);
+    }
+
+    [Fact]
+    public async Task GetRecommendations_AuthorizedUser_ReturnsOkWithRecommendations()
+    {
+        // Arrange
+        Guid userId = Guid.NewGuid();
+        FakeRecommendationService recommendationService = new()
+        {
+            Result = new RecommendationsResultDto
+            {
+                Items = [CreateSampleDto("Python Dev")],
+                SavedCount = 2,
+                BasisKeywords = ["Python"]
+            }
+        };
+        VacanciesController controller = new(_vacancyService, _logger, recommendationService);
+        ControllerTestContext.Setup(controller, currentUserId: userId);
+
+        // Act
+        ActionResult<RecommendationsResultDto> result = await controller.GetRecommendations(limit: 15, CancellationToken.None);
+
+        // Assert
+        OkObjectResult okResult = Assert.IsType<OkObjectResult>(result.Result);
+        RecommendationsResultDto payload = Assert.IsType<RecommendationsResultDto>(okResult.Value);
+        Assert.Single(payload.Items);
+        Assert.Equal(2, payload.SavedCount);
+        Assert.Equal((userId, 15), recommendationService.LastCall);
+    }
+
+    [Fact]
+    public async Task GetRecommendations_WithoutUser_ReturnsUnauthorized()
+    {
+        // Arrange
+        FakeRecommendationService recommendationService = new();
+        VacanciesController controller = new(_vacancyService, _logger, recommendationService);
+        ControllerTestContext.Setup(controller, currentUserId: null);
+
+        // Act
+        ActionResult<RecommendationsResultDto> result = await controller.GetRecommendations(ct: CancellationToken.None);
+
+        // Assert
+        Assert.IsType<UnauthorizedObjectResult>(result.Result);
+    }
+
+    private sealed class FakeRecommendationService : IRecommendationService
+    {
+        public RecommendationsResultDto Result { get; set; } = new();
+        public (Guid UserId, int Limit)? LastCall { get; private set; }
+
+        public Task<RecommendationsResultDto> GetRecommendationsAsync(Guid userId, int limit = 20, CancellationToken ct = default)
+        {
+            LastCall = (userId, limit);
+            return Task.FromResult(Result);
+        }
     }
 }

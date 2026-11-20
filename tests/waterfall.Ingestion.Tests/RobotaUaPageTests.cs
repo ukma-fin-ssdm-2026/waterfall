@@ -256,6 +256,6 @@ public sealed class RobotaUaPageTests
         RawVacancy job = RobotaUa.ParseJobPage("<main><p>Only main content</p></main>");
 
         Assert.Contains("Only main content", job.DescriptionHtml);
-        Assert.Equal("Опис вакансії на сайті robota.ua", RobotaUa.ParseJobPage(string.Empty).DescriptionHtml);
+        Assert.Null(RobotaUa.ParseJobPage(string.Empty).DescriptionHtml);
     }
 }

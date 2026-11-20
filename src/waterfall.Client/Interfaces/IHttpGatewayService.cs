@@ -1,9 +1,11 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using Waterfall.Client.Models.Ai;
+using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SavedVacancies;
+using Waterfall.Client.Models.SiteSearch;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Interfaces;
@@ -18,7 +20,23 @@ public interface IHttpGatewayService
     /// </summary>
     Task<PagedResult<VacancyDto>> GetVacanciesAsync(string? search, int page, int pageSize, CancellationToken ct = default);
 
+    /// <summary>
+    /// Персоналізовані рекомендації на основі збережених вакансій та історії пошуків.
+    /// </summary>
+    Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default);
+
+    /// <summary>
+    /// Ринкова аналітика вакансій (FR-003, FR-008); доступна лише для ролі Analyst.
+    /// </summary>
+    Task<MarketAnalyticsDto> GetMarketAnalyticsAsync(string? category = null, int months = 3, CancellationToken ct = default);
+
     Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Запускає пошук на сайті за фільтрами (POST /api/v1/site-searches); потрібен вхід.</summary>
+    Task<SiteSearchStatusDto> StartSiteSearchAsync(SiteSearchRequest request, CancellationToken ct = default);
+
+    /// <summary>Стан пошуку на сайті: прогрес, а коли завершено — знайдені вакансії.</summary>
+    Task<SiteSearchStatusDto> GetSiteSearchAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<SavedVacancyDto>> GetSavedVacanciesAsync(CancellationToken ct = default);
 

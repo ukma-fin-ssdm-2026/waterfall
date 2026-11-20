@@ -10,11 +10,13 @@ using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Ai;
+using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Geo;
 using Waterfall.Client.Models.Profile;
 using Waterfall.Client.Models.SavedVacancies;
+using Waterfall.Client.Models.SiteSearch;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Services;
@@ -48,8 +50,31 @@ public sealed class HttpGatewayService : IHttpGatewayService
         return SendAsync(new HttpRequestMessage(HttpMethod.Get, url), Json.PagedResultVacancyDto, ct);
     }
 
+    public Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default) =>
+        SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, $"api/v1/vacancies/recommendations?limit={limit}"),
+            Json.RecommendationsResultDto,
+            ct);
+
+    public Task<MarketAnalyticsDto> GetMarketAnalyticsAsync(string? category = null, int months = 3, CancellationToken ct = default)
+    {
+        string url = $"api/v1/analytics?months={months}";
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            url += "&category=" + Uri.EscapeDataString(category.Trim());
+        }
+
+        return SendAsync(new HttpRequestMessage(HttpMethod.Get, url), Json.MarketAnalyticsDto, ct);
+    }
+
     public Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default) =>
         SendAsync(new HttpRequestMessage(HttpMethod.Get, $"api/v1/vacancies/{id}"), Json.VacancyDto, ct);
+
+    public Task<SiteSearchStatusDto> StartSiteSearchAsync(SiteSearchRequest request, CancellationToken ct = default) =>
+        SendAsync(Post("api/v1/site-searches", request, Json.SiteSearchRequest), Json.SiteSearchStatusDto, ct);
+
+    public Task<SiteSearchStatusDto> GetSiteSearchAsync(Guid id, CancellationToken ct = default) =>
+        SendAsync(new HttpRequestMessage(HttpMethod.Get, $"api/v1/site-searches/{id}"), Json.SiteSearchStatusDto, ct);
 
     public async Task<IReadOnlyList<SavedVacancyDto>> GetSavedVacanciesAsync(CancellationToken ct = default) =>
         await SendAsync(new HttpRequestMessage(HttpMethod.Get, "api/v1/saved-vacancies"), Json.ListSavedVacancyDto, ct);

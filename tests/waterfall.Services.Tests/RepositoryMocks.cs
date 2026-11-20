@@ -126,9 +126,24 @@ public sealed class FakeVacancyRepository : IVacancyRepository
         return Task.FromResult(false);
     }
 
+    public Task<IReadOnlyList<VacancyDB>> GetBySourceIdsAsync(string source, IReadOnlyCollection<string> externalIds, CancellationToken ct = default) =>
+        Task.FromResult<IReadOnlyList<VacancyDB>>(Vacancies.Where(v => v.Source == source && v.ExternalId is not null && externalIds.Contains(v.ExternalId)).ToList());
+
     public Task<(int Created, int Updated)> BulkUpsertAsync(IReadOnlyList<VacancyDB> vacancies, CancellationToken ct = default)
     {
         return Task.FromResult((vacancies.Count, 0));
+    }
+
+    public Task<int> DeactivateExpiredAsync(DateTimeOffset publishedBefore, CancellationToken ct = default)
+    {
+        int count = 0;
+        foreach (VacancyDB vacancy in Vacancies.Where(v => v.IsActive && v.PublishedAt < publishedBefore))
+        {
+            vacancy.IsActive = false;
+            count++;
+        }
+
+        return Task.FromResult(count);
     }
 }
 
@@ -336,6 +351,12 @@ public sealed class FakeVacancyViewRepository : IVacancyViewRepository
             .OrderByDescending(v => v.ViewedAt)
             .ToList();
         return Task.FromResult(items);
+    }
+
+    public Task<HashSet<Guid>> GetViewedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, Guid userId, CancellationToken ct = default)
+    {
+        HashSet<Guid> wanted = [.. vacancyIds];
+        return Task.FromResult(Views.Where(v => v.UserId == userId && wanted.Contains(v.VacancyId)).Select(v => v.VacancyId).ToHashSet());
     }
 }
 

@@ -5,20 +5,22 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Interfaces;
-using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.ViewModels;
 
 /// <summary>
-/// Вкладка «Рекомендації» (FR-006, US-004): персоналізовані вакансії на основі збережених технологій.
+/// Вкладка «Рекомендації» (FR-006, US-004): персоналізовані вакансії на основі збережених вакансій та історії пошуків.
 /// </summary>
 public partial class RecommendationsViewModel : ObservableObject
 {
+    private const string InitialBasisText = "Збережіть кілька вакансій, щоб отримати персоналізовані рекомендації";
+
     private readonly IHttpGatewayService _gateway;
     private readonly IMessenger _messenger;
     private readonly IUrlLauncher? _urlLauncher;
     private readonly IDistanceCalculatorService? _distanceService;
+    private CancellationTokenSource? _loadCts;
 
     public RecommendationsViewModel(
         IHttpGatewayService gateway,
@@ -33,9 +35,17 @@ public partial class RecommendationsViewModel : ObservableObject
 
         _messenger.Register<RecommendationsViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
         {
-            foreach (VacancyItemViewModel item in vm.Recommendations.Where(v => v.Id == message.VacancyId))
+            if (message.IsSaved)
             {
-                item.IsSaved = message.IsSaved;
+                foreach (VacancyItemViewModel item in vm.Recommendations.Where(v => v.Id == message.VacancyId).ToList())
+                {
+                    vm.Recommendations.Remove(item);
+                }
+            }
+
+            if (vm.HasLoaded)
+            {
+                _ = vm.LoadRecommendationsInternalAsync(showSpinner: false);
             }
         });
     }
@@ -55,7 +65,12 @@ public partial class RecommendationsViewModel : ObservableObject
     public partial string? ErrorMessage { get; set; }
 
     [ObservableProperty]
-    public partial string RecommendedBasisText { get; set; } = "Підібрано на основі ваших збережених вакансій (Python, .NET)";
+    public partial string RecommendedBasisText { get; set; } = InitialBasisText;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EmptyTitle))]
+    [NotifyPropertyChangedFor(nameof(EmptyDescription))]
+    public partial int SavedCount { get; private set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
@@ -64,43 +79,70 @@ public partial class RecommendationsViewModel : ObservableObject
     public bool HasError => ErrorMessage is not null;
 
     /// <summary>
-    /// Повідомлення за US-004 AC-2: якщо немає збережень або рекомендацій.
+    /// Повідомлення за US-004 AC-2: якщо немає збережень або нових рекомендацій.
     /// </summary>
     public bool IsEmpty => HasLoaded && !IsLoading && ErrorMessage is null && Recommendations.Count == 0;
 
-    // # Mock
-    [RelayCommand]
+    public string EmptyTitle => SavedCount == 0
+        ? "Ще немає збережених вакансій"
+        : "Нових рекомендацій поки немає";
+
+    public string EmptyDescription => SavedCount == 0
+        ? "Почніть зберігати цікаві вакансії в каталозі (натисніть ♡), і ми автоматично підберемо для вас персоналізовані пропозиції"
+        : "Ви вже зберегли всі підходящі пропозиції або каталог ще оновлюється. Перегляньте каталог чи збережіть інші вакансії";
+
+    [RelayCommand(AllowConcurrentExecutions = true)]
     public Task LoadRecommendationsAsync() => LoadRecommendationsInternalAsync(showSpinner: true);
 
-    // # Mock
     private async Task LoadRecommendationsInternalAsync(bool showSpinner)
     {
+        _loadCts?.Cancel();
+        CancellationTokenSource cts = new();
+        _loadCts = cts;
+        CancellationToken ct = cts.Token;
+
         ErrorMessage = null;
         IsLoading = showSpinner;
         try
         {
-            // Отримуємо з бекенду або формуємо демо-рекомендації
-            PagedResult<VacancyDto> page = await _gateway.GetVacanciesAsync("Python", 1, 10);
-            Recommendations.Clear();
-            foreach (VacancyDto vacancy in page.Items.Where(v => !v.IsSaved))
+            RecommendationsResultDto result = await _gateway.GetRecommendationsAsync(ct: ct);
+            if (ct.IsCancellationRequested)
             {
-                Recommendations.Add(new VacancyItemViewModel(vacancy, _gateway, _messenger, msg => ErrorMessage = msg, _urlLauncher, _distanceService));
+                return;
             }
+
+            SavedCount = result.SavedCount;
+            RecommendedBasisText = FormatBasisText(result);
+
+            Recommendations.Clear();
+            foreach (VacancyDto vacancy in result.Items.Where(v => !v.IsSaved))
+            {
+                Recommendations.Add(new VacancyItemViewModel(
+                    vacancy, _gateway, _messenger, msg => ErrorMessage = msg, _urlLauncher, _distanceService));
+            }
+
             HasLoaded = true;
         }
-        catch (ApiException ex)
+        catch (ApiException ex) when (!ct.IsCancellationRequested)
         {
             ErrorMessage = ex.Message;
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+         
+        }
         finally
         {
-            IsLoading = false;
-            IsRefreshing = false;
-            OnPropertyChanged(nameof(IsEmpty));
+            if (!ct.IsCancellationRequested)
+            {
+                IsLoading = false;
+                IsRefreshing = false;
+                OnPropertyChanged(nameof(IsEmpty));
+            }
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task RefreshAsync()
     {
         try
@@ -111,5 +153,33 @@ public partial class RecommendationsViewModel : ObservableObject
         {
             IsRefreshing = false;
         }
+    }
+
+    private static string FormatBasisText(RecommendationsResultDto result)
+    {
+        if (result.SavedCount <= 0)
+        {
+            return InitialBasisText;
+        }
+
+        string keywords = string.Join(", ", result.BasisKeywords);
+        string searches = string.Join(", ", result.BasisSearches);
+
+        if (!string.IsNullOrEmpty(keywords) && !string.IsNullOrEmpty(searches))
+        {
+            return $"Підібрано на основі збережених вакансій ({keywords}) та пошуків ({searches})";
+        }
+
+        if (!string.IsNullOrEmpty(keywords))
+        {
+            return $"Підібрано на основі ваших збережених вакансій ({keywords})";
+        }
+
+        if (!string.IsNullOrEmpty(searches))
+        {
+            return $"Підібрано на основі ваших збережених вакансій та пошуків ({searches})";
+        }
+
+        return $"Підібрано на основі {result.SavedCount} збережених вакансій";
     }
 }

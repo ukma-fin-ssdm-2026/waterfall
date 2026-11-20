@@ -1,7 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
 using CommunityToolkit.Mvvm.Messaging;
-using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Vacancies;
 using Waterfall.Client.ViewModels;
 
@@ -25,7 +24,7 @@ public class RecommendationsViewModelTests
     };
 
     [Fact]
-    public async Task LoadRecommendations_LoadsUnsavedVacancies_AndSetsLoaded()
+    public async Task LoadRecommendations_LoadsUnsavedVacancies_AndFormatsBasisText()
     {
         FakeGateway gateway = new();
         WeakReferenceMessenger messenger = new();
@@ -33,15 +32,15 @@ public class RecommendationsViewModelTests
 
         Task loadTask = vm.LoadRecommendationsCommand.ExecuteAsync(null);
 
-        FakeGateway.CatalogCall call = await gateway.WaitForCatalogCallAsync(1);
+        FakeGateway.RecommendationCall call = await gateway.WaitForRecommendationCallAsync(1);
         Guid id1 = Guid.NewGuid();
         Guid id2 = Guid.NewGuid();
-        call.Response.SetResult(new PagedResult<VacancyDto>
+        call.Response.SetResult(new RecommendationsResultDto
         {
-            Items = [CreateVacancy(id1, "Vacancy 1", isSaved: false), CreateVacancy(id2, "Vacancy 2", isSaved: true)],
-            Page = 1,
-            PageSize = 10,
-            TotalCount = 2
+            Items = [CreateVacancy(id1, "Python Dev", isSaved: false), CreateVacancy(id2, "Saved Python", isSaved: true)],
+            SavedCount = 3,
+            BasisKeywords = ["Python", "Django"],
+            BasisSearches = ["FastAPI"]
         });
 
         await loadTask;
@@ -51,6 +50,35 @@ public class RecommendationsViewModelTests
         Assert.Single(vm.Recommendations);
         Assert.Equal(id1, vm.Recommendations[0].Id);
         Assert.False(vm.IsEmpty);
+        Assert.Contains("Python, Django", vm.RecommendedBasisText);
+        Assert.Contains("FastAPI", vm.RecommendedBasisText);
+    }
+
+    [Fact]
+    public async Task LoadRecommendations_WhenNoSavedVacancies_ShowsInitialPrompt()
+    {
+        FakeGateway gateway = new();
+        WeakReferenceMessenger messenger = new();
+        RecommendationsViewModel vm = new(gateway, messenger);
+
+        Task loadTask = vm.LoadRecommendationsCommand.ExecuteAsync(null);
+
+        FakeGateway.RecommendationCall call = await gateway.WaitForRecommendationCallAsync(1);
+        call.Response.SetResult(new RecommendationsResultDto
+        {
+            Items = [],
+            SavedCount = 0,
+            BasisKeywords = [],
+            BasisSearches = []
+        });
+
+        await loadTask;
+
+        Assert.True(vm.HasLoaded);
+        Assert.True(vm.IsEmpty);
+        Assert.Equal(0, vm.SavedCount);
+        Assert.Equal("Ще немає збережених вакансій", vm.EmptyTitle);
+        Assert.Contains("зберігати", vm.EmptyDescription, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -62,7 +90,7 @@ public class RecommendationsViewModelTests
 
         Task loadTask = vm.LoadRecommendationsCommand.ExecuteAsync(null);
 
-        FakeGateway.CatalogCall call = await gateway.WaitForCatalogCallAsync(1);
+        FakeGateway.RecommendationCall call = await gateway.WaitForRecommendationCallAsync(1);
         call.Response.SetException(new ApiException(System.Net.HttpStatusCode.InternalServerError, null, "Server error"));
 
         await loadTask;
@@ -73,29 +101,53 @@ public class RecommendationsViewModelTests
     }
 
     [Fact]
-    public async Task VacancySaveChangedMessage_UpdatesItemSavedState()
+    public async Task VacancySaveChangedMessage_RemovesSavedItemAndDynamicallyReloads()
     {
         FakeGateway gateway = new();
         StrongReferenceMessenger messenger = new();
         RecommendationsViewModel vm = new(gateway, messenger);
 
         Task loadTask = vm.LoadRecommendationsCommand.ExecuteAsync(null);
-        FakeGateway.CatalogCall call = await gateway.WaitForCatalogCallAsync(1);
-        Guid id = Guid.NewGuid();
-        call.Response.SetResult(new PagedResult<VacancyDto>
+        FakeGateway.RecommendationCall call1 = await gateway.WaitForRecommendationCallAsync(1);
+        Guid savedId = Guid.NewGuid();
+        Guid javaId = Guid.NewGuid();
+        call1.Response.SetResult(new RecommendationsResultDto
         {
-            Items = [CreateVacancy(id, "Vacancy 1", isSaved: false)],
-            Page = 1,
-            PageSize = 10,
-            TotalCount = 1
+            Items = [CreateVacancy(savedId, "Python Vacancy", isSaved: false)],
+            SavedCount = 1,
+            BasisKeywords = ["Python"]
         });
         await loadTask;
 
-        Assert.False(vm.Recommendations[0].IsSaved);
+        Assert.Single(vm.Recommendations);
 
-        messenger.Send(new VacancySaveChangedMessage(id, true));
+        // Користувач зберігає вакансію -> вона одразу зникає зі списку і підтягуються оновлені рекомендації
+        messenger.Send(new VacancySaveChangedMessage(savedId, true));
 
-        Assert.True(vm.Recommendations[0].IsSaved);
+        Assert.Empty(vm.Recommendations);
+
+        TaskCompletionSource reloadDone = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        vm.Recommendations.CollectionChanged += (_, _) =>
+        {
+            if (vm.Recommendations.Count == 1)
+            {
+                reloadDone.TrySetResult();
+            }
+        };
+
+        FakeGateway.RecommendationCall call2 = await gateway.WaitForRecommendationCallAsync(2);
+        call2.Response.SetResult(new RecommendationsResultDto
+        {
+            Items = [CreateVacancy(javaId, "Java Vacancy", isSaved: false)],
+            SavedCount = 2,
+            BasisKeywords = ["Python", "Java"]
+        });
+
+        await reloadDone.Task.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Single(vm.Recommendations);
+        Assert.Equal(javaId, vm.Recommendations[0].Id);
+        Assert.Contains("Java", vm.RecommendedBasisText);
     }
 
     [Fact]
@@ -106,17 +158,43 @@ public class RecommendationsViewModelTests
         RecommendationsViewModel vm = new(gateway, messenger);
 
         Task refreshTask = vm.RefreshCommand.ExecuteAsync(null);
-        FakeGateway.CatalogCall call = await gateway.WaitForCatalogCallAsync(1);
-        call.Response.SetResult(new PagedResult<VacancyDto>
+        FakeGateway.RecommendationCall call = await gateway.WaitForRecommendationCallAsync(1);
+        call.Response.SetResult(new RecommendationsResultDto
         {
             Items = [],
-            Page = 1,
-            PageSize = 10,
-            TotalCount = 0
+            SavedCount = 2
         });
         await refreshTask;
 
         Assert.True(vm.HasLoaded);
         Assert.True(vm.IsEmpty);
+        Assert.Equal("Нових рекомендацій поки немає", vm.EmptyTitle);
+    }
+
+    [Theory]
+    [InlineData(new[] { "Python" }, new string[0], "Підібрано на основі ваших збережених вакансій (Python)")]
+    [InlineData(new string[0], new[] { "Java" }, "Підібрано на основі ваших збережених вакансій та пошуків (Java)")]
+    [InlineData(new string[0], new string[0], "Підібрано на основі 2 збережених вакансій")]
+    public async Task LoadRecommendations_FormatsBasisTextForAllCombinations(
+        string[] keywords,
+        string[] searches,
+        string expectedBasisText)
+    {
+        FakeGateway gateway = new();
+        StrongReferenceMessenger messenger = new();
+        RecommendationsViewModel vm = new(gateway, messenger);
+
+        Task loadTask = vm.LoadRecommendationsCommand.ExecuteAsync(null);
+        FakeGateway.RecommendationCall call = await gateway.WaitForRecommendationCallAsync(1);
+        call.Response.SetResult(new RecommendationsResultDto
+        {
+            Items = [],
+            SavedCount = 2,
+            BasisKeywords = keywords,
+            BasisSearches = searches
+        });
+        await loadTask;
+
+        Assert.Equal(expectedBasisText, vm.RecommendedBasisText);
     }
 }

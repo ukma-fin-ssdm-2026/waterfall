@@ -4,9 +4,11 @@
 using System.Runtime.CompilerServices;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Ai;
+using Waterfall.Client.Models.Analytics;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SavedVacancies;
+using Waterfall.Client.Models.SiteSearch;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Tests;
@@ -23,6 +25,18 @@ internal sealed class FakeGateway : IHttpGatewayService
             new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
+    public sealed record RecommendationCall(int Limit, CancellationToken Ct)
+    {
+        public TaskCompletionSource<RecommendationsResultDto> Response { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
+    public sealed record AnalyticsCall(string? Category, int Months, CancellationToken Ct)
+    {
+        public TaskCompletionSource<MarketAnalyticsDto> Response { get; } =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+    }
+
     public sealed record SavedCall(CancellationToken Ct)
     {
         public TaskCompletionSource<IReadOnlyList<SavedVacancyDto>> Response { get; } =
@@ -31,9 +45,17 @@ internal sealed class FakeGateway : IHttpGatewayService
 
     private readonly SemaphoreSlim _callSignal = new(0);
 
+    private readonly SemaphoreSlim _recommendationSignal = new(0);
+
+    private readonly SemaphoreSlim _analyticsSignal = new(0);
+
     private readonly SemaphoreSlim _savedSignal = new(0);
 
     public List<CatalogCall> CatalogCalls { get; } = [];
+
+    public List<RecommendationCall> RecommendationCalls { get; } = [];
+
+    public List<AnalyticsCall> AnalyticsCalls { get; } = [];
 
     /// <summary>
     /// Відповідь на SaveVacancyAsync / UnsaveVacancyAsync; null — успіх.
@@ -53,6 +75,58 @@ internal sealed class FakeGateway : IHttpGatewayService
 
         _callSignal.Release();
         return call.Response.Task;
+    }
+
+    public Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default)
+    {
+        RecommendationCall call = new(limit, ct);
+        ct.Register(() => call.Response.TrySetCanceled(ct));
+        lock (RecommendationCalls)
+        {
+            RecommendationCalls.Add(call);
+        }
+
+        _recommendationSignal.Release();
+        return call.Response.Task;
+    }
+
+    public async Task<RecommendationCall> WaitForRecommendationCallAsync(int count)
+    {
+        while (RecommendationCalls.Count < count)
+        {
+            if (!await _recommendationSignal.WaitAsync(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException($"Очікувалось {count} викликів рекомендацій, отримано {RecommendationCalls.Count}.");
+            }
+        }
+
+        return RecommendationCalls[count - 1];
+    }
+
+    public Task<MarketAnalyticsDto> GetMarketAnalyticsAsync(string? category = null, int months = 3, CancellationToken ct = default)
+    {
+        AnalyticsCall call = new(category, months, ct);
+        ct.Register(() => call.Response.TrySetCanceled(ct));
+        lock (AnalyticsCalls)
+        {
+            AnalyticsCalls.Add(call);
+        }
+
+        _analyticsSignal.Release();
+        return call.Response.Task;
+    }
+
+    public async Task<AnalyticsCall> WaitForAnalyticsCallAsync(int count)
+    {
+        while (AnalyticsCalls.Count < count)
+        {
+            if (!await _analyticsSignal.WaitAsync(TimeSpan.FromSeconds(5)))
+            {
+                throw new TimeoutException($"Очікувалось {count} викликів аналітики, отримано {AnalyticsCalls.Count}.");
+            }
+        }
+
+        return AnalyticsCalls[count - 1];
     }
 
     /// <summary>
@@ -95,6 +169,32 @@ internal sealed class FakeGateway : IHttpGatewayService
     }
 
     public Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default) => throw new NotSupportedException();
+
+    /// <summary>Запити пошуку на сайтах, що надіслав каталог.</summary>
+    public List<SiteSearchRequest> SiteSearchRequests { get; } = [];
+
+    /// <summary>Відповіді на запуск і наступні опитування пошуку на сайті — по черзі; остання повторюється.</summary>
+    public Queue<SiteSearchStatusDto> SiteSearchStatuses { get; } = new();
+
+    /// <summary>Виняток замість запуску пошуку на сайті (наприклад, 401 чи 429).</summary>
+    public Exception? SiteSearchError { get; set; }
+
+    public int SiteSearchPolls { get; private set; }
+
+    public Task<SiteSearchStatusDto> StartSiteSearchAsync(SiteSearchRequest request, CancellationToken ct = default)
+    {
+        SiteSearchRequests.Add(request);
+        return SiteSearchError is null ? Task.FromResult(NextSiteSearchStatus()) : Task.FromException<SiteSearchStatusDto>(SiteSearchError);
+    }
+
+    public Task<SiteSearchStatusDto> GetSiteSearchAsync(Guid id, CancellationToken ct = default)
+    {
+        SiteSearchPolls++;
+        return Task.FromResult(NextSiteSearchStatus());
+    }
+
+    private SiteSearchStatusDto NextSiteSearchStatus() =>
+        SiteSearchStatuses.Count > 1 ? SiteSearchStatuses.Dequeue() : SiteSearchStatuses.Peek();
     /// <summary>
     /// Відповідь на GetSavedVacanciesAsync: список або виняток.
     /// </summary>
