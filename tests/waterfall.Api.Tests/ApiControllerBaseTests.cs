@@ -21,6 +21,8 @@ public sealed class TestableApiController : ApiControllerBase
     public BadRequestObjectResult TestErrorBadRequest(string message, List<ValidationErrorDetail>? details = null) => ErrorBadRequest(message, details);
     public UnauthorizedObjectResult TestErrorUnauthorized(string message) => ErrorUnauthorized(message);
     public ConflictObjectResult TestErrorConflict(string message) => ErrorConflict(message);
+    public ObjectResult TestErrorForbidden(string message) => ErrorForbidden(message);
+    public ObjectResult TestErrorServiceUnavailable(string message, string code = "SERVICE_UNAVAILABLE") => ErrorServiceUnavailable(message, code);
 }
 
 /// <summary>
@@ -140,5 +142,73 @@ public sealed class ApiControllerBaseTests
         ConflictObjectResult conflict = _controller.TestErrorConflict("Resource state conflict");
         ApiErrorResponse err409 = Assert.IsType<ApiErrorResponse>(conflict.Value);
         Assert.Equal("CONFLICT", err409.Error.Code);
+    }
+
+    [Fact]
+    public void ErrorForbidden_Produces403WithForbiddenCode()
+    {
+        // Arrange
+        DefaultHttpContext context = new() { TraceIdentifier = "trace-err-test" };
+        _controller.ControllerContext = new ControllerContext { HttpContext = context };
+
+        // Act
+        ObjectResult forbidden = _controller.TestErrorForbidden("Action is not allowed for this role");
+
+        // Assert
+        Assert.Equal(StatusCodes.Status403Forbidden, forbidden.StatusCode);
+        ApiErrorResponse err403 = Assert.IsType<ApiErrorResponse>(forbidden.Value);
+        Assert.Equal("FORBIDDEN", err403.Error.Code);
+        Assert.Equal("Action is not allowed for this role", err403.Error.Message);
+        Assert.Equal("trace-err-test", err403.Error.RequestId);
+    }
+
+    [Fact]
+    public void ErrorServiceUnavailable_Produces503WithRequestedCode()
+    {
+        // Arrange
+        DefaultHttpContext context = new() { TraceIdentifier = "trace-err-test" };
+        _controller.ControllerContext = new ControllerContext { HttpContext = context };
+
+        // Act 1: типовий код
+        ObjectResult unavailable = _controller.TestErrorServiceUnavailable("ШІ-консультант тимчасово недоступний.");
+
+        // Assert
+        Assert.Equal(StatusCodes.Status503ServiceUnavailable, unavailable.StatusCode);
+        ApiErrorResponse err503 = Assert.IsType<ApiErrorResponse>(unavailable.Value);
+        Assert.Equal("SERVICE_UNAVAILABLE", err503.Error.Code);
+        Assert.Equal("trace-err-test", err503.Error.RequestId);
+
+        // Act 2: код, який передає викликач (ШІ-консультант)
+        ObjectResult llmUnavailable = _controller.TestErrorServiceUnavailable("ШІ недоступний.", "LLM_UNAVAILABLE");
+
+        // Assert
+        ApiErrorResponse errLlm = Assert.IsType<ApiErrorResponse>(llmUnavailable.Value);
+        Assert.Equal("LLM_UNAVAILABLE", errLlm.Error.Code);
+    }
+
+    [Fact]
+    public void ErrorBadRequest_CarriesProvidedValueInDetails()
+    {
+        // Arrange
+        DefaultHttpContext context = new() { TraceIdentifier = "trace-err-test" };
+        _controller.ControllerContext = new ControllerContext { HttpContext = context };
+        List<ValidationErrorDetail> details =
+        [
+            new ValidationErrorDetail
+            {
+                Field = "salaryMin",
+                Message = "Мінімальна заробітна плата не може бути від'ємною.",
+                ProvidedValue = -100
+            }
+        ];
+
+        // Act
+        BadRequestObjectResult badRequest = _controller.TestErrorBadRequest("Запит містить невалідні поля", details);
+
+        // Assert
+        ApiErrorResponse err400 = Assert.IsType<ApiErrorResponse>(badRequest.Value);
+        ValidationErrorDetail detail = Assert.Single(err400.Error.Details);
+        Assert.Equal("salaryMin", detail.Field);
+        Assert.Equal(-100, detail.ProvidedValue);
     }
 }

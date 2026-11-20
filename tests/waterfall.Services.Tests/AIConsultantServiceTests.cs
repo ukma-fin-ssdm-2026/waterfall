@@ -197,6 +197,21 @@ public sealed class AIConsultantServiceTests
     }
 
     [Fact]
+    public async Task PrepareAsync_TooLongMessage_ThrowsBeforeProcessing()
+    {
+        // Arrange
+        string message = new string('x', 2_000);
+        AIConsultantService service = CreateService();
+
+        // Act
+        Task<AIConsultantTurn> action = service.PrepareAsync(_userId, Guid.Empty, message);
+
+        // Assert
+        await Assert.ThrowsAsync<ArgumentException>(() => action);
+        Assert.Equal(0, _llm.Extract.CallCount);
+    }
+
+    [Fact]
     public async Task PrepareAsync_ForeignSession_ThrowsBeforeCallingLlm()
     {
         // Arrange

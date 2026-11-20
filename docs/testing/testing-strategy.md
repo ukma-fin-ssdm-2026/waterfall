@@ -22,13 +22,14 @@
 
 Замість штучної гонитви за «100% рядковим покриттям» через тривіальні перевірки вбудованих методів ORM чи авто-властивостей, набір тестів сфокусовано на критичній бізнес-логіці, стійкості (resilience) та граничних умовах.
 
-Загальне покриття по всьому рішенню: **82,2 % рядків, 72,6 % гілок, 87,0 % методів** (усі 7 наборів, coverlet + ReportGenerator з точними фільтрами з `ci.yml`, 20.11.2026): `Waterfall.Api` — **90,8 %**, `waterfall.Services` — **90,5 %**, `waterfall.Repository` — **79,1 %**, `waterfall.Client` — **79,4 %**. Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) для окремих клієнтських звітів виключає [`tests/coverage.runsettings`](../../tests/coverage.runsettings).
+Загальне покриття по всьому рішенню: **≥ 78,2 % рядків** (усі 7 наборів, coverlet + ReportGenerator з точними фільтрами з `ci.yml`, 20.11.2026). Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) для окремих клієнтських звітів виключає [`tests/coverage.runsettings`](../../tests/coverage.runsettings).
 
 Що залишилось непокритим модульним тестуванням і чому:
 - **`Program.cs` та конфігурація хоста (0 %):** шаблонне завантаження веб-сервера ASP.NET Core; покривається smoke-тестами та e2e сценаріями при запуску.
 - **`WaterfallDbSeeder.cs` (0 %):** одноразовий ініціалізатор демо-даних, не бере участі в робочому циклі обробки клієнтських запитів.
 - **`OpenApiGenerator.cs` (0 %):** службова утиліта експорту OpenAPI специфікації для документації, валідується статично в CI.
-- **`ServiceCollectionExtensions` (0 %):** декларативна реєстрація DI-залежностей.
+- **`ServiceCollectionExtensions` (0 %):** декларативна реєстрація DI-залежностей (перевірка fail-fast конфігурації JWT — окремий план).
+- **`AIConsultantController` (73 %):** непокриті лише обробники обриву SSE-з'єднання (`IOException`, скасування) та термінальні події `error`; основні сценарії (403 за роллю, 404, 503 до стрімінгу, 429 за лімітом) перевіряються.
 - **Клієнт:** лише властивості, що передають поле DTO (`Title`, `Description`, `Notes`), і неможливі комбінації умов у `FavoritesViewModel.IsEmpty`. Аналіз непокритого `catch` знайшов справжню ваду: відповідь у невідомому кодуванні (сторінка проксі в `windows-1251`) вилітала повз `ApiException`; виправлено з регресійними тестами. Проєкт `waterfall.UI` (XAML, code-behind, `SecureStorage`) у звіт не входить: це прив'язки без логіки, вони потребують MAUI-воркладів і перевіряються системними тестами. [HTML-звіт](../../tests/waterfall.Client.Tests/coverage-report/index.html)
 - **`src/mcp` (TypeScript):** MCP-сервер перевіряється статичними аналізаторами (ESLint з `eslint-plugin-security`, `tsc`, `npm audit`).
 
@@ -73,13 +74,15 @@
 
 ## 5. Інтеграція у конвеєр CI/CD
 
-**Зараз** у [`ci.yml`](../../.github/workflows/ci.yml) на кожен Pull Request і пуш у `main`: job `build` збирає API (`Release`; SecurityCodeScan працює як аналізатор під час збірки), job `test` по черзі запускає всі 7 наборів .NET (`Ingestion`, `Client`, `Auth`, `Repository`, `Services`, `Api`, `Reliability`) із `--collect:"XPlat Code Coverage"`, ReportGenerator зводить звіти в `Summary.txt` і підсумок у Step Summary, а крок Quality Gate валить job, якщо загальне рядкове покриття нижче 75 % (поточне значення: **82,2 %**). MCP-сервер перевіряє окремий workflow `mcp.yml`. Обмеження:
-- гілка `main` не захищена (branch protection вимкнено), тож червоний `test` не блокує злиття, а лише позначає PR;
+**Зараз** у [`ci.yml`](../../.github/workflows/ci.yml) на кожен Pull Request і пуш у `main` працює **один** job `test`: спершу збирається API (`Release`; SecurityCodeScan працює як аналізатор під час збірки), потім по черзі запускаються всі 7 наборів .NET (`Ingestion`, `Client`, `Auth`, `Repository`, `Services`, `Api`, `Reliability`) із `--collect:"XPlat Code Coverage"`, ReportGenerator зводить звіти в `Summary.txt` і підсумок у Step Summary, а крок Quality Gate валить job, якщо загальне рядкове покриття нижче 75 % (поточне значення: **≥ 78,2 %**). Один job означає **одну чергу** на спільних self-hosted раннерах замість двох. Зміни лише в документації (`docs/**`, `*.md`, `Labs/**`, `coverage-report/**`) не запускають ні збірки, ні тестів: job швидко зеленіє. MCP-сервер перевіряє окремий workflow `mcp.yml`.
+
+Обмеження:
+- `main` захищена ruleset «Branches»: обов'язкові перевірки `test` (CI) і `SonarCloud Code Analysis`, тож червоний `test` блокує злиття PR;
 - CI не передає `tests/coverage.runsettings`, тому ворота рахують і згенерований код клієнта (81,7 % замість 80,3 %);
 - HTML-звіт у CI не зберігається; дашборд `coverage-report/` згенеровано локально й закомічено вручну.
 
 **План** (у порядку користі):
-1. **Обов'язкова перевірка:** увімкнути branch protection для `main` з required status check `test`, інакше ворота лише попереджають.
+1. (Виконано) **Обов'язкова перевірка:** увімкнути branch protection для `main` з required status check `test`, інакше ворота лише попереджають.
 2. **Покриття без згенерованого коду:** додати `--settings tests/coverage.runsettings` до кроків `dotnet test`, HTML-звіт — у workflow artifact. Тоді звіти не треба комітити вручну, і вони не застарівають.
 3. **Підсумок у PR:** `SummaryGithub.md` — коментарем до PR, а не лише в Step Summary.
 4. **Lint:** `dotnet format --verify-no-changes` (налаштування вже в `.editorconfig`).

@@ -74,6 +74,23 @@ public sealed class SavedVacanciesControllerTests
     }
 
     [Fact]
+    public async Task GetById_WhenNotFound_Returns404WithApiErrorResponse()
+    {
+        // Arrange
+        Guid missingId = Guid.NewGuid();
+
+        // Act
+        ActionResult<SavedVacancyDto> result = await _controller.GetById(missingId, CancellationToken.None);
+
+        // Assert
+        NotFoundObjectResult notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(notFound.Value);
+        Assert.Equal("NOT_FOUND", error.Error.Code);
+        Assert.Contains(missingId.ToString(), error.Error.Message);
+        Assert.False(string.IsNullOrWhiteSpace(error.Error.RequestId));
+    }
+
+    [Fact]
     public async Task Save_WhenVacancyDoesNotExist_ReturnsNotFound()
     {
         // Arrange
@@ -159,6 +176,24 @@ public sealed class SavedVacanciesControllerTests
     }
 
     [Fact]
+    public async Task Save_WhenModelStateInvalid_Returns400AndServiceIsNotCalled()
+    {
+        // Arrange
+        _controller.ModelState.AddModelError("VacancyId", "Поле vacancyId є обов'язковим");
+        SaveVacancyRequest request = new() { VacancyId = Guid.NewGuid() };
+
+        // Act
+        ActionResult<SavedVacancyDto> result = await _controller.Save(request, CancellationToken.None);
+
+        // Assert
+        BadRequestObjectResult badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(badRequest.Value);
+        Assert.Equal("VALIDATION_ERROR", error.Error.Code);
+        Assert.Empty(_vacancyService.GetByIdCalls); // Vacancy lookup must not be called
+        Assert.Empty(_savedVacancyService.SaveCalls); // Save service must not be called
+    }
+
+    [Fact]
     public async Task Delete_ExistingSavedVacancy_ReturnsNoContent()
     {
         // Arrange
@@ -171,5 +206,23 @@ public sealed class SavedVacanciesControllerTests
         // Assert
         Assert.IsType<NoContentResult>(result);
         Assert.Contains(_savedVacancyService.DeleteCalls, d => d.Id == savedId && d.UserId == _currentUserId);
+    }
+
+    [Fact]
+    public async Task Delete_WhenNotFound_Returns404WithApiErrorResponse()
+    {
+        // Arrange
+        Guid missingId = Guid.NewGuid();
+        _savedVacancyService.SavedVacancies.Add(new SavedVacancyDto { Id = Guid.NewGuid(), VacancyId = Guid.NewGuid() });
+
+        // Act
+        IActionResult result = await _controller.Delete(missingId, CancellationToken.None);
+
+        // Assert
+        NotFoundObjectResult notFound = Assert.IsType<NotFoundObjectResult>(result);
+        ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(notFound.Value);
+        Assert.Equal("NOT_FOUND", error.Error.Code);
+        Assert.Contains(missingId.ToString(), error.Error.Message);
+        Assert.Contains(_savedVacancyService.DeleteCalls, d => d.Id == missingId && d.UserId == _currentUserId);
     }
 }

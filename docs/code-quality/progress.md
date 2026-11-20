@@ -57,6 +57,11 @@ graph LR
 Відомі обмеження:
 - Прямий офлайн-збір (`OfflineSiteCollector`) підтримує DOU (RSS) та Djinni (JSON-LD); Work.ua та Robota.ua потребують headless Chromium на сервері (Cloudflare).
 
+Виправлено під час роботи над гілкою:
+- Зайві пробіли/перенос рядка у збереженому токені (`AuthHeaderHandler` тепер робить `Trim()`): інакше Kestrel відхиляє кожен запит порожнім 400. Регресійний тест `DirtyToken_StillSendsCleanBearer`.
+- Сервер після #65 віддає перелічення назвою (`"source": "Djinni"`), а клієнт чекав числа — у `ClientJsonContext` додано `JsonStringEnumConverter`, тест реєстрації оновлено на `"role": "Analyst"`, додано `GetVacancies_ParsesSourceAsName`. Перевірено наживо: каталог, вхід і обране через справжній шлюз проти локального API.
+- CI (`.github/workflows/ci.yml`) тепер в одному job `test` спершу збирається лише `src/api` (щоб не тягти MAUI-пакети), а потім тестуються усі набори .NET (`Ingestion`, `Client`, `Auth`, `Repository`, `Services`, `Api`, `Reliability`) зі збором покриття і ReportGenerator, а крок Quality Gate валить job, якщо покриття рядків нижче 75 %. Один job = одна черга на раннері замість двох.
+
 ## 3. Як запустити
 
 Потрібно: .NET SDK 10, workload `maui` (`dotnet workload install maui`). Для Android-збірки — Android SDK (`ANDROID_HOME`).

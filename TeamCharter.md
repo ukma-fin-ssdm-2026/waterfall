@@ -111,7 +111,7 @@
 | Тести | поведінка клієнта (gateway, viewmodels) | `dotnet test tests/waterfall.Client.Tests` |
 | `gitleaks` (pre-commit, `.pre-commit-config.yaml`) | секрети в змінах коміту | одноразово `pip install pre-commit` (або `uv tool install pre-commit` / `pipx install pre-commit`) і `pre-commit install`; далі автоматично на `git commit` |
 | Prettier | форматування TS | `npx prettier --check "src/**/*.ts"` у `src/mcp` |
-| CI (`.github/workflows/ci.yml`) | білд API на кожен PR | автоматично |
+| CI (`.github/workflows/ci.yml`) | білд API і тести на кожен PR (один job `test`) | автоматично |
 
 Закінчення рядків — LF (`.editorconfig` + `.gitattributes`), щоб перевірки давали однаковий результат на Windows і Linux.
 
