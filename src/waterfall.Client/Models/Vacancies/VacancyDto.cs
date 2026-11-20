@@ -1,23 +1,29 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: позначка «переглянуто» для знайдених на сайтах вакансій (issue #62, на прохання Дениса); перевірено: тести SiteSearchServiceTests, самоперевірка автора (§8)
 
+using Waterfall.Repository.Entities;
+
 namespace Waterfall.Client.Models.Vacancies;
 
 /// <summary>
 /// Клієнтська копія контракту VacancyDto з waterfall.Services (відповідь GET /api/v1/vacancies).
-/// Копія свідома: посилання на waterfall.Services затягнуло б EF Core та серверний код у застосунок.
+/// Копія свідома: посилання на waterfall.Services затягнуло б серверний код бізнес-логіки у застосунок.
 /// </summary>
 public record VacancyDto
 {
     public Guid Id { get; init; }
+    public string? ExternalId { get; init; }
     public string Title { get; init; } = string.Empty;
     public string Company { get; init; } = string.Empty;
     public string Description { get; init; } = string.Empty;
     public string Category { get; init; } = string.Empty;
+    public string? CategoryGroup { get; init; }
     public string Location { get; init; } = string.Empty;
     public string? FullAddress { get; init; }
     public string? Schedule { get; init; }
     public string? Experience { get; init; }
+    public int? ExperienceMonths { get; init; }
+    public WorkFormat WorkFormat { get; init; }
     public decimal? SalaryMin { get; init; }
     public decimal? SalaryMax { get; init; }
     public string Currency { get; init; } = string.Empty;
