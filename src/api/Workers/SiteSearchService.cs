@@ -47,7 +47,7 @@ public sealed record MultiSiteSearchStart(MultiSiteSearchStatusDto? Status, stri
 /// бо повного опису, навичок і графіка в їхньому списку немає (Work.ua за бажанням — лише за списком). До одного сайту одночасно йде один пошук; такий самий пошук протягом
 /// <see cref="CacheLifetime"/> віддається з бази.
 /// </summary>
-public sealed class SiteSearchService : ISiteSearchService
+public sealed class SiteSearchService : ISiteSearchService, IDisposable
 {
     public static readonly TimeSpan CacheLifetime = TimeSpan.FromHours(3);
 
@@ -774,6 +774,15 @@ public sealed class SiteSearchService : ISiteSearchService
                     Message = _message
                 };
             }
+        }
+    }
+
+    public void Dispose()
+    {
+        _dbCacheLock.Dispose();
+        foreach (SemaphoreSlim gate in _siteGates.Values)
+        {
+            gate.Dispose();
         }
     }
 }

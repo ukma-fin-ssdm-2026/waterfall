@@ -15,7 +15,7 @@ namespace Waterfall.Client.Services;
 /// Реалізація локального сховища вакансій клієнта поверх EF Core SQLite (<see cref="ClientWaterfallDbContext"/>).
 /// Підтримує офлайн-збір, редагування категорій, дедуплікацію та двосторонню синхронізацію із сервером.
 /// </summary>
-public sealed class EfLocalVacancyStore : ILocalVacancyStore
+public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
 {
     private const string VacancySyncStateKey = "vacancies";
 
@@ -630,4 +630,6 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore
             return [];
         }
     }
+
+    public void Dispose() => _initLock.Dispose();
 }

@@ -17,12 +17,14 @@ namespace Waterfall.Client.Services;
 /// підтримує прямий збір із DOU RSS та Djinni HTML/JSON-LD через HttpClient,
 /// щоб клієнт міг збирати вакансії автономно й синхронізувати їх із сервером після відновлення зв'язку.
 /// </summary>
-public sealed partial class OfflineSiteCollector : IOfflineSiteCollector
+public sealed partial class OfflineSiteCollector : IOfflineSiteCollector, IDisposable
 {
     private readonly HttpClient _http;
+    private readonly bool _ownsHttpClient;
 
     public OfflineSiteCollector(HttpClient? httpClient = null)
     {
+        _ownsHttpClient = httpClient is null;
         _http = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(25) };
         if (!_http.DefaultRequestHeaders.Contains("User-Agent"))
         {
@@ -338,4 +340,12 @@ public sealed partial class OfflineSiteCollector : IOfflineSiteCollector
 
     [GeneratedRegex(@"\s+", RegexOptions.None, 500)]
     private static partial Regex MultiSpaceRegex();
+
+    public void Dispose()
+    {
+        if (_ownsHttpClient)
+        {
+            _http.Dispose();
+        }
+    }
 }

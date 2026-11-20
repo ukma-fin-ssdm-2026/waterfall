@@ -21,7 +21,7 @@ namespace Waterfall.Client.ViewModels;
 /// DOU, Work.ua, Djinni, Robota.ua), підтримує максимально глибокий пошук, крос-сайтову фільтрацію,
 /// офлайн-роботу через локальну SQLite БД та двосторонню синхронізацію із сервером.
 /// </summary>
-public partial class DatabaseViewModel : ObservableObject
+public partial class DatabaseViewModel : ObservableObject, IDisposable
 {
     public static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(300);
     private const int ServerPageSize = 100;
@@ -420,9 +420,14 @@ public partial class DatabaseViewModel : ObservableObject
 
     private async Task DebounceSearchAsync()
     {
-        _debounceCts?.Cancel();
+        CancellationTokenSource? previous = _debounceCts;
         CancellationTokenSource cts = new();
         _debounceCts = cts;
+        if (previous is not null)
+        {
+            await previous.CancelAsync();
+            previous.Dispose();
+        }
         try
         {
             await Task.Delay(SearchDebounce, _time, cts.Token);
@@ -460,6 +465,7 @@ public partial class DatabaseViewModel : ObservableObject
         if (_loadCts is not null)
         {
             await _loadCts.CancelAsync();
+            _loadCts.Dispose();
         }
 
         CancellationTokenSource cts = new();
@@ -1227,5 +1233,14 @@ public partial class DatabaseViewModel : ObservableObject
         {
             target.Add(value);
         }
+    }
+
+    public void Dispose()
+    {
+        _debounceCts?.Cancel();
+        _debounceCts?.Dispose();
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

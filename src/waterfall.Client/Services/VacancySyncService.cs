@@ -13,7 +13,7 @@ namespace Waterfall.Client.Services;
 /// Підтримує пакетне вивантаження великої кількості офлайн-вакансій, дельта-синхронізацію за LastSyncedAt
 /// та повну синхронізацію.
 /// </summary>
-public sealed class VacancySyncService : IVacancySyncService
+public sealed class VacancySyncService : IVacancySyncService, IDisposable
 {
     public const int UploadBatchSize = 500;
 
@@ -148,4 +148,6 @@ public sealed class VacancySyncService : IVacancySyncService
             return new LocalVacancyStats(0, 0, null);
         }
     }
+
+    public void Dispose() => _syncLock.Dispose();
 }

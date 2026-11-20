@@ -37,9 +37,14 @@ public partial class App : Application
         SubscribeConnectivitySync();
     }
 
-    protected override async void OnStart()
+    protected override void OnStart()
     {
         base.OnStart();
+        _ = InitializeOnStartAsync();
+    }
+
+    private async Task InitializeOnStartAsync()
+    {
         try
         {
             AuthResponse response = await _gateway.LoginAsync(new LoginRequest
@@ -75,10 +80,10 @@ public partial class App : Application
         SubscribeConnectivitySync();
     }
 
-    protected override async void OnStart()
+    protected override void OnStart()
     {
         base.OnStart();
-        await TriggerBackgroundSyncAsync();
+        _ = TriggerBackgroundSyncAsync();
     }
 #endif
 
@@ -86,17 +91,19 @@ public partial class App : Application
     {
         try
         {
-            Connectivity.Current.ConnectivityChanged += async (_, args) =>
-            {
-                if (args.NetworkAccess == NetworkAccess.Internet)
-                {
-                    await TriggerBackgroundSyncAsync();
-                }
-            };
+            Connectivity.Current.ConnectivityChanged += OnConnectivityChanged;
         }
         catch
         {
             // Ігноруємо на платформах без підтримки Connectivity
+        }
+    }
+
+    private void OnConnectivityChanged(object? sender, ConnectivityChangedEventArgs args)
+    {
+        if (args.NetworkAccess == NetworkAccess.Internet)
+        {
+            _ = TriggerBackgroundSyncAsync();
         }
     }
 
