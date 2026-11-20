@@ -3,25 +3,26 @@
 
 ## 1. Поточний статус
 
-У рішенні **567 тести** у 6 проєктах (кількість — за `dotnet test`, 01.11.2026):
+У рішенні **1083 пройдених тести (+1 пропущений live LLM smoke = 1084)** у **7 проєктах** (за прогоном `dotnet test -c Release`, 20.11.2026):
 
 | Набір тестів | Модуль | Тестів | Що перевіряє |
 | :--- | :--- | :---: | :--- |
-| [`waterfall.Ingestion.Tests`](../../tests/waterfall.Ingestion.Tests/README.md) | збір вакансій | 186 | нормалізація полів, фоновий парсер, `BulkUpsertAsync` на справжній SQLite; розбір сторінок Djinni/Dou/Work.ua, `robots.txt` і темп запитів `SiteCrawler`; фікстури, заглушки, граничні випадки |
+| [`waterfall.Ingestion.Tests`](../../tests/waterfall.Ingestion.Tests/README.md) | збір вакансій | 283 | нормалізація полів, фоновий парсер, `SiteSearchService` (одиночний та пакетний 1–4 сайти, незалежний кеш), `BulkUpsertAsync` на справжній SQLite; розбір сторінок Djinni/DOU/Work.ua/Robota.ua, `robots.txt`, `SiteCrawler`, `VacancyExpirationService` |
 | `waterfall.Auth.Tests` | автентифікація | 40 | сервіс автентифікації, JWT, хешування паролів, контролер, валідація запитів |
-| [`waterfall.Client.Tests`](../../tests/waterfall.Client.Tests/README.md) | клієнт / UI | 168 | `HttpGatewayService` (помилки мережі й сервера), viewmodels каталогу, «Обраного», входу і картки, розбір JWT; заглушки з керованими відповідями, `FakeTimeProvider`, property-based тест (FsCheck) |
-| [`waterfall.Repository.Tests`](../../tests/waterfall.Repository.Tests/README.md) | сховище (репозиторії) | 61 | SQLite in-memory: пошук за 4 полями та JSON, фільтрація, сортування, пагінація, `BulkUpsert`, ізоляція закладок, операції користувачів і геокешу |
-| [`waterfall.Services.Tests`](../../tests/waterfall.Services.Tests/README.md) | бізнес-сервіси та кеш | 66 | Cache-Aside (PERF-001), Stale-Cache fallback (REL-001), збагачення `IsSaved`, каскадна інвалідація кешу, стійкість до битого JSON; адреса користувача в `UserPersonalData` |
-| [`waterfall.Api.Tests`](../../tests/waterfall.Api.Tests/README.md) | REST API та безпека | 46 | Ендпоїнти вакансій, закладок, автентифікації, профілю й геокодування (HTTP 200/201/400/401/404/409), трасування запитів, витяг claims з JWT, захист від витоку даних у логи (CWE-532) |
-| `src/mcp` (TypeScript) | MCP-сервер | — | тестів немає; лише статичні перевірки: ESLint з `eslint-plugin-security`, `tsc`, `npm audit` |
+| [`waterfall.Client.Tests`](../../tests/waterfall.Client.Tests/README.md) | клієнт / UI / sync | 296 | `HttpGatewayService`, viewmodels усіх вкладок («Каталог» + мультисайтовий парсинг, «База вакансій», «Обране», «Вхід», «Аналітика», «ШІ-консультант», «Рекомендації», «Налаштування», картка), локальна SQLite та двостороння синхронізація (`VacancySyncTests`), `OfflineSiteCollector`, геокеш, `FakeTimeProvider`, property-based (FsCheck) |
+| [`waterfall.Repository.Tests`](../../tests/waterfall.Repository.Tests/README.md) | сховище (репозиторії) | 145 | SQLite in-memory: пошук за 4 полями та JSON, кирилиця, `VacancyNormalizer`, `VacancyExperienceParser`, фільтрація, сортування, пагінація, `BulkUpsert`, `SyncMergeAsync`, автоапгрейд legacy БД, ізоляція закладок, чат-сесії, геокеш, NFR PERF-001 та SEC-001 |
+| [`waterfall.Services.Tests`](../../tests/waterfall.Services.Tests/README.md) | бізнес-сервіси та кеш | 205 (+1 skip) | Cache-Aside (PERF-001), Stale-Cache fallback (REL-001), `SyncVacanciesAsync`, `RecommendationService`, `AnalyticsService`, `UserStatsService`, `AIConsultantService`, `VacancyAnalysisService`, `FallbackChatClient`, `GeoLocationService` |
+| [`waterfall.Api.Tests`](../../tests/waterfall.Api.Tests/README.md) | REST API та безпека | 82 | Усі контролери API (вакансії, sync, site-searches одиночний і batch, закладки, профіль, гео, аналітика, AI SSE), трасування запитів, JWT claims, захист від витоку даних у логи (CWE-532) |
+| `waterfall.Reliability.Tests` | надійність і Health Checks | 32 | Граничні значення (`BoundaryTests`), ін'єкція збоїв (`FaultInjectionTests`), обробка помилок (`ErrorHandlingTests`), Health Checks (`/health`, `/health/live`) |
+| `src/mcp` (TypeScript) | MCP-сервер | — | тестів немає; статичні перевірки: ESLint з `eslint-plugin-security`, `tsc`, `npm audit` |
 
-Усі набори .NET прописані в CI (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)). З 19.10.2026 workflow-и виконуються на self-hosted раннерах курсу (PR #111), тож зелений прогін CI знову щось доводить: 01.11.2026 на `main` пройшли і тести (567, 0 падінь), і ворота покриття (76,5 %).
+Усі 7 наборів .NET прописані в CI (job `test` у [`ci.yml`](../../.github/workflows/ci.yml)). Зведений результат прогону 20.11.2026: **1083 пройдено, 0 падінь**, ворота покриття пройдено з запасом (**78,2 % ≥ 75 %**).
 
 ## 2. Покриття та філософія якості
 
 Замість штучної гонитви за «100% рядковим покриттям» через тривіальні перевірки вбудованих методів ORM чи авто-властивостей, набір тестів сфокусовано на критичній бізнес-логіці, стійкості (resilience) та граничних умовах.
 
-Загальне покриття по всьому рішенню: **76,5 % рядків, 67,2 % гілок** (усі 6 наборів, coverlet + ReportGenerator з фільтрами з `ci.yml`, 01.11.2026). Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) виключає спільний [`tests/coverage.runsettings`](../../tests/coverage.runsettings).
+Загальне покриття по всьому рішенню: **82,2 % рядків, 72,6 % гілок, 87,0 % методів** (усі 7 наборів, coverlet + ReportGenerator з точними фільтрами з `ci.yml`, 20.11.2026): `Waterfall.Api` — **90,8 %**, `waterfall.Services` — **90,5 %**, `waterfall.Repository` — **79,1 %**, `waterfall.Client` — **79,4 %**. Згенерований код (`*.g.cs` System.Text.Json і CommunityToolkit.Mvvm, `[GeneratedCode]`) для окремих клієнтських звітів виключає [`tests/coverage.runsettings`](../../tests/coverage.runsettings).
 
 Що залишилось непокритим модульним тестуванням і чому:
 - **`Program.cs` та конфігурація хоста (0 %):** шаблонне завантаження веб-сервера ASP.NET Core; покривається smoke-тестами та e2e сценаріями при запуску.
@@ -72,7 +73,7 @@
 
 ## 5. Інтеграція у конвеєр CI/CD
 
-**Зараз** у [`ci.yml`](../../.github/workflows/ci.yml) на кожен Pull Request і пуш у `main`: job `build` збирає API (`Release`; SecurityCodeScan працює як аналізатор під час збірки), job `test` по черзі запускає всі 6 наборів .NET із `--collect:"XPlat Code Coverage"`, ReportGenerator зводить звіти в `Summary.txt` і підсумок у Step Summary, а крок Quality Gate валить job, якщо загальне рядкове покриття нижче 75 %. MCP-сервер перевіряє окремий workflow `mcp.yml`. Обмеження:
+**Зараз** у [`ci.yml`](../../.github/workflows/ci.yml) на кожен Pull Request і пуш у `main`: job `build` збирає API (`Release`; SecurityCodeScan працює як аналізатор під час збірки), job `test` по черзі запускає всі 7 наборів .NET (`Ingestion`, `Client`, `Auth`, `Repository`, `Services`, `Api`, `Reliability`) із `--collect:"XPlat Code Coverage"`, ReportGenerator зводить звіти в `Summary.txt` і підсумок у Step Summary, а крок Quality Gate валить job, якщо загальне рядкове покриття нижче 75 % (поточне значення: **82,2 %**). MCP-сервер перевіряє окремий workflow `mcp.yml`. Обмеження:
 - гілка `main` не захищена (branch protection вимкнено), тож червоний `test` не блокує злиття, а лише позначає PR;
 - CI не передає `tests/coverage.runsettings`, тому ворота рахують і згенерований код клієнта (81,7 % замість 80,3 %);
 - HTML-звіт у CI не зберігається; дашборд `coverage-report/` згенеровано локально й закомічено вручну.
