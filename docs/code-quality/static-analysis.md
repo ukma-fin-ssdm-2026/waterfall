@@ -410,7 +410,7 @@ schema build failures in stderr: 0
 | Аудит залежностей | `npm run audit:deps` | у дереві залежностей є вразливість рівня moderate і вище |
 
 * Workflow запускається лише на зміни в `src/mcp/**`, тож нове advisory в npm не блокує PR, які MCP-сервер не чіпають. За новими вразливостями між змінами стежать Dependabot alerts.
-* Окремий job `test` у [`ci.yml`](../../.github/workflows/ci.yml) запускає на кожен PR тести `waterfall.Security.Tests`, `waterfall.Ingestion.Tests` і `waterfall.Client.Tests` паралельно зі збіркою, з тим самим лімітом 5 хвилин (MAINT-001).
+* Один job `test` у [`ci.yml`](../../.github/workflows/ci.yml) запускає на кожен PR тести `waterfall.Security.Tests`, `waterfall.Ingestion.Tests` і `waterfall.Client.Tests` разом зі збіркою API в одному job (одна черга на раннері), з тим самим лімітом часу (MAINT-001).
 
 **NuGet-залежності C#-проєктів** перевірено так само:
 ```bash

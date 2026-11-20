@@ -165,6 +165,41 @@ public sealed class VacanciesControllerTests
     }
 
     [Fact]
+    public async Task Update_WhenModelStateInvalid_Returns400AndServiceIsNotCalled()
+    {
+        // Arrange
+        VacancyDto existing = CreateSampleDto("Old Title");
+        _vacancyService.Vacancies.Add(existing);
+        _controller.ModelState.AddModelError("Title", "Поле 'Title' є обов'язковим.");
+
+        // Act
+        ActionResult<VacancyDto> result = await _controller.Update(existing.Id, new UpdateVacancyRequest(), CancellationToken.None);
+
+        // Assert
+        BadRequestObjectResult badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(badRequest.Value);
+        Assert.Equal("VALIDATION_ERROR", error.Error.Code);
+        Assert.Empty(_vacancyService.UpdateCalls); // Service must not be called
+    }
+
+    [Fact]
+    public async Task Update_WhenNotFound_Returns404WithApiErrorResponse()
+    {
+        // Arrange
+        Guid missingId = Guid.NewGuid();
+
+        // Act
+        ActionResult<VacancyDto> result = await _controller.Update(missingId, new UpdateVacancyRequest { Title = "New Title" }, CancellationToken.None);
+
+        // Assert
+        NotFoundObjectResult notFound = Assert.IsType<NotFoundObjectResult>(result.Result);
+        ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(notFound.Value);
+        Assert.Equal("NOT_FOUND", error.Error.Code);
+        Assert.Contains(missingId.ToString(), error.Error.Message);
+        Assert.False(string.IsNullOrWhiteSpace(error.Error.RequestId));
+    }
+
+    [Fact]
     public async Task Delete_ExistingVacancy_ReturnsNoContent()
     {
         // Arrange
@@ -177,6 +212,23 @@ public sealed class VacanciesControllerTests
         // Assert
         Assert.IsType<NoContentResult>(result);
         Assert.Contains(existing.Id, _vacancyService.DeleteCalls);
+    }
+
+    [Fact]
+    public async Task Delete_WhenNotFound_Returns404WithApiErrorResponse()
+    {
+        // Arrange
+        Guid missingId = Guid.NewGuid();
+
+        // Act
+        IActionResult result = await _controller.Delete(missingId, CancellationToken.None);
+
+        // Assert
+        NotFoundObjectResult notFound = Assert.IsType<NotFoundObjectResult>(result);
+        ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(notFound.Value);
+        Assert.Equal("NOT_FOUND", error.Error.Code);
+        Assert.Contains(missingId.ToString(), error.Error.Message);
+        Assert.Contains(missingId, _vacancyService.DeleteCalls);
     }
 
     [Fact]
