@@ -1981,7 +1981,9 @@ public partial class CatalogViewModel : ObservableObject
             ? BuildLocalFilteredDtos()
             : found;
 
-        List<VacancyItemViewModel> cards = await Task.Run(() => CreateCards(toCreate));
+        // Явна відмова від токена: Task.Run з токеном лише не дає стартувати, зупинити вже
+        // почате створення карток він не може; застарілий результат відсікає generation-guard нижче.
+        List<VacancyItemViewModel> cards = await Task.Run(() => CreateCards(toCreate), CancellationToken.None);
 
         if (generation != _fetchGeneration)
         {

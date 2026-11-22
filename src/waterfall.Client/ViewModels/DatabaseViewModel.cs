@@ -1047,6 +1047,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
         // Усе важке — побудова випадаючих списків (Distinct/OrderBy), фільтрація, сортування
         // і створення карток — виконується поза UI-потоком над незмінним знімком.
+        // Явна відмова від токена: Task.Run з токеном лише не дає стартувати, а цей прохід
+        // читає незмінний знімок; застарілий результат відсікає generation-guard нижче.
         OpenResult computed = await Task.Run(() =>
         {
             List<string> categories = BuildCategoryOptions(source);
@@ -1060,7 +1062,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             };
             List<VacancyItemViewModel> cards = BuildCards(source, effective);
             return new OpenResult(categories, locations, restoredCategory, restoredLocation, cards);
-        });
+        }, CancellationToken.None);
 
         if (generation != _openGeneration)
         {
