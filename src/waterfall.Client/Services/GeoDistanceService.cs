@@ -21,6 +21,18 @@ namespace Waterfall.Client.Services;
 public class GeoDistanceService : IDistanceCalculatorService
 {
     private static readonly ConcurrentDictionary<string, (double Lat, double Lon)> GeoCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Ознаки вуличної адреси (вулиця, проспект, площа, будинок тощо).
+    /// Якщо вони присутні — адреса вважається вуличною, а не міською.
+    /// </summary>
+    private static readonly string[] StreetMarkers =
+    {
+        "вул", "просп", "пр-т", "пр.", "пл.", "площ", "б-р", "бульв", "пров", "набережн",
+        "шосе", "узвіз", "алея", "тупик", "мікрорайон", "мкр", "бц", "трц", "тц", "офіс",
+        "метро", "буд", "st.", "str.", "street", "ave", "blvd", "sq."
+    };
+
     private static readonly SemaphoreSlim PhotonSemaphore = new(1, 1);
     private static readonly SemaphoreSlim OsrmSemaphore = new(2, 2);
 
@@ -75,8 +87,11 @@ public class GeoDistanceService : IDistanceCalculatorService
             return null;
         }
 
+        string normalizedOrigin = NormalizeAddressKey(UserAddress);
+        string normalizedDestination = NormalizeAddressKey(destinationAddress);
+
         // Однакові адреси (наприклад, користувач знаходиться в тому ж офісі чи за тією ж адресою)
-        if (string.Equals(NormalizeAddressKey(UserAddress), NormalizeAddressKey(destinationAddress), StringComparison.OrdinalIgnoreCase) ||
+        if (string.Equals(normalizedOrigin, normalizedDestination, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(UserAddress.Trim(), destinationAddress.Trim(), StringComparison.OrdinalIgnoreCase))
         {
             return 0.1;
@@ -93,11 +108,19 @@ public class GeoDistanceService : IDistanceCalculatorService
                 return 0.1;
             }
 
-            // 2. З'єднуємо точки та шукаємо маршрут і реальну дорожню відстань через роутер OSRM
-            double? routeKm = await TryOsrmRouteAsync(originCoord.Value, destCoord.Value, ct).ConfigureAwait(false);
-            if (routeKm.HasValue)
+            // 2. З'єднуємо точки та шукаємо маршрут і реальну дорожню відстань через роутер OSRM.
+            // Якщо хоча б одна точка — центроїд міста (не точна адреса), маршрутизація OSRM не дасть
+            // коректного результату для «центр міста -> центр міста», тому одразу беремо геовідстань.
+            bool originApproximate = IsCityCentroidResolution(UserAddress);
+            bool destinationApproximate = IsCityCentroidResolution(destinationAddress);
+
+            if (!originApproximate && !destinationApproximate)
             {
-                return routeKm.Value;
+                double? routeKm = await TryOsrmRouteAsync(originCoord.Value, destCoord.Value, ct).ConfigureAwait(false);
+                if (routeKm.HasValue)
+                {
+                    return routeKm.Value;
+                }
             }
 
             // 3. Якщо офлайн або роутер недоступний — розрахунок геовідстані з дорожнім коефіцієнтом
@@ -130,10 +153,22 @@ public class GeoDistanceService : IDistanceCalculatorService
             }
         }
 
+        // 1. Офлайн-довідник: точні координати відомих адрес (авторитетні, завжди) та центроїди міст
+        //    (лише для адрес без вуличної деталізації — без цифр та ознак вулиці).
+        if (TryGetApproximateCoordinate(norm, LooseKey(address), out (double Lat, double Lon) approximate))
+        {
+            GeoCache[norm] = approximate;
+            if (_localCache != null)
+            {
+                await _localCache.SaveCoordinatesAsync(address, approximate.Lat, approximate.Lon, isSynced: false, ct).ConfigureAwait(false);
+            }
+            return approximate;
+        }
+
         bool hadNetworkError = false;
         Exception? networkException = null;
 
-        // 1. Звернення до сервера: перевірка БД (GeoLocationCache) або геокодування через Photon (з кешуванням у БД) / Wikipedia (fallback без кешування)
+        // 2. Звернення до сервера: перевірка БД (GeoLocationCache) або геокодування через Photon (з кешуванням у БД) / Wikipedia (fallback без кешування)
         if (_gateway != null)
         {
             try
@@ -159,18 +194,6 @@ public class GeoDistanceService : IDistanceCalculatorService
             {
                 // Сервер повернув іншу помилку — переходимо до локального пошуку
             }
-        }
-
-        // 2. Локальний швидкий довідник відомих бізнес-центрів та вулиць (для офлайн-режиму та швидкої роботи)
-        (double Lat, double Lon)? localMatch = LookupKnownLocation(norm);
-        if (localMatch.HasValue)
-        {
-            GeoCache[norm] = localMatch.Value;
-            if (_localCache != null)
-            {
-                await _localCache.SaveCoordinatesAsync(address, localMatch.Value.Lat, localMatch.Value.Lon, isSynced: false, ct).ConfigureAwait(false);
-            }
-            return localMatch.Value;
         }
 
         List<string> candidates = GeoAddressHelper.GenerateQueryCandidates(address).ToList();
@@ -480,6 +503,73 @@ public class GeoDistanceService : IDistanceCalculatorService
 
     internal static string NormalizeAddressKey(string address) =>
         address.Trim().ToLowerInvariant().Replace("вул.", "").Replace("проспект", "").Replace("пл.", "");
+
+    /// <summary>
+    /// «Сирий» ключ без видалення слів «вул.», «проспект», «пл.»: перевірка вуличної деталізації
+    /// має бачити ці ознаки, бо NormalizeAddressKey їх вирізає.
+    /// </summary>
+    private static string LooseKey(string address) =>
+        address.Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// Чи містить нормалізована адреса вуличну деталізацію (номер будинку або ознаку вулиці).
+    /// Такі адреси потребують точного геокодування, центроїд міста для них не застосовується.
+    /// </summary>
+    private static bool HasStreetDetail(string norm)
+    {
+        foreach (char c in norm)
+        {
+            if (char.IsDigit(c))
+            {
+                return true;
+            }
+        }
+
+        foreach (string marker in StreetMarkers)
+        {
+            if (norm.Contains(marker, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Чи буде адреса розв'язана саме як центроїд міста (міська адреса без вуличної деталізації).
+    /// Точні координати з довідника відомих адрес сюди НЕ входять — вони вважаються точними.
+    /// </summary>
+    private static bool IsCityCentroidResolution(string address) =>
+        !HasStreetDetail(LooseKey(address)) && LookupCityCentroid(NormalizeAddressKey(address)).HasValue;
+
+    /// <summary>
+    /// Офлайн-пошук координат без жодного мережевого запиту:
+    /// спочатку точний довідник відомих адрес (авторитетний), потім — центроїд міста,
+    /// але лише для адрес без вуличної деталізації.
+    /// </summary>
+    private static bool TryGetApproximateCoordinate(string norm, string looseNorm, out (double Lat, double Lon) coords)
+    {
+        (double Lat, double Lon)? known = LookupKnownLocation(norm);
+        if (known.HasValue)
+        {
+            coords = known.Value;
+            return true;
+        }
+
+        if (!HasStreetDetail(looseNorm))
+        {
+            (double Lat, double Lon)? city = LookupCityCentroid(norm);
+            if (city.HasValue)
+            {
+                coords = city.Value;
+                return true;
+            }
+        }
+
+        coords = default;
+        return false;
+    }
 
 
 
