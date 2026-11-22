@@ -33,6 +33,11 @@ public static class MauiProgram
                 fonts.AddFont("lucide.ttf", "Lucide");
             });
 
+#if ANDROID
+        builder.ConfigureMauiHandlers(handlers =>
+            handlers.AddHandler<waterfall.UI.Controls.SectionPagerView, waterfall.UI.Platforms.Android.Handlers.SectionPagerViewHandler>());
+#endif
+
         builder.Services.AddSingleton<ThemeService>();
 
         builder.Services.AddSingleton(TimeProvider.System);
@@ -104,6 +109,12 @@ public static class MauiProgram
 #elif ANDROID
             handler.PlatformView.Background = null;
             handler.PlatformView.SetBackgroundColor(Android.Graphics.Color.Transparent);
+            handler.PlatformView.SetPadding(0, 0, 0, 0);
+            handler.PlatformView.SetMinHeight(0);
+            handler.PlatformView.SetMinimumHeight(0);
+            handler.PlatformView.Gravity =
+                (handler.PlatformView.Gravity & Android.Views.GravityFlags.HorizontalGravityMask)
+                | Android.Views.GravityFlags.CenterVertical;
 #elif IOS || MACCATALYST
             handler.PlatformView.BorderStyle = UIKit.UITextBorderStyle.None;
 #endif

@@ -22,6 +22,8 @@ public partial class CatalogPage : ContentPage, IHostedPage
         viewModel.IsLocalFilterPanelVisible = false;
         BindingContext = _viewModel = viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        OverflowMenuLayer.PropertyChanged += OnOverlayVisibilityPropertyChanged;
+        SortMenuLayer.PropertyChanged += OnOverlayVisibilityPropertyChanged;
         _viewModel.NavigateToLoginAction = async () =>
         {
             IAppNavigationHost? host = (IAppNavigationHost?)DesktopHostPage.Current ?? PhoneHostPage.Current;
@@ -31,6 +33,14 @@ public partial class CatalogPage : ContentPage, IHostedPage
             }
         };
     }
+
+    internal bool HasOpenOverlay =>
+        _viewModel.IsParsePanelVisible ||
+        _viewModel.IsLocalFilterPanelVisible ||
+        OverflowMenuLayer.IsVisible ||
+        SortMenuLayer.IsVisible;
+
+    internal event EventHandler? OverlayStateChanged;
 
     internal void ToggleOverflowFromHost()
     {
@@ -48,14 +58,24 @@ public partial class CatalogPage : ContentPage, IHostedPage
 
     public bool OnHostBackPressed() => OnBackButtonPressed();
 
+    private void OnOverlayVisibilityPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(IsVisible))
+        {
+            OverlayStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(CatalogViewModel.IsParsePanelVisible))
         {
+            OverlayStateChanged?.Invoke(this, EventArgs.Empty);
             _ = AnimateSheetAsync(ParseSheetHost, "ParseSheetTemplate", _viewModel.IsParsePanelVisible, _parseSheetAnimState);
         }
         else if (e.PropertyName == nameof(CatalogViewModel.IsLocalFilterPanelVisible))
         {
+            OverlayStateChanged?.Invoke(this, EventArgs.Empty);
             _ = AnimateSheetAsync(LocalFilterSheetHost, "LocalFilterSheetTemplate", _viewModel.IsLocalFilterPanelVisible, _localFilterSheetAnimState);
         }
     }

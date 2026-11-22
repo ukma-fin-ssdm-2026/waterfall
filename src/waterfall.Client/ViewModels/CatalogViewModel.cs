@@ -49,6 +49,7 @@ public partial class CatalogViewModel : ObservableObject
 
     private CancellationTokenSource? _debounceCts;
     private CancellationTokenSource? _siteSearchCts;
+    private CancellationTokenSource? _distancePrefetchCts;
 
     // Останній застосований текст рядка пошуку: той самий запит (наприклад, з доданим пробілом) не записуємо в історію двічі
     private string? _appliedQuery;
@@ -2810,6 +2811,11 @@ public partial class CatalogViewModel : ObservableObject
         }
 
         _vacancies.ReplaceAll(nextCards);
+
+        _distancePrefetchCts?.Cancel();
+        CancellationTokenSource prefetchCts = new();
+        _distancePrefetchCts = prefetchCts;
+        _ = VacancyFilterEngine.PrefetchDistancesAsync(nextCards, _distanceService, prefetchCts.Token);
 
         TotalCount = Vacancies.Count;
         OnPropertyChanged(nameof(IsEmpty));

@@ -14,12 +14,30 @@ public partial class DatabasePage : ContentPage, IHostedPage
         viewModel.IsFilterPanelVisible = false;
         BindingContext = _viewModel = viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        OverflowMenuLayer.PropertyChanged += OnOverlayVisibilityPropertyChanged;
+        SortMenuLayer.PropertyChanged += OnOverlayVisibilityPropertyChanged;
+    }
+
+    internal bool HasOpenOverlay =>
+        _viewModel.IsFilterPanelVisible ||
+        OverflowMenuLayer.IsVisible ||
+        SortMenuLayer.IsVisible;
+
+    internal event EventHandler? OverlayStateChanged;
+
+    private void OnOverlayVisibilityPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(IsVisible))
+        {
+            OverlayStateChanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(DatabaseViewModel.IsFilterPanelVisible))
         {
+            OverlayStateChanged?.Invoke(this, EventArgs.Empty);
             _ = AnimateSheetAsync(FilterSheetHost, "FilterSheetTemplate", _viewModel.IsFilterPanelVisible, _filterSheetAnimState);
         }
     }

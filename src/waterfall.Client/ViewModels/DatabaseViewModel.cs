@@ -42,6 +42,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     private readonly ConcurrentDictionary<Guid, double?> _distanceCache = new();
     private CancellationTokenSource? _debounceCts;
     private CancellationTokenSource? _loadCts;
+    private CancellationTokenSource? _distancePrefetchCts;
     private bool _suppressAutoFilter;
     private bool _hasLoadedOnce;
 
@@ -1090,7 +1091,13 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         List<VacancyDto> matched = _allVacancies.Where(MatchesAllFilters).ToList();
         List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(matched, SelectedSortOption, GetDistanceKm).ToList();
 
-        _vacancies.ReplaceAll(sorted.Select(CreateCard));
+        List<VacancyItemViewModel> cards = sorted.Select(CreateCard).ToList();
+        _vacancies.ReplaceAll(cards);
+
+        _distancePrefetchCts?.Cancel();
+        CancellationTokenSource prefetchCts = new();
+        _distancePrefetchCts = prefetchCts;
+        _ = VacancyFilterEngine.PrefetchDistancesAsync(cards, _distanceService, prefetchCts.Token);
 
         FilteredCount = Vacancies.Count;
         OnPropertyChanged(nameof(HasActiveFilters));
@@ -1333,6 +1340,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         _debounceCts?.Dispose();
         _loadCts?.Cancel();
         _loadCts?.Dispose();
+        _distancePrefetchCts?.Cancel();
+        _distancePrefetchCts?.Dispose();
         GC.SuppressFinalize(this);
     }
 }

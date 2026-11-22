@@ -19,6 +19,7 @@ public sealed class ThemeService
     private const string AmoledDarkKey = "waterfall_amoled_dark";
 
     public event EventHandler? ThemeChanged;
+    internal static event EventHandler? PaletteChanged;
 
     public AppThemeMode Mode { get; private set; } = AppThemeMode.System;
 
@@ -201,6 +202,7 @@ public sealed class ThemeService
 
         ApplyPlatformChrome(isDark, isAmoled);
         ThemeChanged?.Invoke(this, EventArgs.Empty);
+        PaletteChanged?.Invoke(this, EventArgs.Empty);
     }
 
     /// <summary>

@@ -8,7 +8,7 @@ namespace waterfall.UI.Views;
 
 /// <summary>
 /// Mobile host page that pins the phone header and segmented pill switcher in place
-/// while lazily mounting child sub-pages and horizontally sliding between them.
+/// while lazily mounting child sub-pages and horizontally switching between them.
 /// </summary>
 public sealed class PhoneSectionHostPage : ContentPage, IHostedPage
 {
@@ -18,13 +18,18 @@ public sealed class PhoneSectionHostPage : ContentPage, IHostedPage
     private readonly bool _isCabinet;
     private readonly List<TabEntry> _tabs;
     private readonly MobileSegmentedBar _segmentedBar;
+#if ANDROID
+    private readonly SectionPagerView _pager;
+    private readonly List<ContentView> _slots = [];
+#else
     private readonly Grid _bodyHost;
+    private bool _isSwitching;
+#endif
     private readonly HorizontalStackLayout? _catalogHeaderActions;
     private readonly HorizontalStackLayout? _databaseHeaderActions;
     private readonly Dictionary<string, MountedPage> _mounted = new(StringComparer.OrdinalIgnoreCase);
 
     private string _activeRoute = string.Empty;
-    private bool _isSwitching;
 
     internal string ActiveSubRoute => string.IsNullOrEmpty(_activeRoute) ? _tabs[0].Route : _activeRoute;
 
@@ -69,11 +74,32 @@ public sealed class PhoneSectionHostPage : ContentPage, IHostedPage
             OnTabSelected = route => SwitchToAsync(route, animate: true)
         };
 
+#if ANDROID
+        for (int i = 0; i < _tabs.Count; i++)
+        {
+            _slots.Add(new ContentView
+            {
+                HorizontalOptions = LayoutOptions.Fill,
+                VerticalOptions = LayoutOptions.Fill
+            });
+        }
+
+        _pager = new SectionPagerView
+        {
+            HorizontalOptions = LayoutOptions.Fill,
+            VerticalOptions = LayoutOptions.Fill
+        };
+        _pager.SetPages(_slots);
+        _pager.PageApproaching += (_, index) => EnsureSlotMounted(index);
+        _pager.PageSelected += (_, index) => HandlePagerSelected(index);
+        View body = _pager;
+#else
         _bodyHost = new Grid
         {
             IsClippedToBounds = true
         };
-        AttachHorizontalSwipes(_bodyHost);
+        View body = _bodyHost;
+#endif
 
         Grid root = new()
         {
@@ -87,11 +113,11 @@ public sealed class PhoneSectionHostPage : ContentPage, IHostedPage
 
         Grid.SetRow(header, 0);
         Grid.SetRow(_segmentedBar, 1);
-        Grid.SetRow(_bodyHost, 2);
+        Grid.SetRow(body, 2);
 
         root.Children.Add(header);
         root.Children.Add(_segmentedBar);
-        root.Children.Add(_bodyHost);
+        root.Children.Add(body);
 
         Content = root;
         UpdateHeaderCta(_tabs[0].Route);
@@ -255,6 +281,149 @@ public sealed class PhoneSectionHostPage : ContentPage, IHostedPage
         return SwitchToOnMainThreadAsync(route, animate);
     }
 
+#if ANDROID
+    private Task SwitchToOnMainThreadAsync(string rawRoute, bool animate)
+    {
+        string targetRoute = rawRoute.Trim().TrimStart('/');
+        int newIndex = _tabs.FindIndex(t => string.Equals(t.Route, targetRoute, StringComparison.OrdinalIgnoreCase));
+        if (newIndex < 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        string canonicalRoute = _tabs[newIndex].Route;
+        if (string.Equals(_activeRoute, canonicalRoute, StringComparison.OrdinalIgnoreCase) &&
+            _mounted.ContainsKey(canonicalRoute))
+        {
+            return Task.CompletedTask;
+        }
+
+        MountedPage? incoming = EnsureSlotMounted(newIndex);
+        if (incoming is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        MountedPage? outgoing = !string.IsNullOrEmpty(_activeRoute) && _mounted.TryGetValue(_activeRoute, out MountedPage? prev)
+            ? prev
+            : null;
+
+        _activeRoute = canonicalRoute;
+        _segmentedBar.SetActiveRoute(canonicalRoute);
+        UpdateHeaderCta(canonicalRoute);
+        UpdateSwipeEnabled();
+        _pager.SetCurrentIndex(newIndex, animate);
+
+        if (outgoing is not null)
+        {
+            CloseActiveMenus(outgoing.Page);
+            MountedPageHelper.Deactivate(outgoing.Page);
+        }
+
+        MountedPageHelper.Activate(incoming.Page);
+        return Task.CompletedTask;
+    }
+
+    private void HandlePagerSelected(int newIndex)
+    {
+        if (newIndex < 0 || newIndex >= _tabs.Count)
+        {
+            return;
+        }
+
+        string canonicalRoute = _tabs[newIndex].Route;
+        if (string.Equals(_activeRoute, canonicalRoute, StringComparison.OrdinalIgnoreCase) &&
+            _mounted.ContainsKey(canonicalRoute))
+        {
+            return;
+        }
+
+        MountedPage? incoming = EnsureSlotMounted(newIndex);
+        if (incoming is null)
+        {
+            return;
+        }
+
+        MountedPage? outgoing = !string.IsNullOrEmpty(_activeRoute) && _mounted.TryGetValue(_activeRoute, out MountedPage? prev)
+            ? prev
+            : null;
+
+        _activeRoute = canonicalRoute;
+        _segmentedBar.SetActiveRoute(canonicalRoute);
+        UpdateHeaderCta(canonicalRoute);
+        UpdateSwipeEnabled();
+
+        if (outgoing is not null)
+        {
+            CloseActiveMenus(outgoing.Page);
+            MountedPageHelper.Deactivate(outgoing.Page);
+        }
+
+        MountedPageHelper.Activate(incoming.Page);
+    }
+
+    private MountedPage? EnsureSlotMounted(int index)
+    {
+        if (index < 0 || index >= _tabs.Count)
+        {
+            return null;
+        }
+
+        string canonicalRoute = _tabs[index].Route;
+        if (_mounted.TryGetValue(canonicalRoute, out MountedPage? existing))
+        {
+            return existing;
+        }
+
+        ContentPage page = (ContentPage)_services.GetRequiredService(_tabs[index].PageType);
+        HideStandaloneHeaderIfNeeded(page);
+
+        MountedPage mounted = MountedPageHelper.Mount(page);
+        mounted.Wrapper.TranslationX = 0;
+        mounted.Wrapper.Opacity = 1;
+        mounted.Wrapper.IsVisible = true;
+        HookOverlayChanges(mounted.Page);
+
+        _slots[index].Content = mounted.Wrapper;
+        _mounted[canonicalRoute] = mounted;
+        return mounted;
+    }
+
+    private void HookOverlayChanges(ContentPage page)
+    {
+        switch (page)
+        {
+            case CatalogPage cp:
+                cp.OverlayStateChanged += OnChildOverlayStateChanged;
+                break;
+            case DatabasePage dp:
+                dp.OverlayStateChanged += OnChildOverlayStateChanged;
+                break;
+        }
+    }
+
+    private void OnChildOverlayStateChanged(object? sender, EventArgs e) => UpdateSwipeEnabled();
+
+    private void UpdateSwipeEnabled()
+    {
+        _pager.IsSwipeEnabled = !IsActiveOverlayOpen();
+    }
+
+    private bool IsActiveOverlayOpen()
+    {
+        if (string.IsNullOrEmpty(_activeRoute) || !_mounted.TryGetValue(_activeRoute, out MountedPage? active))
+        {
+            return false;
+        }
+
+        return active.Page switch
+        {
+            CatalogPage cp => cp.HasOpenOverlay,
+            DatabasePage dp => dp.HasOpenOverlay,
+            _ => false
+        };
+    }
+#else
     private async Task SwitchToOnMainThreadAsync(string rawRoute, bool animate)
     {
         string targetRoute = rawRoute.Trim().TrimStart('/');
@@ -280,7 +449,6 @@ public sealed class PhoneSectionHostPage : ContentPage, IHostedPage
             HideStandaloneHeaderIfNeeded(page);
 
             incoming = MountedPageHelper.Mount(page);
-            AttachHorizontalSwipes(incoming.Wrapper.Content);
             _bodyHost.Children.Add(incoming.Wrapper);
             _mounted[canonicalRoute] = incoming;
         }
@@ -327,74 +495,7 @@ public sealed class PhoneSectionHostPage : ContentPage, IHostedPage
 
         MountedPageHelper.Activate(incoming.Page);
     }
-
-    private void AttachHorizontalSwipes(View? view)
-    {
-        if (view is null)
-        {
-            return;
-        }
-
-        AttachSwipePair(view);
-
-        if (view is ScrollView scroll)
-        {
-            if (scroll.Content is not null)
-            {
-                AttachSwipePair(scroll.Content);
-            }
-        }
-        else if (view is Layout layout)
-        {
-            foreach (IView child in layout.Children)
-            {
-                if (child is ScrollView childScroll)
-                {
-                    AttachSwipePair(childScroll);
-                    if (childScroll.Content is not null)
-                    {
-                        AttachSwipePair(childScroll.Content);
-                    }
-                }
-                else if (child is RefreshView rv && rv.Content is ScrollView rvScroll)
-                {
-                    AttachSwipePair(rv);
-                    AttachSwipePair(rvScroll);
-                    if (rvScroll.Content is not null)
-                    {
-                        AttachSwipePair(rvScroll.Content);
-                    }
-                }
-            }
-        }
-    }
-
-    private void AttachSwipePair(View target)
-    {
-        SwipeGestureRecognizer swipeLeft = new() { Direction = SwipeDirection.Left };
-        swipeLeft.Swiped += (_, _) => _ = StepAsync(+1);
-        SwipeGestureRecognizer swipeRight = new() { Direction = SwipeDirection.Right };
-        swipeRight.Swiped += (_, _) => _ = StepAsync(-1);
-        target.GestureRecognizers.Add(swipeLeft);
-        target.GestureRecognizers.Add(swipeRight);
-    }
-
-    private Task StepAsync(int delta)
-    {
-        if (_isSwitching || string.IsNullOrEmpty(_activeRoute))
-        {
-            return Task.CompletedTask;
-        }
-
-        int currentIndex = _tabs.FindIndex(t => string.Equals(t.Route, _activeRoute, StringComparison.OrdinalIgnoreCase));
-        int nextIndex = currentIndex + delta;
-        if (currentIndex < 0 || nextIndex < 0 || nextIndex >= _tabs.Count)
-        {
-            return Task.CompletedTask;
-        }
-
-        return SwitchToAsync(_tabs[nextIndex].Route, animate: true);
-    }
+#endif
 
     private void UpdateHeaderCta(string route)
     {

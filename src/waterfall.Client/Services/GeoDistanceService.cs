@@ -83,8 +83,8 @@ public class GeoDistanceService : IDistanceCalculatorService
         }
 
         // 1. Отримуємо координати обох адрес (Photon як основний із кешуванням у БД, Wikipedia як запасний без кешування)
-        (double Lat, double Lon)? originCoord = await ResolveCoordinatesAsync(UserAddress, ct);
-        (double Lat, double Lon)? destCoord = await ResolveCoordinatesAsync(destinationAddress, ct);
+        (double Lat, double Lon)? originCoord = await ResolveCoordinatesAsync(UserAddress, ct).ConfigureAwait(false);
+        (double Lat, double Lon)? destCoord = await ResolveCoordinatesAsync(destinationAddress, ct).ConfigureAwait(false);
 
         if (originCoord.HasValue && destCoord.HasValue)
         {
@@ -94,7 +94,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             }
 
             // 2. З'єднуємо точки та шукаємо маршрут і реальну дорожню відстань через роутер OSRM
-            double? routeKm = await TryOsrmRouteAsync(originCoord.Value, destCoord.Value, ct);
+            double? routeKm = await TryOsrmRouteAsync(originCoord.Value, destCoord.Value, ct).ConfigureAwait(false);
             if (routeKm.HasValue)
             {
                 return routeKm.Value;
@@ -122,7 +122,7 @@ public class GeoDistanceService : IDistanceCalculatorService
         // 0. Перевірка локальної бази даних SQLite клієнта
         if (_localCache != null)
         {
-            (double Lat, double Lon)? localDbCoords = await _localCache.GetCoordinatesAsync(address, ct);
+            (double Lat, double Lon)? localDbCoords = await _localCache.GetCoordinatesAsync(address, ct).ConfigureAwait(false);
             if (localDbCoords.HasValue)
             {
                 GeoCache[norm] = localDbCoords.Value;
@@ -138,14 +138,14 @@ public class GeoDistanceService : IDistanceCalculatorService
         {
             try
             {
-                CoordinatesDto? serverCoords = await _gateway.GetCoordinatesAsync(address, ct);
+                CoordinatesDto? serverCoords = await _gateway.GetCoordinatesAsync(address, ct).ConfigureAwait(false);
                 if (serverCoords != null)
                 {
                     (double Lat, double Lon) res = (serverCoords.Latitude, serverCoords.Longitude);
                     GeoCache[norm] = res;
                     if (_localCache != null)
                     {
-                        await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: true, ct);
+                        await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: true, ct).ConfigureAwait(false);
                     }
                     return res;
                 }
@@ -168,7 +168,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             GeoCache[norm] = localMatch.Value;
             if (_localCache != null)
             {
-                await _localCache.SaveCoordinatesAsync(address, localMatch.Value.Lat, localMatch.Value.Lon, isSynced: false, ct);
+                await _localCache.SaveCoordinatesAsync(address, localMatch.Value.Lat, localMatch.Value.Lon, isSynced: false, ct).ConfigureAwait(false);
             }
             return localMatch.Value;
         }
@@ -181,16 +181,16 @@ public class GeoDistanceService : IDistanceCalculatorService
             try
             {
                 string json;
-                await PhotonSemaphore.WaitAsync(ct);
+                await PhotonSemaphore.WaitAsync(ct).ConfigureAwait(false);
                 try
                 {
                     if (_photonDelay > TimeSpan.Zero)
                     {
-                        await Task.Delay(_photonDelay, ct);
+                        await Task.Delay(_photonDelay, ct).ConfigureAwait(false);
                     }
 
                     string url = $"https://photon.komoot.io/api/?q={Uri.EscapeDataString(candidate)}&limit=5";
-                    json = await _httpClient.GetStringAsync(url, ct);
+                    json = await _httpClient.GetStringAsync(url, ct).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -249,7 +249,7 @@ public class GeoDistanceService : IDistanceCalculatorService
                         GeoCache[norm] = res;
                         if (_localCache != null)
                         {
-                            await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: false, ct);
+                            await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: false, ct).ConfigureAwait(false);
                         }
                         return res;
                     }
@@ -276,7 +276,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             try
             {
                 string url = $"https://uk.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch={Uri.EscapeDataString(candidate)}&gsrlimit=5&prop=coordinates&format=json";
-                string json = await _httpClient.GetStringAsync(url, ct);
+                string json = await _httpClient.GetStringAsync(url, ct).ConfigureAwait(false);
                 using var doc = JsonDocument.Parse(json);
 
                 if (doc.RootElement.TryGetProperty("query", out JsonElement queryElem) &&
@@ -340,7 +340,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             GeoCache[norm] = cityCentroid.Value;
             if (_localCache != null)
             {
-                await _localCache.SaveCoordinatesAsync(address, cityCentroid.Value.Lat, cityCentroid.Value.Lon, isSynced: false, ct);
+                await _localCache.SaveCoordinatesAsync(address, cityCentroid.Value.Lat, cityCentroid.Value.Lon, isSynced: false, ct).ConfigureAwait(false);
             }
             return cityCentroid.Value;
         }
@@ -368,7 +368,7 @@ public class GeoDistanceService : IDistanceCalculatorService
 
         try
         {
-            var unsynced = await _localCache.GetUnsyncedAsync(ct);
+            var unsynced = await _localCache.GetUnsyncedAsync(ct).ConfigureAwait(false);
             GeoSyncRequestDto request = new()
             {
                 ClientItems = unsynced.Select(u => new GeoSyncItemDto
@@ -381,7 +381,7 @@ public class GeoDistanceService : IDistanceCalculatorService
                 }).ToList()
             };
 
-            GeoSyncResponseDto? response = await _gateway.SyncGeoCacheAsync(request, ct);
+            GeoSyncResponseDto? response = await _gateway.SyncGeoCacheAsync(request, ct).ConfigureAwait(false);
             if (response == null)
             {
                 return 0;
@@ -389,12 +389,12 @@ public class GeoDistanceService : IDistanceCalculatorService
 
             if (unsynced.Count > 0)
             {
-                await _localCache.MarkAsSyncedAsync(unsynced.Select(u => u.Id), ct);
+                await _localCache.MarkAsSyncedAsync(unsynced.Select(u => u.Id), ct).ConfigureAwait(false);
             }
 
             if (response.ServerItems != null && response.ServerItems.Count > 0)
             {
-                await _localCache.UpsertFromServerAsync(response.ServerItems, ct);
+                await _localCache.UpsertFromServerAsync(response.ServerItems, ct).ConfigureAwait(false);
 
                 foreach (GeoSyncItemDto item in response.ServerItems)
                 {
@@ -427,7 +427,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             return cachedKm;
         }
 
-        await OsrmSemaphore.WaitAsync(ct);
+        await OsrmSemaphore.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (_routeCache.TryGetValue(routeKey, out cachedKm))
@@ -436,7 +436,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             }
 
             string url = $"https://router.project-osrm.org/route/v1/driving/{oLon},{oLat};{dLon},{dLat}?overview=false";
-            string json = await _httpClient.GetStringAsync(url, ct);
+            string json = await _httpClient.GetStringAsync(url, ct).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("routes", out JsonElement routes) &&
                 routes.ValueKind == JsonValueKind.Array &&

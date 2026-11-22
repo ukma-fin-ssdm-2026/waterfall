@@ -419,16 +419,28 @@ public class VacancyItemViewModelTests
     [InlineData(null, null, false)]
     [InlineData("", null, false)]
     [InlineData("   ", null, false)]
+    [InlineData("Київ", null, false)]
+    [InlineData("Львів", null, false)]
+    [InlineData("м. Київ", null, false)]
+    [InlineData("Київ, Львів", null, false)]
+    [InlineData("Україна", null, false)]
+    [InlineData("Київ", "Київ", false)]
     [InlineData("не вказано точну адресу", null, false)]
     [InlineData("Київ, не вказано точну адресу", null, false)]
     [InlineData("Remote", null, false)]
     [InlineData("remote", null, false)]
     [InlineData("Віддалено", null, false)]
+    [InlineData("Дистанційно", null, false)]
+    [InlineData("Віддалена робота", null, false)]
+    [InlineData("За кордоном", null, false)]
     [InlineData("Київ", "не вказано точну адресу", false)]
     [InlineData("Київ", "Віддалено", false)]
     [InlineData("Київ, вул. Хрещатик 1", null, true)]
     [InlineData("Remote", "Київ, вул. Хрещатик 1", true)]
     [InlineData("Київ", "вул. Хрещатик, 1", true)]
+    [InlineData("Київ", "вул. Мечникова", true)]
+    [InlineData("Київ", "БЦ Парус", true)]
+    [InlineData("Київ", "UNIT.City", true)]
     public void CanShowOnMap_ReflectsExactOfficeAvailability(string? location, string? fullAddress, bool expected)
     {
         VacancyItemViewModel item = new(new VacancyDto
@@ -444,15 +456,41 @@ public class VacancyItemViewModelTests
         Assert.Equal(expected, item.CanShowOnMap);
     }
 
+    [Fact]
+    public async Task Constructor_IsLazyForDistance_And_EnsureDistanceLoadedDeduplicatesSameAddress()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 3.2 };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "вул. Мечникова, 2"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await Task.Delay(30);
+        Assert.Equal(0, service.DistanceCallCount);
+        Assert.Null(item.DistanceText);
+
+        await item.EnsureDistanceLoadedAsync();
+        await item.EnsureDistanceLoadedAsync();
+
+        Assert.Equal(1, service.DistanceCallCount);
+        Assert.Equal("3.2 км від вас", item.DistanceText);
+    }
+
     private sealed class FakeDistanceService : IDistanceCalculatorService
     {
         public string? UserAddress { get; set; } = "вул. Хрещатик, 22, Київ";
         public double? DistanceToReturn { get; set; } = 1.5;
         public (double Lat, double Lon)? CoordinatesToReturn { get; set; } = (50.4501, 30.5234);
         public bool ThrowNetworkError { get; set; }
+        public int DistanceCallCount { get; private set; }
 
         public Task<double?> CalculateDistanceKmAsync(string destinationAddress, CancellationToken ct = default)
         {
+            DistanceCallCount++;
             if (ThrowNetworkError)
             {
                 throw new HttpRequestException("Немає інтернету");

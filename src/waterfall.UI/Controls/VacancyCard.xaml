@@ -1,291 +1,341 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<!-- Картка вакансії: Warm Editorial (без зайвих рамок, тиха метаінформація, лише «Архівна» для неактивних). -->
+<!-- Картка вакансії: Warm Editorial, пласка ієрархія без DynamicResource і DataTrigger для швидкого скролу. -->
 <ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
-             xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
              xmlns:res="clr-namespace:waterfall.UI.Resources"
-             x:Class="waterfall.UI.Controls.VacancyCard"
-             x:DataType="vm:VacancyItemViewModel">
+             x:Class="waterfall.UI.Controls.VacancyCard">
 
-    <Border Style="{StaticResource VacancyCard}">
-        <Border.Triggers>
-            <DataTrigger TargetType="Border" Binding="{Binding IsActive}" Value="False">
-                <Setter Property="Opacity" Value="0.74" />
-            </DataTrigger>
-        </Border.Triggers>
+    <Border x:Name="CardBorder"
+            StrokeShape="RoundRectangle 13"
+            StrokeThickness="1"
+            Stroke="#2D2A26"
+            BackgroundColor="#22201E"
+            Padding="16,14"
+            Margin="12,5">
         <Border.GestureRecognizers>
-            <TapGestureRecognizer Command="{Binding ToggleDetailsCommand}" />
+            <TapGestureRecognizer Tapped="OnToggleDetailsTapped" />
         </Border.GestureRecognizers>
 
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+              ColumnDefinitions="*,Auto"
+              ColumnSpacing="10"
+              RowSpacing="0">
 
-            <!-- Рядок 0: Заголовок + Зарплата ліворуч, тихе серце без рамки праворуч -->
-            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                <VerticalStackLayout Grid.Column="0" Spacing="3">
-                    <Label Text="{Binding Title}"
-                           Style="{StaticResource CardTitle}"
-                           FontSize="15"
-                           LineBreakMode="TailTruncation"
-                           MaxLines="2" />
-                    <Label Text="{Binding SalaryDisplay}"
-                           Style="{StaticResource SalaryLabel}">
-                        <Label.Triggers>
-                            <DataTrigger TargetType="Label" Binding="{Binding HasSalary}" Value="False">
-                                <Setter Property="TextColor" Value="{DynamicResource TextMuted}" />
-                                <Setter Property="FontFamily" Value="OpenSansRegular" />
-                                <Setter Property="FontSize" Value="12" />
-                            </DataTrigger>
-                        </Label.Triggers>
-                    </Label>
-                </VerticalStackLayout>
+            <!-- Рядок 0: Заголовок (зліва) + серце «Обраного» на 2 рядки справа -->
+            <Label x:Name="TitleLabel"
+                   Grid.Row="0"
+                   Grid.Column="0"
+                   FontFamily="OpenSansSemibold"
+                   FontSize="15"
+                   LineBreakMode="TailTruncation"
+                   MaxLines="2"
+                   BackgroundColor="Transparent"
+                   TextColor="#F2EFEA" />
 
-                <Border Grid.Column="1"
-                        WidthRequest="34"
-                        HeightRequest="34"
-                        StrokeShape="RoundRectangle 9"
+            <Border x:Name="HeartBorder"
+                    Grid.Row="0"
+                    Grid.RowSpan="2"
+                    Grid.Column="1"
+                    WidthRequest="34"
+                    HeightRequest="34"
+                    StrokeShape="RoundRectangle 9"
+                    StrokeThickness="0"
+                    Stroke="Transparent"
+                    BackgroundColor="Transparent"
+                    VerticalOptions="Start"
+                    SemanticProperties.Hint="Додати до обраного або прибрати з нього">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnToggleSaveTapped" />
+                </Border.GestureRecognizers>
+                <Path x:Name="HeartPath"
+                      Data="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"
+                      Aspect="Uniform"
+                      WidthRequest="17"
+                      HeightRequest="17"
+                      HorizontalOptions="Center"
+                      VerticalOptions="Center"
+                      StrokeThickness="1.7"
+                      StrokeLineJoin="Round"
+                      StrokeLineCap="Round"
+                      Fill="Transparent"
+                      Stroke="#767068" />
+            </Border>
+
+            <!-- Рядок 1: Зарплата -->
+            <Label x:Name="SalaryLabel"
+                   Grid.Row="1"
+                   Grid.Column="0"
+                   Margin="0,2,0,0"
+                   FontFamily="OpenSansSemibold"
+                   FontSize="14.5"
+                   BackgroundColor="Transparent"
+                   TextColor="#F2EFEA" />
+
+            <!-- Рядок 2: Компанія -->
+            <Label x:Name="CompanyLabel"
+                   Grid.Row="2"
+                   Grid.ColumnSpan="2"
+                   Margin="0,6,0,0"
+                   FontFamily="OpenSansSemibold"
+                   FontSize="12"
+                   LineBreakMode="TailTruncation"
+                   MaxLines="1"
+                   BackgroundColor="Transparent"
+                   TextColor="#ABA49A" />
+
+            <!-- Рядок 3: Категорія + відстань + бейдж «Архівна» -->
+            <HorizontalStackLayout x:Name="MetaRow"
+                                   Grid.Row="3"
+                                   Grid.ColumnSpan="2"
+                                   Margin="0,2,0,0"
+                                   Spacing="6"
+                                   VerticalOptions="Center">
+                <Label x:Name="MetaLabel"
+                       FontFamily="OpenSansRegular"
+                       FontSize="11.5"
+                       LineBreakMode="TailTruncation"
+                       MaxLines="1"
+                       VerticalOptions="Center"
+                       BackgroundColor="Transparent"
+                       TextColor="#767068" />
+
+                <Border x:Name="ArchivedBadge"
+                        IsVisible="False"
+                        StrokeShape="RoundRectangle 5"
                         StrokeThickness="0"
-                        BackgroundColor="Transparent"
-                        VerticalOptions="Start"
-                        SemanticProperties.Description="{Binding SaveButtonText}"
-                        SemanticProperties.Hint="Додати до обраного або прибрати з нього">
-                    <Border.GestureRecognizers>
-                        <TapGestureRecognizer Command="{Binding ToggleSaveCommand}" />
-                    </Border.GestureRecognizers>
-                    <Border.Triggers>
-                        <DataTrigger TargetType="Border" Binding="{Binding IsSaved}" Value="True">
-                            <Setter Property="BackgroundColor" Value="{DynamicResource PrimarySurface}" />
-                        </DataTrigger>
-                    </Border.Triggers>
-                    <Path Data="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"
-                          Aspect="Uniform"
-                          WidthRequest="16"
-                          HeightRequest="16"
-                          HorizontalOptions="Center"
-                          VerticalOptions="Center"
-                          Stroke="{DynamicResource TextMutedBrush}"
-                          StrokeThickness="1.7"
-                          StrokeLineJoin="Round"
-                          StrokeLineCap="Round"
-                          Fill="Transparent">
-                        <Path.Triggers>
-                            <DataTrigger TargetType="Path" Binding="{Binding IsSaved}" Value="True">
-                                <Setter Property="Stroke" Value="{DynamicResource PrimaryBrush}" />
-                                <Setter Property="Fill" Value="{DynamicResource PrimaryBrush}" />
-                            </DataTrigger>
-                        </Path.Triggers>
-                    </Path>
+                        Stroke="Transparent"
+                        BackgroundColor="#2C2926"
+                        Padding="6,1"
+                        VerticalOptions="Center">
+                    <Label x:Name="ArchivedLabel"
+                           FontFamily="OpenSansSemibold"
+                           FontSize="10"
+                           BackgroundColor="Transparent"
+                           TextColor="#767068" />
                 </Border>
+            </HorizontalStackLayout>
+
+            <!-- Рядок 4: Адреса офісу та кнопка «Показати на мапі» -->
+            <Grid x:Name="AddressRow"
+                  Grid.Row="4"
+                  Grid.ColumnSpan="2"
+                  Margin="0,6,0,0"
+                  ColumnDefinitions="Auto,*,Auto"
+                  ColumnSpacing="6"
+                  VerticalOptions="Center">
+                <Label x:Name="AddressPinLabel"
+                       Grid.Column="0"
+                       Text="{x:Static res:Icons.MapPin}"
+                       FontFamily="Lucide"
+                       FontSize="12"
+                       VerticalOptions="Center"
+                       BackgroundColor="Transparent"
+                       TextColor="#767068" />
+                <Label x:Name="AddressLabel"
+                       Grid.Column="1"
+                       FontFamily="OpenSansRegular"
+                       FontSize="11.5"
+                       LineBreakMode="TailTruncation"
+                       MaxLines="1"
+                       VerticalOptions="Center"
+                       BackgroundColor="Transparent"
+                       TextColor="#ABA49A" />
+                <Label x:Name="MapToggleLabel"
+                       Grid.Column="2"
+                       FontFamily="OpenSansSemibold"
+                       FontSize="11.5"
+                       Padding="6,4"
+                       VerticalOptions="Center"
+                       BackgroundColor="Transparent"
+                       TextColor="#D4745E"
+                       SemanticProperties.Hint="Показати або приховати інтерактивну карту розташування офісу">
+                    <Label.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnToggleMapTapped" />
+                    </Label.GestureRecognizers>
+                </Label>
             </Grid>
 
-            <!-- Рядок 1: Тихий рядок метаданих (компанія, категорія, відстань; бейдж «Архівна» лише коли !IsActive) -->
-            <VerticalStackLayout Grid.Row="1" Spacing="3">
-                <Label Text="{Binding Company}"
-                       FontSize="12"
-                       FontFamily="OpenSansSemibold"
-                       TextColor="{DynamicResource TextSecondary}"
-                       LineBreakMode="TailTruncation"
-                       MaxLines="1" />
+            <!-- Рядок 5: Лінивий контейнер мапи (індикатор, помилка й WebView створюються лише після кліку) -->
+            <ContentView x:Name="CardMapHost"
+                         Grid.Row="5"
+                         Grid.ColumnSpan="2"
+                         Margin="0,4,0,0"
+                         IsVisible="False" />
 
-                <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
-                    <Label Text="{Binding CategoryDisplay}"
-                           FontSize="11.5"
-                           TextColor="{DynamicResource TextMuted}"
-                           LineBreakMode="TailTruncation"
-                           MaxLines="1"
-                           VerticalOptions="Center" />
-
-                    <HorizontalStackLayout IsVisible="{Binding HasDistanceText}" Spacing="4" VerticalOptions="Center">
-                        <Label Text="·" FontSize="11.5" TextColor="{DynamicResource TextMuted}" VerticalOptions="Center" />
-                        <Label Text="{x:Static res:Icons.MapPin}" FontFamily="Lucide" FontSize="10.5" TextColor="{DynamicResource TextMuted}" VerticalOptions="Center" />
-                        <Label Text="{Binding DistanceText}" FontSize="11.5" TextColor="{DynamicResource TextSecondary}" VerticalOptions="Center" />
-                    </HorizontalStackLayout>
-
-                    <Border IsVisible="False"
-                            StrokeShape="RoundRectangle 5"
-                            StrokeThickness="0"
-                            BackgroundColor="{DynamicResource TonalSurface}"
-                            Padding="6,1"
-                            VerticalOptions="Center">
-                        <Border.Triggers>
-                            <DataTrigger TargetType="Border" Binding="{Binding IsActive}" Value="False">
-                                <Setter Property="IsVisible" Value="True" />
-                            </DataTrigger>
-                        </Border.Triggers>
-                        <Label Text="{Binding StatusText}"
-                               FontSize="10"
-                               FontFamily="OpenSansSemibold"
-                               TextColor="{DynamicResource TextMuted}" />
-                    </Border>
-                </HorizontalStackLayout>
-            </VerticalStackLayout>
-
-            <!-- Рядок 2: Адреса офісу та інтерактивна мапа -->
-            <VerticalStackLayout Grid.Row="2" Spacing="4" IsVisible="{Binding HasAddress}">
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6" VerticalOptions="Center">
-                    <Label Grid.Column="0"
-                           Text="{x:Static res:Icons.MapPin}"
-                           FontFamily="Lucide"
-                           FontSize="12"
-                           TextColor="{DynamicResource TextMuted}"
-                           VerticalOptions="Center" />
-                    <Label Grid.Column="1"
-                           Text="{Binding AddressDisplay}"
-                           TextColor="{DynamicResource TextSecondary}"
-                           FontSize="11.5"
-                           LineBreakMode="TailTruncation"
-                           VerticalOptions="Center" />
-                    <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center" IsVisible="{Binding CanShowOnMap}">
-                        <ActivityIndicator IsRunning="{Binding IsLoadingMap}"
-                                           IsVisible="{Binding IsLoadingMap}"
-                                           HeightRequest="14"
-                                           WidthRequest="14"
-                                           VerticalOptions="Center" />
-                        <Button Text="{Binding MapToggleText}"
-                                Command="{Binding ToggleMapCommand}"
-                                Style="{StaticResource LinkButton}"
-                                FontSize="11.5"
-                                HeightRequest="24"
-                                MinimumHeightRequest="24"
-                                Padding="4,0"
-                                SemanticProperties.Hint="Показати або приховати інтерактивну карту розташування офісу" />
-                    </HorizontalStackLayout>
-                </Grid>
-
-                <Border IsVisible="{Binding HasMapError}"
-                        StrokeShape="RoundRectangle 8"
-                        StrokeThickness="1"
-                        Stroke="{DynamicResource Danger}"
-                        BackgroundColor="{DynamicResource DangerSurface}"
-                        Padding="8,4"
-                        Margin="0,2">
-                    <Label Text="{Binding MapErrorMessage}"
-                           TextColor="{DynamicResource Danger}"
-                           FontSize="11" />
-                </Border>
-
-                <!-- Лінивий контейнер мапи: хедер і WebView створюються лише при натисканні «Показати на мапі» -->
-                <ContentView x:Name="CardMapHost"
-                             IsVisible="{Binding IsMapExpanded}" />
-            </VerticalStackLayout>
-
-            <!-- Рядок 3: Короткий опис -->
-            <Label Grid.Row="3"
-                   Text="{Binding Description}"
+            <!-- Рядок 6: Короткий опис -->
+            <Label x:Name="DescriptionLabel"
+                   Grid.Row="6"
+                   Grid.ColumnSpan="2"
+                   Margin="0,6,0,0"
+                   FontFamily="OpenSansRegular"
+                   FontSize="12"
                    MaxLines="2"
                    LineBreakMode="TailTruncation"
-                   TextColor="{DynamicResource TextSecondary}"
-                   FontSize="12" />
+                   BackgroundColor="Transparent"
+                   TextColor="#ABA49A" />
 
-            <!-- Рядок 4: Тональні безрамкові теги навичок (3 перевикористовувані чипи для швидкого скролу Android) -->
-            <Grid x:Name="SkillsRow" Grid.Row="4" ColumnDefinitions="*,Auto" ColumnSpacing="6" VerticalOptions="Center">
-                <FlexLayout Grid.Column="0"
-                            Wrap="Wrap"
-                            Direction="Row"
-                            AlignItems="Center"
-                            JustifyContent="Start">
-                    <Border x:Name="SkillChip0" Style="{StaticResource SkillChip}" IsVisible="False">
-                        <Label x:Name="SkillLabel0" FontSize="11" TextColor="{DynamicResource TextSecondary}" />
-                    </Border>
-                    <Border x:Name="SkillChip1" Style="{StaticResource SkillChip}" IsVisible="False">
-                        <Label x:Name="SkillLabel1" FontSize="11" TextColor="{DynamicResource TextSecondary}" />
-                    </Border>
-                    <Border x:Name="SkillChip2" Style="{StaticResource SkillChip}" IsVisible="False">
-                        <Label x:Name="SkillLabel2" FontSize="11" TextColor="{DynamicResource TextSecondary}" />
-                    </Border>
-                </FlexLayout>
-
-                <Border Grid.Column="1"
-                        Style="{StaticResource SkillChip}"
-                        IsVisible="{Binding HasMoreSkills}"
-                        Margin="0,0,0,5"
-                        VerticalOptions="Start">
-                    <Label Text="{Binding MoreSkillsText}"
+            <!-- Рядок 7: Тональні безрамкові теги навичок в один рядок -->
+            <HorizontalStackLayout x:Name="SkillsRow"
+                                   Grid.Row="7"
+                                   Grid.ColumnSpan="2"
+                                   Margin="0,6,0,0"
+                                   Spacing="5"
+                                   VerticalOptions="Center">
+                <Border x:Name="SkillChip0"
+                        StrokeShape="RoundRectangle 6"
+                        StrokeThickness="0"
+                        Stroke="Transparent"
+                        BackgroundColor="#2C2926"
+                        Padding="8,3"
+                        IsVisible="False">
+                    <Label x:Name="SkillLabel0"
+                           FontFamily="OpenSansRegular"
                            FontSize="11"
-                           TextColor="{DynamicResource TextMuted}" />
+                           MaxLines="1"
+                           LineBreakMode="TailTruncation"
+                           BackgroundColor="Transparent"
+                           TextColor="#ABA49A" />
                 </Border>
+                <Border x:Name="SkillChip1"
+                        StrokeShape="RoundRectangle 6"
+                        StrokeThickness="0"
+                        Stroke="Transparent"
+                        BackgroundColor="#2C2926"
+                        Padding="8,3"
+                        IsVisible="False">
+                    <Label x:Name="SkillLabel1"
+                           FontFamily="OpenSansRegular"
+                           FontSize="11"
+                           MaxLines="1"
+                           LineBreakMode="TailTruncation"
+                           BackgroundColor="Transparent"
+                           TextColor="#ABA49A" />
+                </Border>
+                <Border x:Name="SkillChip2"
+                        StrokeShape="RoundRectangle 6"
+                        StrokeThickness="0"
+                        Stroke="Transparent"
+                        BackgroundColor="#2C2926"
+                        Padding="8,3"
+                        IsVisible="False">
+                    <Label x:Name="SkillLabel2"
+                           FontFamily="OpenSansRegular"
+                           FontSize="11"
+                           MaxLines="1"
+                           LineBreakMode="TailTruncation"
+                           BackgroundColor="Transparent"
+                           TextColor="#ABA49A" />
+                </Border>
+                <Border x:Name="MoreSkillsChip"
+                        StrokeShape="RoundRectangle 6"
+                        StrokeThickness="0"
+                        Stroke="Transparent"
+                        BackgroundColor="#2C2926"
+                        Padding="8,3"
+                        IsVisible="False">
+                    <Label x:Name="MoreSkillsLabel"
+                           FontFamily="OpenSansRegular"
+                           FontSize="11"
+                           MaxLines="1"
+                           BackgroundColor="Transparent"
+                           TextColor="#767068" />
+                </Border>
+            </HorizontalStackLayout>
+
+            <!-- Рядок 8: Розділювач -->
+            <BoxView x:Name="DividerBox"
+                     Grid.Row="8"
+                     Grid.ColumnSpan="2"
+                     Margin="0,7,0,6"
+                     HeightRequest="1"
+                     BackgroundColor="Transparent"
+                     Color="#2E2B27" />
+
+            <!-- Рядок 9: Тихий нижній футер -->
+            <Grid Grid.Row="9"
+                  Grid.ColumnSpan="2"
+                  ColumnDefinitions="Auto,*,Auto"
+                  ColumnSpacing="8"
+                  VerticalOptions="Center">
+                <HorizontalStackLayout x:Name="SourceRow"
+                                       Grid.Column="0"
+                                       Spacing="4"
+                                       Padding="2,4"
+                                       VerticalOptions="Center">
+                    <Label x:Name="SourceLabel"
+                           FontFamily="OpenSansSemibold"
+                           FontSize="11.5"
+                           VerticalOptions="Center"
+                           BackgroundColor="Transparent"
+                           TextColor="#767068" />
+                    <Label x:Name="SourceExternalIcon"
+                           Text="{x:Static res:Icons.ExternalLink}"
+                           FontFamily="Lucide"
+                           FontSize="11"
+                           VerticalOptions="Center"
+                           BackgroundColor="Transparent"
+                           TextColor="#767068" />
+                </HorizontalStackLayout>
+
+                <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
+                    <Border x:Name="AiButtonBorder"
+                            StrokeShape="RoundRectangle 8"
+                            StrokeThickness="0"
+                            Stroke="Transparent"
+                            BackgroundColor="#2C2926"
+                            Padding="10,5"
+                            SemanticProperties.Hint="Надіслати вакансію ШІ-асистенту для швидкого аналізу">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnAnalyzeWithAiTapped" />
+                        </Border.GestureRecognizers>
+                        <HorizontalStackLayout Spacing="5" VerticalOptions="Center">
+                            <Label x:Name="AiSparklesLabel"
+                                   Text="{x:Static res:Icons.Sparkles}"
+                                   FontFamily="Lucide"
+                                   FontSize="12"
+                                   VerticalOptions="Center"
+                                   BackgroundColor="Transparent"
+                                   TextColor="#D4745E" />
+                            <Label x:Name="AiTextLabel"
+                                   Text="ШІ-аналіз"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="11.5"
+                                   VerticalOptions="Center"
+                                   BackgroundColor="Transparent"
+                                   TextColor="#ABA49A" />
+                        </HorizontalStackLayout>
+                    </Border>
+
+                    <Border x:Name="DetailsToggleBorder"
+                            WidthRequest="28"
+                            HeightRequest="28"
+                            StrokeShape="RoundRectangle 8"
+                            StrokeThickness="0"
+                            Stroke="Transparent"
+                            BackgroundColor="Transparent">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnToggleDetailsTapped" />
+                        </Border.GestureRecognizers>
+                        <Label x:Name="DetailsChevronLabel"
+                               Text="{x:Static res:Icons.ChevronDown}"
+                               FontFamily="Lucide"
+                               FontSize="14"
+                               HorizontalOptions="Center"
+                               VerticalOptions="Center"
+                               HorizontalTextAlignment="Center"
+                               VerticalTextAlignment="Center"
+                               BackgroundColor="Transparent"
+                               TextColor="#767068" />
+                    </Border>
+                </HorizontalStackLayout>
             </Grid>
 
-            <!-- Рядок 5: Тихий нижній футер без зайвих рамок -->
-            <VerticalStackLayout Grid.Row="5" Spacing="8">
-                <BoxView HeightRequest="1" Color="{DynamicResource DividerColor}" />
-
-                <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" VerticalOptions="Center">
-                    <Grid Grid.Column="0" VerticalOptions="Center">
-                        <HorizontalStackLayout IsVisible="{Binding HasSourceUrl}" Spacing="4" Padding="2,4" VerticalOptions="Center">
-                            <HorizontalStackLayout.GestureRecognizers>
-                                <TapGestureRecognizer Command="{Binding OpenSourceCommand}" />
-                            </HorizontalStackLayout.GestureRecognizers>
-                            <Label Text="{Binding SourceText}"
-                                   FontSize="11.5"
-                                   FontFamily="OpenSansSemibold"
-                                   TextColor="{DynamicResource TextMuted}"
-                                   VerticalOptions="Center" />
-                            <Label Text="{x:Static res:Icons.ExternalLink}"
-                                   FontFamily="Lucide"
-                                   FontSize="11"
-                                   TextColor="{DynamicResource TextMuted}"
-                                   VerticalOptions="Center" />
-                        </HorizontalStackLayout>
-                        <Label Text="{Binding SourceText}"
-                               FontSize="11.5"
-                               TextColor="{DynamicResource TextMuted}"
-                               VerticalOptions="Center">
-                            <Label.Triggers>
-                                <DataTrigger TargetType="Label" Binding="{Binding HasSourceUrl}" Value="True">
-                                    <Setter Property="IsVisible" Value="False" />
-                                </DataTrigger>
-                            </Label.Triggers>
-                        </Label>
-                    </Grid>
-
-                    <HorizontalStackLayout Grid.Column="2" Spacing="6" VerticalOptions="Center">
-                        <Border StrokeShape="RoundRectangle 8"
-                                StrokeThickness="0"
-                                BackgroundColor="{DynamicResource TonalSurface}"
-                                Padding="10,5"
-                                SemanticProperties.Hint="Надіслати вакансію ШІ-асистенту для швидкого аналізу">
-                            <Border.GestureRecognizers>
-                                <TapGestureRecognizer Command="{Binding AnalyzeWithAiCommand}" />
-                            </Border.GestureRecognizers>
-                            <HorizontalStackLayout Spacing="5" VerticalOptions="Center">
-                                <Label Text="{x:Static res:Icons.Sparkles}"
-                                       FontFamily="Lucide"
-                                       FontSize="12"
-                                       TextColor="{DynamicResource Primary}"
-                                       VerticalOptions="Center" />
-                                <Label Text="ШІ-аналіз"
-                                       FontSize="11.5"
-                                       FontFamily="OpenSansSemibold"
-                                       TextColor="{DynamicResource TextSecondary}"
-                                       VerticalOptions="Center" />
-                            </HorizontalStackLayout>
-                        </Border>
-
-                        <Button Text="{x:Static res:Icons.ChevronDown}"
-                                Command="{Binding ToggleDetailsCommand}"
-                                Style="{StaticResource GhostIconButton}"
-                                WidthRequest="28"
-                                HeightRequest="28"
-                                MinimumWidthRequest="28"
-                                MinimumHeightRequest="28"
-                                FontSize="14"
-                                SemanticProperties.Description="{Binding DetailsToggleText}">
-                            <Button.Triggers>
-                                <DataTrigger TargetType="Button" Binding="{Binding IsDetailsExpanded}" Value="True">
-                                    <Setter Property="Text" Value="{x:Static res:Icons.ChevronUp}" />
-                                    <Setter Property="TextColor" Value="{DynamicResource Primary}" />
-                                </DataTrigger>
-                            </Button.Triggers>
-                        </Button>
-                    </HorizontalStackLayout>
-                </Grid>
-            </VerticalStackLayout>
-
-            <!-- Рядок 6: Лінивий розгорнутий опис (наповнюється лише при натисканні на картку) -->
+            <!-- Рядок 10: Лінивий розгорнутий опис (наповнюється лише при натисканні на картку) -->
             <ContentView x:Name="DetailsHost"
-                         Grid.Row="6"
-                         IsVisible="{Binding IsDetailsExpanded}" />
-
+                         Grid.Row="10"
+                         Grid.ColumnSpan="2"
+                         Margin="0,8,0,0"
+                         IsVisible="False" />
         </Grid>
     </Border>
 </ContentView>
