@@ -11,7 +11,7 @@ using Waterfall.Client.ViewModels;
 
 namespace Waterfall.Client.Tests;
 
-public sealed class CatalogMultiSiteSearchTests : IDisposable
+public sealed class CatalogMultiSiteSearchTests : IDisposable, IAsyncLifetime
 {
     private readonly string _tempDbPath = Path.Combine(Path.GetTempPath(), $"waterfall-multisite-{Guid.NewGuid():N}.db");
     private readonly FakeGateway _gateway = new();
@@ -23,6 +23,15 @@ public sealed class CatalogMultiSiteSearchTests : IDisposable
     {
         _localStore = new EfLocalVacancyStore(_tempDbPath);
     }
+
+    /// <summary>
+    /// Перший доступ до локальної SQLite створює файл і модель EF Core; на повільному диску
+    /// це може займати кілька секунд. Прогріваємо сховище до тесту, щоб таймаути
+    /// всередині тестів не залежали від швидкості ініціалізації БД.
+    /// </summary>
+    public Task InitializeAsync() => _localStore.GetStatsAsync();
+
+    public Task DisposeAsync() => Task.CompletedTask;
 
     public void Dispose()
     {
