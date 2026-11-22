@@ -69,19 +69,10 @@
                                            FontSize="11.5"
                                            TextColor="{DynamicResource TextSecondary}"
                                            Margin="2,0,0,0" />
-                                    <Border StrokeShape="RoundRectangle 10"
-                                            Stroke="{DynamicResource Secondary}"
-                                            StrokeThickness="1"
-                                            BackgroundColor="{DynamicResource DarkBg2}"
-                                            HeightRequest="40"
-                                            Padding="12,0">
-                                        <Picker ItemsSource="{Binding Categories}"
-                                                SelectedItem="{Binding SelectedCategory}"
-                                                FontSize="13"
-                                                MinimumHeightRequest="34"
-                                                HeightRequest="36"
-                                                VerticalOptions="Center"
-                                                BackgroundColor="Transparent" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}"
+                                                ItemsSource="{Binding Categories}"
+                                                SelectedItem="{Binding SelectedCategory}" />
                                     </Border>
                                 </VerticalStackLayout>
 
@@ -90,19 +81,10 @@
                                            FontSize="11.5"
                                            TextColor="{DynamicResource TextSecondary}"
                                            Margin="2,0,0,0" />
-                                    <Border StrokeShape="RoundRectangle 10"
-                                            Stroke="{DynamicResource Secondary}"
-                                            StrokeThickness="1"
-                                            BackgroundColor="{DynamicResource DarkBg2}"
-                                            HeightRequest="40"
-                                            Padding="12,0">
-                                        <Picker ItemsSource="{Binding Periods}"
-                                                SelectedItem="{Binding SelectedPeriod}"
-                                                FontSize="13"
-                                                MinimumHeightRequest="34"
-                                                HeightRequest="36"
-                                                VerticalOptions="Center"
-                                                BackgroundColor="Transparent" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}"
+                                                ItemsSource="{Binding Periods}"
+                                                SelectedItem="{Binding SelectedPeriod}" />
                                     </Border>
                                 </VerticalStackLayout>
 

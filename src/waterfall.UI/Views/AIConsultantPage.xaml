@@ -204,14 +204,11 @@
                 BackgroundColor="{DynamicResource DarkBg1}"
                 Padding="12,10">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                <Border StrokeShape="RoundRectangle 20"
-                        StrokeThickness="1"
-                        Stroke="{DynamicResource Secondary}"
-                        BackgroundColor="{DynamicResource DarkBg2}"
-                        Padding="12,0">
-                    <Entry Text="{Binding InputText}"
+                <Border Style="{StaticResource CompactFieldBorder}"
+                        StrokeShape="RoundRectangle 20">
+                    <Entry Style="{StaticResource CompactEntry}"
+                           Text="{Binding InputText}"
                            Placeholder="Запитайте про вакансії..."
-                           BackgroundColor="Transparent"
                            ReturnCommand="{Binding SendMessageCommand}" />
                 </Border>
                 <Button Grid.Column="1"

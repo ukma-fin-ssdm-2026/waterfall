@@ -185,7 +185,6 @@
                         <Border Grid.Row="{OnIdiom Phone=1, Default=0}"
                                 Grid.Column="{OnIdiom Phone=0, Default=1}"
                                 Style="{StaticResource CompactFieldBorder}"
-                                Padding="10,0"
                                 WidthRequest="{OnIdiom Phone=-1, Default=230}"
                                 HorizontalOptions="{OnIdiom Phone=Fill, Default=End}"
                                 VerticalOptions="Center">

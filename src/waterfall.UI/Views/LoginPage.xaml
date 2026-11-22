@@ -22,27 +22,21 @@
                                Style="{StaticResource CardTitle}"
                                FontSize="22" />
 
-                        <Border StrokeShape="RoundRectangle 10"
-                                Stroke="{DynamicResource Secondary}"
-                                BackgroundColor="{DynamicResource DarkBg2}"
-                                Padding="10,0">
-                            <Entry Text="{Binding Email}"
+                        <Border Style="{StaticResource CompactFieldBorder}">
+                            <Entry Style="{StaticResource CompactEntry}"
+                                   Text="{Binding Email}"
                                    Placeholder="Електронна пошта"
                                    Keyboard="Email"
                                    IsSpellCheckEnabled="False"
                                    IsTextPredictionEnabled="False"
-                                   BackgroundColor="Transparent"
                                    SemanticProperties.Description="Електронна пошта" />
                         </Border>
 
-                        <Border StrokeShape="RoundRectangle 10"
-                                Stroke="{DynamicResource Secondary}"
-                                BackgroundColor="{DynamicResource DarkBg2}"
-                                Padding="10,0">
-                            <Entry Text="{Binding Password}"
+                        <Border Style="{StaticResource CompactFieldBorder}">
+                            <Entry Style="{StaticResource CompactEntry}"
+                                   Text="{Binding Password}"
                                    Placeholder="Пароль"
                                    IsPassword="True"
-                                   BackgroundColor="Transparent"
                                    ReturnCommand="{Binding SubmitCommand}"
                                    SemanticProperties.Description="Пароль" />
                         </Border>
@@ -52,16 +46,13 @@
                                Style="{StaticResource MutedLabel}"
                                FontSize="12" />
 
-                        <Border StrokeShape="RoundRectangle 10"
-                                Stroke="{DynamicResource Secondary}"
-                                BackgroundColor="{DynamicResource DarkBg2}"
-                                Padding="10,0"
+                        <Border Style="{StaticResource CompactFieldBorder}"
                                 IsVisible="{Binding IsRegisterMode}">
-                            <Picker Title="Роль"
+                            <Picker Style="{StaticResource CompactPicker}"
+                                    Title="Роль"
                                     ItemsSource="{Binding Roles}"
                                     SelectedItem="{Binding SelectedRole}"
-                                    ItemDisplayBinding="{Binding Title, x:DataType=vm:RoleOption}"
-                                    BackgroundColor="Transparent" />
+                                    ItemDisplayBinding="{Binding Title, x:DataType=vm:RoleOption}" />
                         </Border>
 
                         <Border Style="{StaticResource ErrorBanner}"
@@ -146,14 +137,11 @@
                                        TextColor="{DynamicResource White}"
                                        VerticalOptions="Center" />
                             </HorizontalStackLayout>
-                            <Border StrokeShape="RoundRectangle 10"
-                                    Stroke="{DynamicResource Secondary}"
-                                    BackgroundColor="{DynamicResource DarkBg2}"
-                                    Padding="10,0">
+                            <Border Style="{StaticResource CompactFieldBorder}">
                                 <Grid ColumnDefinitions="*,Auto">
-                                    <Entry Text="{Binding UserAddress}"
-                                           Placeholder="Вулиця або місто..."
-                                           BackgroundColor="Transparent" />
+                                    <Entry Style="{StaticResource CompactEntry}"
+                                           Text="{Binding UserAddress}"
+                                           Placeholder="Вулиця або місто..." />
                                     <ActivityIndicator Grid.Column="1"
                                                        IsRunning="{Binding IsLoadingSuggestions}"
                                                        IsVisible="{Binding IsLoadingSuggestions}"
