@@ -12,24 +12,24 @@
 
 ## Тести
 
-296 тестових випадків у 19 класах (актуалізовано 20.11.2026):
+348 тестових випадків у 19 класах (актуалізовано 22.11.2026):
 
 | Клас | Випадків | Що перевіряє |
 | :--- | :---: | :--- |
 | [`LoginViewModelTests`](LoginViewModelTests.cs) | 41 | локальна перевірка email/пароля, вхід/реєстрація, сесія, адреса профілю, особиста статистика (Test-28…30) |
 | [`HttpGatewayServiceTests`](HttpGatewayServiceTests.cs) | 37 | URL і тіла всіх REST-ендпоінтів (зокрема `GetVacanciesAsync(VacancyQueryOptions)`, `StartMultiSiteSearchAsync`/`GetMultiSiteSearchAsync`, `SyncVacanciesAsync`), Bearer, enum-рядки, обробка помилок/кодувань/тайм-аутів |
-| [`VacancyItemViewModelTests`](VacancyItemViewModelTests.cs) | 36 | форматування зарплати/джерела/компанії/статусу, відстані, перемикач «Обраного» та реакція на повідомлення |
+| [`VacancyItemViewModelTests`](VacancyItemViewModelTests.cs) | 69 | форматування зарплати/джерела/компанії/статусу, відстані, перемикач «Обраного» та реакція на повідомлення |
 | [`CatalogSiteSearchTests`](CatalogSiteSearchTests.cs) | 33 | пошук на 4 сайтах із каталогу (DOU, Djinni, Work.ua, Robota.ua), коди фільтрів, `fromPage`, `listOnly`, прогрес, кеш |
-| [`CatalogViewModelTests`](CatalogViewModelTests.cs) | 29 | локальна фільтрація каталогу, вайт-/бан-лист, «Без переглянутих», «Включно без ЗП», debounce, сортування, скидання фільтрів, банер помилок |
+| [`CatalogViewModelTests`](CatalogViewModelTests.cs) | 30 | локальна фільтрація каталогу, вайт-/бан-лист, «Без переглянутих», «Включно без ЗП», debounce, сортування, скидання фільтрів, банер помилок |
 | [`AIConsultantViewModelTests`](AIConsultantViewModelTests.cs) | 22 | чат ШІ-консультанта (SSE `meta`/`vacancies`/`delta`/`done`/`error`), аналіз вакансій (`relevance`), відновлення після помилки |
-| [`GeoDistanceServiceTests`](GeoDistanceServiceTests.cs) | 17 | геокодування, розрахунок відстані OSRM і формулою гаверсинів, офлайн-кешування |
+| [`GeoDistanceServiceTests`](GeoDistanceServiceTests.cs) | 28 | геокодування, розрахунок відстані OSRM і формулою гаверсинів, офлайн-кешування |
 | [`AiConsultantGatewayTests`](AiConsultantGatewayTests.cs) | 14 | парсинг SSE-потоку `/messages` і `/analyze`, обробка 429/503 |
-| [`RecommendationsViewModelTests`](RecommendationsViewModelTests.cs) | 8 | завантаження персоналізованих рекомендацій, порожній стан, оновлення |
+| [`RecommendationsViewModelTests`](RecommendationsViewModelTests.cs) | 9 | завантаження персоналізованих рекомендацій, порожній стан, оновлення |
 | [`SystemSettingsViewModelTests`](SystemSettingsViewModelTests.cs) | 8 | читання/збереження `appsettings.json` (`Ingestion`), перемикання фонового збору, відображення статусу та запуск ручної синхронізації БД |
-| [`FavoritesViewModelTests`](FavoritesViewModelTests.cs) | 7 | завантаження, видалення, порожній стан, реакція на зміни з інших вкладок |
+| [`FavoritesViewModelTests`](FavoritesViewModelTests.cs) | 8 | завантаження, видалення, порожній стан, реакція на зміни з інших вкладок |
 | [`EfLocalGeoCacheServiceTests`](SqliteLocalGeoCacheServiceTests.cs) | 7 | локальний SQLite геокеш та двостороння синхронізація з сервером |
-| [`DatabaseViewModelTests`](DatabaseViewModelTests.cs) | 5 | повне багатосторінкове завантаження БД 4 сайтів, лічильники, крос-сайтові фільтри (джерела, категорії, формат, досвід, крос-валютна ЗП, свіжість, статус, слова, debounce), сортування, офлайн-фолбек + ручна синхронізація, JSON експорт/імпорт |
-| [`AnalyticsViewModelTests`](AnalyticsViewModelTests.cs) | 6 | рольовий доступ (`Analyst`), графіки зарплат/категорій/технологій, стан недостатності даних |
+| [`DatabaseViewModelTests`](DatabaseViewModelTests.cs) | 8 | повне багатосторінкове завантаження БД 4 сайтів, лічильники, крос-сайтові фільтри (джерела, категорії, формат, досвід, крос-валютна ЗП, свіжість, статус, слова, debounce), сортування, офлайн-фолбек + ручна синхронізація, JSON експорт/імпорт |
+| [`AnalyticsViewModelTests`](AnalyticsViewModelTests.cs) | 8 | рольовий доступ (`Analyst`), графіки зарплат/категорій/технологій, стан недостатності даних |
 | [`AuthSessionTests`](AuthSessionTests.cs) | 6 | регресійний тест розбору JWT і property-based тест (FsCheck) |
 | [`PhotonAddressAutocompleteServiceTests`](PhotonAddressAutocompleteServiceTests.cs) | 6 | автодоповнення адрес (Photon API + Wikipedia fallback) |
 | [`CatalogMultiSiteSearchTests`](CatalogMultiSiteSearchTests.cs) | 5 | прапорці вмикання/вимикання 4 сайтів («Усі 4»/«Жодного»), маршрутизація 1 сайту vs 2–4 сайти (`/batch`), незалежні `fromPage`/фільтри, живий прогрес, офлайн-фолбек `OfflineSiteCollector` |
@@ -61,10 +61,10 @@
 
 | | До Lab 06 | Зараз |
 | :--- | :---: | :---: |
-| Тестових випадків | 61 | 106 |
-| Рядки | 89,6 % | 99,2 % |
-| Гілки | 79,4 % | 98,3 % |
-| Методи | 88,2 % | 97,9 % |
+| Тестових випадків | 61 | 348 |
+| Рядки | 89,6 % | 71,5 % |
+| Гілки | 79,4 % | 64,3 % |
+| Методи | 88,2 % | 77,9 % |
 
 HTML-звіт: [`coverage-report/index.html`](coverage-report/index.html).
 

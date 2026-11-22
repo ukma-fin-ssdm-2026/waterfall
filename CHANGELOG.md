@@ -17,6 +17,10 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Background ingestion can be switched on and off without restarting the API**: `JobParserService` watches `Ingestion:Enabled` in `appsettings.json` (edited by hand or from the system settings screen) and starts or stops collecting within a second; `Ingestion:EnableOnStart` turns collection on at startup without editing the file. It still starts disabled by default.
 - **`robots.txt` answered with 401/403** now means the site is skipped and paused, like 5xx and 429; before, any 4xx counted as a missing file that allows everything.
+- **Нова навігаційна оболонка**: `AppShell` замінено на хости `DesktopHostPage` (Windows — лівий рейл із ролезалежними пунктами, «Аналітика» лише для ролі «Аналітик») і `PhoneHostPage` (телефон — нижній бар із 5 розділів); `PhoneSectionHostPage` об'єднує Каталог із «Базою вакансій» і Профіль/Налаштування/Підбірку в один екран із нативним Android-пейджером `SectionPagerView`. Усі сторінки передизайнено в темі Warm Editorial із Lucide-іконками та спільними контролами `VacancyListView`, `OverlaySheetFrame`, `MobileSegmentedBar`, `AnchoredPopupMenu`, `ToastBanner`; `VacancyCard` став пласким — без `DynamicResource` і прив'язок у XAML заради швидкого скролу.
+- **Плавність відкриття вкладок і першого скролу**: картки вакансій створюються у фоновому потоці, відстані префетчаться з паузами між картками, оверлей-шити прогріваються заздалегідь, а офлайн-гео спирається на центроїди міст і довідник адрес без звернення до мережі.
+- **Відстань на картці як commute-сигнал**: показується лише для вакансій із точною адресою офісу в місті користувача; сортування за відстанню виводить такі картки першими.
+- **Уніфікована геометрія полів вводу**: висота 44 і горизонтальні відступи 12 на всіх сторінках; на Android прибрано обнулення нативного padding.
 
 ### Fixed
 - Пошук каталогу знаходить кирилицю незалежно від регістру («бухгалтер» → «Бухгалтер») на SQLite і MSSQL завдяки `SearchText`.
