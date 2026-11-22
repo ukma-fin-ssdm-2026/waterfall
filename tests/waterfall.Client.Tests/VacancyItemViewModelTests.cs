@@ -480,6 +480,118 @@ public class VacancyItemViewModelTests
         Assert.Equal("3.2 км від вас", item.DistanceText);
     }
 
+    [Fact]
+    public async Task Distance_IsComputed_ForExactAddressInSameCity()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 2.5, UserAddress = "Київ, вул. Хрещатик, 22" };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "Київ, вул. Мечникова, 2"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        Assert.True(item.CanShowOnMap);
+
+        await item.EnsureDistanceLoadedAsync();
+
+        Assert.Equal(1, service.DistanceCallCount);
+        Assert.Equal(2.5, item.DistanceKm);
+        Assert.Equal("2.5 км від вас", item.DistanceText);
+    }
+
+    [Fact]
+    public async Task Distance_IsSilent_ForExactAddressInAnotherCity()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 5.0, UserAddress = "Київ, вул. Хрещатик, 22" };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Львів",
+            FullAddress = "Львів, вул. Соборна, 12"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        Assert.True(item.CanShowOnMap);
+
+        await item.EnsureDistanceLoadedAsync();
+        await item.RefreshDistanceAsync();
+
+        _messenger.Send(new UserAddressChangedMessage(service.UserAddress));
+        await Task.Delay(50);
+
+        Assert.Equal(0, service.DistanceCallCount);
+        Assert.Null(item.DistanceKm);
+        Assert.Null(item.DistanceText);
+        Assert.False(item.HasDistanceText);
+    }
+
+    [Theory]
+    [InlineData("Київ", null)]
+    [InlineData("не вказано точну адресу", null)]
+    [InlineData("Remote", "Віддалено")]
+    public async Task Distance_IsSilent_WithoutExactOfficeAddress(string location, string? fullAddress)
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 3.0 };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = location,
+            FullAddress = fullAddress
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        Assert.False(item.CanShowOnMap);
+
+        await item.EnsureDistanceLoadedAsync();
+        await item.RefreshDistanceAsync();
+
+        Assert.Equal(0, service.DistanceCallCount);
+        Assert.Null(item.DistanceText);
+        Assert.False(item.HasDistanceText);
+    }
+
+    [Fact]
+    public void CachedInitialDistance_IsIgnored_ForAnotherCity()
+    {
+        FakeDistanceService service = new() { UserAddress = "Київ, вул. Хрещатик, 22" };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Львів",
+            FullAddress = "Львів, вул. Соборна, 12"
+        }, _gateway, _messenger, _errors.Add, distanceService: service, initialDistanceKm: 540.0);
+
+        Assert.Null(item.DistanceKm);
+        Assert.Null(item.DistanceText);
+    }
+
+    [Fact]
+    public async Task Distance_FallsBackToCompute_WhenUserCityIsUnclassifiable()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 4.1, UserAddress = "Бровари, вул. Гагаріна 5" };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "Київ, вул. Мечникова, 2"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await item.RefreshDistanceAsync();
+
+        Assert.Equal(1, service.DistanceCallCount);
+        Assert.Equal(4.1, item.DistanceKm);
+        Assert.Equal("4.1 км від вас", item.DistanceText);
+    }
+
     private sealed class FakeDistanceService : IDistanceCalculatorService
     {
         public string? UserAddress { get; set; } = "вул. Хрещатик, 22, Київ";

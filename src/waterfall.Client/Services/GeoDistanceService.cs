@@ -33,6 +33,36 @@ public class GeoDistanceService : IDistanceCalculatorService
         "метро", "буд", "st.", "str.", "street", "ave", "blvd", "sq."
     };
 
+    /// <summary>
+    /// Обласні центри України: канонічний ключ міста, координати центроїда та підрядки,
+    /// за якими місто розпізнається в адресі (українська та англійська назви).
+    /// </summary>
+    private static readonly (string Key, double Lat, double Lon, string[] Aliases)[] CityCentroids =
+    [
+        ("київ", 50.4501, 30.5234, ["київ", "kyiv", "kiev"]),
+        ("львів", 49.8397, 24.0297, ["львів", "lviv"]),
+        ("харків", 49.9935, 36.2304, ["харків", "kharkiv"]),
+        ("дніпро", 48.4647, 35.0462, ["дніпро", "dnipro"]),
+        ("одеса", 46.4825, 30.7233, ["одеса", "odesa"]),
+        ("запоріжжя", 47.8388, 35.1396, ["запоріж", "zaporizhzhia"]),
+        ("вінниця", 49.2331, 28.4682, ["вінниц", "vinnytsia"]),
+        ("полтава", 49.5883, 34.5514, ["полтав", "poltava"]),
+        ("чернівці", 48.2921, 25.9358, ["чернівц", "chernivtsi"]),
+        ("івано-франківськ", 48.9226, 24.7111, ["івано-франківськ", "frankivsk"]),
+        ("тернопіль", 49.5535, 25.5948, ["тернопіль", "ternopil"]),
+        ("ужгород", 48.6208, 22.2879, ["ужгород", "uzhhorod"]),
+        ("луцьк", 50.7472, 25.3254, ["луцьк", "lutsk"]),
+        ("рівне", 50.6199, 26.2516, ["рівне", "rivne"]),
+        ("житомир", 50.2547, 28.6587, ["житомир", "zhytomyr"]),
+        ("черкаси", 49.4444, 32.0598, ["черкас", "cherkasy"]),
+        ("суми", 50.9077, 34.7981, ["суми", "sumy"]),
+        ("чернігів", 51.4982, 31.2893, ["чернігів", "chernihiv"]),
+        ("миколаїв", 46.9750, 31.9946, ["миколаїв", "mykolaiv"]),
+        ("херсон", 46.6354, 32.6169, ["херсон", "kherson"]),
+        ("кропивницький", 48.5079, 32.2623, ["кропивницьк", "kropyvnytskyi"]),
+        ("хмельницький", 49.4230, 26.9871, ["хмельницьк", "khmelnytskyi"])
+    ];
+
     private static readonly SemaphoreSlim PhotonSemaphore = new(1, 1);
     private static readonly SemaphoreSlim OsrmSemaphore = new(2, 2);
 
@@ -512,6 +542,42 @@ public class GeoDistanceService : IDistanceCalculatorService
         address.Trim().ToLowerInvariant();
 
     /// <summary>
+    /// Канонічний ключ міста з адреси (наприклад, «київ» для «Київ, вул. Хрещатик 22»),
+    /// або <c>null</c>, якщо жодного обласного центру з таблиці центроїдів в адресі немає
+    /// (передмістя, іноземна чи порожня адреса). Вулична деталізація не заважає.
+    /// </summary>
+    public static string? ExtractCityKey(string? address)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return null;
+        }
+
+        (string Key, double Lat, double Lon)? match = MatchCityCentroid(NormalizeAddressKey(address));
+        return match is null ? null : match.Value.Key;
+    }
+
+    /// <summary>
+    /// Пошук канонічного ключа та центроїда міста за підрядками тієї самої таблиці,
+    /// яку використовує офлайн-розв'язання координат.
+    /// </summary>
+    private static (string Key, double Lat, double Lon)? MatchCityCentroid(string norm)
+    {
+        foreach ((string key, double lat, double lon, string[] aliases) in CityCentroids)
+        {
+            foreach (string alias in aliases)
+            {
+                if (norm.Contains(alias, StringComparison.Ordinal))
+                {
+                    return (key, lat, lon);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Чи містить нормалізована адреса вуличну деталізацію (номер будинку або ознаку вулиці).
     /// Такі адреси потребують точного геокодування, центроїд міста для них не застосовується.
     /// </summary>
@@ -838,30 +904,13 @@ public class GeoDistanceService : IDistanceCalculatorService
     /// </summary>
     private static (double Lat, double Lon)? LookupCityCentroid(string norm)
     {
-        if (norm.Contains("київ") || norm.Contains("kyiv") || norm.Contains("kiev")) return (50.4501, 30.5234);
-        if (norm.Contains("львів") || norm.Contains("lviv")) return (49.8397, 24.0297);
-        if (norm.Contains("харків") || norm.Contains("kharkiv")) return (49.9935, 36.2304);
-        if (norm.Contains("дніпро") || norm.Contains("dnipro")) return (48.4647, 35.0462);
-        if (norm.Contains("одеса") || norm.Contains("odesa")) return (46.4825, 30.7233);
-        if (norm.Contains("запоріж") || norm.Contains("zaporizhzhia")) return (47.8388, 35.1396);
-        if (norm.Contains("вінниц") || norm.Contains("vinnytsia")) return (49.2331, 28.4682);
-        if (norm.Contains("полтав") || norm.Contains("poltava")) return (49.5883, 34.5514);
-        if (norm.Contains("чернівц") || norm.Contains("chernivtsi")) return (48.2921, 25.9358);
-        if (norm.Contains("івано-франківськ") || norm.Contains("frankivsk")) return (48.9226, 24.7111);
-        if (norm.Contains("тернопіль") || norm.Contains("ternopil")) return (49.5535, 25.5948);
-        if (norm.Contains("ужгород") || norm.Contains("uzhhorod")) return (48.6208, 22.2879);
-        if (norm.Contains("луцьк") || norm.Contains("lutsk")) return (50.7472, 25.3254);
-        if (norm.Contains("рівне") || norm.Contains("rivne")) return (50.6199, 26.2516);
-        if (norm.Contains("житомир") || norm.Contains("zhytomyr")) return (50.2547, 28.6587);
-        if (norm.Contains("черкас") || norm.Contains("cherkasy")) return (49.4444, 32.0598);
-        if (norm.Contains("суми") || norm.Contains("sumy")) return (50.9077, 34.7981);
-        if (norm.Contains("чернігів") || norm.Contains("chernihiv")) return (51.4982, 31.2893);
-        if (norm.Contains("миколаїв") || norm.Contains("mykolaiv")) return (46.9750, 31.9946);
-        if (norm.Contains("херсон") || norm.Contains("kherson")) return (46.6354, 32.6169);
-        if (norm.Contains("кропивницьк") || norm.Contains("kropyvnytskyi")) return (48.5079, 32.2623);
-        if (norm.Contains("хмельницьк") || norm.Contains("khmelnytskyi")) return (49.4230, 26.9871);
+        (string Key, double Lat, double Lon)? match = MatchCityCentroid(norm);
+        if (match is null)
+        {
+            return null;
+        }
 
-        return null;
+        return (match.Value.Lat, match.Value.Lon);
     }
 
     private static bool IsNetworkException(Exception ex) =>

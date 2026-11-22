@@ -281,6 +281,39 @@ public class GeoDistanceServiceTests
         Assert.NotEmpty(gatewayCalls);
     }
 
+    [Fact]
+    public void ExtractCityKey_ReturnsSameKey_ForCityOnlyAndCityWithStreet()
+    {
+        string? cityOnly = GeoDistanceService.ExtractCityKey("Київ");
+        string? withStreet = GeoDistanceService.ExtractCityKey("Київ, вул. Хрещатик 22");
+
+        Assert.Equal("київ", cityOnly);
+        Assert.Equal(cityOnly, withStreet);
+    }
+
+    [Fact]
+    public void ExtractCityKey_ReturnsDistinctKeys_ForDifferentCities()
+    {
+        string? kyiv = GeoDistanceService.ExtractCityKey("Київ, вул. Хрещатик 22");
+        string? lviv = GeoDistanceService.ExtractCityKey("Львів");
+
+        Assert.NotNull(kyiv);
+        Assert.NotNull(lviv);
+        Assert.NotEqual(kyiv, lviv);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("Бровари, вул. Гагаріна 5")]
+    [InlineData("Вишневе, Києво-Святошинський район")]
+    [InlineData("Warsaw, Marszałkowska 1")]
+    public void ExtractCityKey_ReturnsNull_ForUnclassifiableAddresses(string? address)
+    {
+        Assert.Null(GeoDistanceService.ExtractCityKey(address));
+    }
+
     private sealed class ThrowingHttpHandler : HttpMessageHandler
     {
         public int CallCount { get; private set; }

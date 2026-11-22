@@ -240,6 +240,12 @@ public static class VacancyFilterEngine
             for (int i = 0; i < limit; i++)
             {
                 ct.ThrowIfCancellationRequested();
+
+                if (!cards[i].CanShowOnMap)
+                {
+                    continue;
+                }
+
                 await cards[i].EnsureDistanceLoadedAsync(ct);
 
                 if (i < limit - 1 && interCardDelayMs > 0)

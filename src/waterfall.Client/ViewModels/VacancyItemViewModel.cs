@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Helpers;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
+using Waterfall.Client.Services;
 using Waterfall.Repository.Normalization;
 
 namespace Waterfall.Client.ViewModels;
@@ -70,7 +71,7 @@ public partial class VacancyItemViewModel : ObservableObject
 
         CanShowOnMap = HasExactOfficeAddress(GetMapTarget());
 
-        if (initialDistanceKm.HasValue)
+        if (initialDistanceKm.HasValue && ShouldResolveDistance(_distanceService?.UserAddress))
         {
             DistanceKm = initialDistanceKm;
             DistanceText = initialDistanceKm.Value < 1.0
@@ -184,11 +185,49 @@ public partial class VacancyItemViewModel : ObservableObject
 
     public bool HasDistanceText => !string.IsNullOrWhiteSpace(DistanceText);
 
+    /// <summary>
+    /// Чи має картка взагалі розраховувати відстань: потрібна точна адреса офісу,
+    /// а розпізнані міста вакансії та користувача мають збігатися.
+    /// Нерозпізнане місто (передмістя) не блокує розрахунок.
+    /// </summary>
+    private bool ShouldResolveDistance(string? userAddress)
+    {
+        if (!CanShowOnMap)
+        {
+            return false;
+        }
+
+        string? targetCity = GeoDistanceService.ExtractCityKey(GetMapTarget());
+        string? userCity = GeoDistanceService.ExtractCityKey(userAddress);
+        return targetCity is null
+            || userCity is null
+            || string.Equals(targetCity, userCity, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Мовчки прибирає відстань, не звертаючись до сервісу: картка не підлягає розрахунку,
+    /// але спроба фіксується, щоб повторні виклики не запускали її знову.
+    /// </summary>
+    private void ClearDistanceWithoutResolution(string? userAddress)
+    {
+        _distanceLoadAttempted = true;
+        _distanceLoadedForAddress = userAddress;
+        DistanceKm = null;
+        DistanceText = null;
+        _onDistanceCalculated?.Invoke(Vacancy.Id, null);
+    }
+
     public Task EnsureDistanceLoadedAsync(CancellationToken ct = default)
     {
         string? currentAddress = _distanceService?.UserAddress;
         if (_distanceService is null || !HasAddress || string.IsNullOrWhiteSpace(currentAddress))
         {
+            return Task.CompletedTask;
+        }
+
+        if (!ShouldResolveDistance(currentAddress))
+        {
+            ClearDistanceWithoutResolution(currentAddress);
             return Task.CompletedTask;
         }
 
@@ -222,6 +261,12 @@ public partial class VacancyItemViewModel : ObservableObject
                 DistanceKm = null;
                 DistanceText = null;
                 _onDistanceCalculated?.Invoke(Vacancy.Id, null);
+                return;
+            }
+
+            if (!ShouldResolveDistance(userAddress))
+            {
+                ClearDistanceWithoutResolution(userAddress);
                 return;
             }
 
