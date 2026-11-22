@@ -54,7 +54,7 @@
 | Test-21 | `AIConsultantServiceTests.PrepareAsync_SummaryPrompt_ContainsExactlyTheReturnedVacancies`, `StreamAnswerAsync_PersistsFullTextAndExactlyTheSentVacancyLinks`, `EfChatSessionRepositoryTests.AddAssistantMessageAsync_UnknownVacancy_ViolatesForeignKeyAndPersistsNothing`, `VacancyAnalysisServiceTests.PrepareAsync_PromptContainsExactlyTheRequestedVacancies`, `PrepareAsync_UnknownVacancy_ThrowsNotFound` | виконано (промпт містить рівно вакансії з БД; FK на `Vacancies` відхиляє вигадану; аналіз FR-010 бачить лише вибрані вакансії) |
 | Test-22…27 | `AnalyticsServiceTests`, `AnalyticsControllerTests`, `AnalyticsViewModelTests` | виконано (бекенд + рольова перевірка `403` + клієнт `AnalyticsViewModel`) |
 | Test-28…30 | `UserStatsServiceTests`, `LoginViewModelTests` (`RestoreSession_LoadsPersonalStats_WhenJobSeeker_Test28`, `VacancySaveChanged_UpdatesSavedCountAndReloadsStats_Test29`, `LoadPersonalStats_EmptyActivity_ShowsEmptyState_Test30`), `HttpGatewayServiceTests` | виконано |
-| Test-31 | `ci.yml` (7 наборів, 1151 пройдений + 1 пропущений live LLM тест) + зведений звіт ReportGenerator | виконано (line 86.0%, branch 76.4%, 22.11.2026) |
+| Test-31 | `ci.yml` (7 наборів, 1157 пройдених + 1 пропущений live LLM тест) + зведений звіт ReportGenerator | виконано (line 85.9%, branch 76.4%, 22.11.2026) |
 | Test-32 | `VacancyItemViewModelTests.SalaryText_CoversAllRangeShapes` | виконано |
 | Test-33 | `CatalogViewModelTests.ResetFilters_ResetsFieldsToDefaultAndReloadsCatalog_Test33` | виконано |
 | Test-34, Test-35 | `VacancyItemSkillsTests` (`VisibleSkills_*`) | виконано |

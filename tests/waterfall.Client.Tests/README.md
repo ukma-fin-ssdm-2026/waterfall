@@ -12,7 +12,7 @@
 
 ## Тести
 
-348 тестових випадків у 19 класах (актуалізовано 22.11.2026):
+354 тестових випадків у 20 класах (актуалізовано 22.11.2026):
 
 | Клас | Випадків | Що перевіряє |
 | :--- | :---: | :--- |
@@ -33,6 +33,7 @@
 | [`AuthSessionTests`](AuthSessionTests.cs) | 6 | регресійний тест розбору JWT і property-based тест (FsCheck) |
 | [`PhotonAddressAutocompleteServiceTests`](PhotonAddressAutocompleteServiceTests.cs) | 6 | автодоповнення адрес (Photon API + Wikipedia fallback) |
 | [`CatalogMultiSiteSearchTests`](CatalogMultiSiteSearchTests.cs) | 5 | прапорці вмикання/вимикання 4 сайтів («Усі 4»/«Жодного»), маршрутизація 1 сайту vs 2–4 сайти (`/batch`), незалежні `fromPage`/фільтри, живий прогрес, офлайн-фолбек `OfflineSiteCollector` |
+| [`VacancyPrefetchDistancesTests`](VacancyPrefetchDistancesTests.cs) | 6 | фоновий префетч відстаней: без точної адреси або з іншого міста — нуль звернень до сервісу; точна адреса у місті користувача — один запит і заповнений `DistanceText`; порожня адреса, скасований токен, порожній список |
 | [`VacancyItemSkillsTests`](VacancyItemSkillsTests.cs) | 5 | показ щонайбільше 3 навичок, чип `+N`, фільтрація порожніх і дублів |
 | [`VacancySyncTests`](VacancySyncTests.cs) | 4 | наскрізна двостороння синхронізація на реальній SQLite (клієнт ↔ сервер, дедуплікація, Last-Write-Wins), ідемпотентний апгрейд legacy SQLite без колонок синхронізації, парсинг DOU RSS + Djinni JSON-LD у `OfflineSiteCollector`, ручна синхронізація із `SystemSettingsViewModel` |
 
@@ -61,7 +62,7 @@
 
 | | До Lab 06 | Зараз |
 | :--- | :---: | :---: |
-| Тестових випадків | 61 | 348 |
+| Тестових випадків | 61 | 354 |
 | Рядки | 89,6 % | 71,5 % |
 | Гілки | 79,4 % | 64,3 % |
 | Методи | 88,2 % | 77,9 % |
