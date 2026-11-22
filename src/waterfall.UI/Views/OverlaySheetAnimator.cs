@@ -12,6 +12,28 @@ internal static class OverlaySheetAnimator
         public int Version;
     }
 
+    public static void Prewarm(
+        ContentView host,
+        ResourceDictionary resources,
+        string templateKey,
+        object bindingContext)
+    {
+        if (!MainThread.IsMainThread || host.Content is not null)
+        {
+            return;
+        }
+
+        // Інфлейтимо шторку заздалегідь, але лишаємо її прихованою:
+        // перше відкриття користувачем має виконати лише анімацію.
+        if (resources.TryGetValue(templateKey, out object? tpl) &&
+            tpl is DataTemplate template &&
+            template.CreateContent() is View sheet)
+        {
+            sheet.BindingContext = bindingContext;
+            host.Content = sheet;
+        }
+    }
+
     public static Task AnimateAsync(
         ContentView host,
         ResourceDictionary resources,

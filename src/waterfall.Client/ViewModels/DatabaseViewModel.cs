@@ -45,6 +45,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _distancePrefetchCts;
     private bool _suppressAutoFilter;
     private bool _hasLoadedOnce;
+    private int _openGeneration;
 
     public DatabaseViewModel(
         IHttpGatewayService gateway,
@@ -580,7 +581,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 await _localStore.SaveVacanciesAsync(loaded, isSynced: true, cts.Token);
             }
 
-            SetDatabaseVacancies(loaded);
+            await SetDatabaseVacanciesAsync(loaded);
             await RefreshLocalStatsAsync(cts.Token);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
@@ -592,7 +593,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             // Офлайн-режим: завантажуємо повну локальну базу SQLite клієнта
             IReadOnlyList<VacancyDto> local = await _localStore.GetAllAsync(CancellationToken.None);
             IsOfflineMode = true;
-            SetDatabaseVacancies(local.ToList());
+            await SetDatabaseVacanciesAsync(local.ToList());
             await RefreshLocalStatsAsync(CancellationToken.None);
             StatusBannerText = $"Офлайн-режим: відкрито локальну базу ({local.Count} вакансій)";
         }
@@ -604,7 +605,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 IReadOnlyList<VacancyDto> local = await _localStore.GetAllAsync(CancellationToken.None);
                 if (local.Count > 0)
                 {
-                    SetDatabaseVacancies(local.ToList());
+                    await SetDatabaseVacanciesAsync(local.ToList());
                 }
             }
         }
@@ -1002,7 +1003,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             {
                 await _localStore.SaveVacanciesAsync(imported, isSynced: false, CancellationToken.None);
                 IReadOnlyList<VacancyDto> merged = await _localStore.GetAllAsync(CancellationToken.None);
-                SetDatabaseVacancies(merged.ToList());
+                await SetDatabaseVacanciesAsync(merged.ToList());
                 await RefreshLocalStatsAsync(CancellationToken.None);
             }
             else
@@ -1011,7 +1012,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                     .GroupBy(v => v.Id)
                     .Select(g => g.Last())
                     .ToList();
-                SetDatabaseVacancies(combined);
+                await SetDatabaseVacanciesAsync(combined);
             }
 
             StatusBannerText = $"Імпортовано {imported.Count} вакансій";
@@ -1024,11 +1025,10 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
     // ==================== ВНУТРІШНЯ ЛОГІКА ФІЛЬТРАЦІЇ ТА СОРТУВАННЯ ====================
 
-    private void SetDatabaseVacancies(List<VacancyDto> vacancies)
+    private async Task SetDatabaseVacanciesAsync(List<VacancyDto> vacancies)
     {
         _allVacancies.Clear();
         _allVacancies.AddRange(vacancies);
-        _hasLoadedOnce = true;
 
         TotalInDatabase = _allVacancies.Count;
         DouCount = _allVacancies.Count(v => v.Source == JobSource.Dou);
@@ -1036,8 +1036,53 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         DjinniCount = _allVacancies.Count(v => v.Source == JobSource.Djinni);
         RobotaUaCount = _allVacancies.Count(v => v.Source == JobSource.RobotaUa);
 
-        RefreshDynamicPickers();
-        ApplyFiltersAndSort();
+        int generation = ++_openGeneration;
+        string prevCategory = SelectedCategory;
+        string prevLocation = SelectedLocation;
+        FilterSnapshot filters = CaptureFilterSnapshot(prevCategory, prevLocation);
+
+        // Знімок списку для фонового проходу: новіше завантаження може замінити _allVacancies,
+        // поки цей прохід ще рахує, і тоді фонова гілка не має бачити мутовану колекцію.
+        List<VacancyDto> source = [.. _allVacancies];
+
+        // Усе важке — побудова випадаючих списків (Distinct/OrderBy), фільтрація, сортування
+        // і створення карток — виконується поза UI-потоком над незмінним знімком.
+        OpenResult computed = await Task.Run(() =>
+        {
+            List<string> categories = BuildCategoryOptions(source);
+            List<string> locations = BuildLocationOptions(source);
+            string restoredCategory = categories.Contains(prevCategory, StringComparer.Ordinal) ? prevCategory : categories[0];
+            string restoredLocation = locations.Contains(prevLocation, StringComparer.Ordinal) ? prevLocation : locations[0];
+            FilterSnapshot effective = filters with
+            {
+                SelectedCategory = restoredCategory,
+                SelectedLocation = restoredLocation
+            };
+            List<VacancyItemViewModel> cards = BuildCards(source, effective);
+            return new OpenResult(categories, locations, restoredCategory, restoredLocation, cards);
+        });
+
+        if (generation != _openGeneration)
+        {
+            // Новіше завантаження вже замінило дані — застарілий результат тихо відкидаємо.
+            return;
+        }
+
+        _suppressAutoFilter = true;
+        try
+        {
+            ReplaceCollection(AvailableCategories, computed.Categories);
+            SelectedCategory = computed.RestoredCategory;
+            ReplaceCollection(AvailableLocations, computed.Locations);
+            SelectedLocation = computed.RestoredLocation;
+        }
+        finally
+        {
+            _suppressAutoFilter = false;
+        }
+
+        _hasLoadedOnce = true;
+        ApplyCardsToUi(computed.Cards);
     }
 
     private void RefreshDynamicPickers()
@@ -1046,31 +1091,11 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         try
         {
             string prevCat = SelectedCategory;
-            List<string> categories =
-            [
-                "Усі категорії",
-                .. _allVacancies
-                    .Select(v => v.Category?.Trim())
-                    .Where(c => !string.IsNullOrWhiteSpace(c))
-                    .Cast<string>()
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(c => c, StringComparer.CurrentCultureIgnoreCase)
-            ];
-            ReplaceCollection(AvailableCategories, categories);
+            ReplaceCollection(AvailableCategories, BuildCategoryOptions(_allVacancies));
             SelectedCategory = AvailableCategories.Contains(prevCat) ? prevCat : AvailableCategories[0];
 
             string prevLoc = SelectedLocation;
-            List<string> locations =
-            [
-                "Усі міста",
-                .. _allVacancies
-                    .Select(ExtractCityToken)
-                    .Where(l => !string.IsNullOrWhiteSpace(l))
-                    .Cast<string>()
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .OrderBy(l => l, StringComparer.CurrentCultureIgnoreCase)
-            ];
-            ReplaceCollection(AvailableLocations, locations);
+            ReplaceCollection(AvailableLocations, BuildLocationOptions(_allVacancies));
             SelectedLocation = AvailableLocations.Contains(prevLoc) ? prevLoc : AvailableLocations[0];
         }
         finally
@@ -1079,19 +1104,62 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         }
     }
 
+    private static List<string> BuildCategoryOptions(IReadOnlyList<VacancyDto> vacancies)
+    {
+        List<string> categories = ["Усі категорії"];
+        categories.AddRange(
+            vacancies
+                .Select(v => v.Category?.Trim())
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(c => c, StringComparer.CurrentCultureIgnoreCase));
+        return categories;
+    }
+
+    private static List<string> BuildLocationOptions(IReadOnlyList<VacancyDto> vacancies)
+    {
+        List<string> locations = ["Усі міста"];
+        locations.AddRange(
+            vacancies
+                .Select(ExtractCityToken)
+                .Where(l => !string.IsNullOrWhiteSpace(l))
+                .Cast<string>()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(l => l, StringComparer.CurrentCultureIgnoreCase));
+        return locations;
+    }
+
     private async Task ApplyFiltersWithDistanceAsync()
     {
+        FilterSnapshot filters = CaptureFilterSnapshot(SelectedCategory, SelectedLocation);
         await VacancyFilterEngine.PrecalculateDistancesAsync(
-            _allVacancies.Where(MatchesAllFilters), _distanceService, _distanceCache, CancellationToken.None);
+            _allVacancies.Where(v => MatchesAllFilters(v, filters)), _distanceService, _distanceCache, CancellationToken.None);
         ApplyFiltersAndSort();
     }
 
     private void ApplyFiltersAndSort()
     {
-        List<VacancyDto> matched = _allVacancies.Where(MatchesAllFilters).ToList();
-        List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(matched, SelectedSortOption, GetDistanceKm).ToList();
+        FilterSnapshot filters = CaptureFilterSnapshot(SelectedCategory, SelectedLocation);
+        ApplyCardsToUi(BuildCards(_allVacancies, filters));
+    }
 
-        List<VacancyItemViewModel> cards = sorted.Select(CreateCard).ToList();
+    private List<VacancyItemViewModel> BuildCards(IReadOnlyList<VacancyDto> source, FilterSnapshot filters)
+    {
+        List<VacancyDto> matched = source.Where(v => MatchesAllFilters(v, filters)).ToList();
+        List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(matched, filters.SelectedSortOption, GetDistanceKm).ToList();
+
+        List<VacancyItemViewModel> cards = new(sorted.Count);
+        foreach (VacancyDto dto in sorted)
+        {
+            cards.Add(CreateCard(dto));
+        }
+
+        return cards;
+    }
+
+    private void ApplyCardsToUi(List<VacancyItemViewModel> cards)
+    {
         _vacancies.ReplaceAll(cards);
 
         _distancePrefetchCts?.Cancel();
@@ -1103,6 +1171,37 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasActiveFilters));
         OnPropertyChanged(nameof(IsFilterHighlightActive));
     }
+
+    private FilterSnapshot CaptureFilterSnapshot(string selectedCategory, string selectedLocation) => new(
+        IncludeDou,
+        IncludeWorkUa,
+        IncludeDjinni,
+        IncludeRobotaUa,
+        SelectedCategoryGroup,
+        selectedCategory,
+        SelectedWorkFormat,
+        SelectedExperience,
+        selectedLocation,
+        LocationFilter,
+        CompanyFilter,
+        SkillsFilter,
+        OnlyWithSalary,
+        MinSalaryFilter,
+        MaxSalaryFilter,
+        SelectedSalaryCurrency,
+        IncludeNoSalary,
+        SelectedFreshness,
+        _time.GetUtcNow(),
+        SelectedStatus,
+        OnlySaved,
+        HideViewed,
+        new HashSet<Guid>(_viewedIds),
+        WhiteListWords.ToArray(),
+        WhiteListMatchAll,
+        BanListWords.ToArray(),
+        TitleOnly,
+        SearchText,
+        SelectedSortOption);
 
     private VacancyItemViewModel CreateCard(VacancyDto dto)
     {
@@ -1118,16 +1217,16 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             initialDistanceKm: cachedKm);
     }
 
-    private bool MatchesAllFilters(VacancyDto v)
+    private bool MatchesAllFilters(VacancyDto v, FilterSnapshot f)
     {
         // 1. Мультивибір із 4 сайтів-джерел
         bool sourceMatches = v.Source switch
         {
-            JobSource.Dou => IncludeDou,
-            JobSource.WorkUa => IncludeWorkUa,
-            JobSource.Djinni => IncludeDjinni,
-            JobSource.RobotaUa => IncludeRobotaUa,
-            _ => IncludeDou && IncludeWorkUa && IncludeDjinni && IncludeRobotaUa
+            JobSource.Dou => f.IncludeDou,
+            JobSource.WorkUa => f.IncludeWorkUa,
+            JobSource.Djinni => f.IncludeDjinni,
+            JobSource.RobotaUa => f.IncludeRobotaUa,
+            _ => f.IncludeDou && f.IncludeWorkUa && f.IncludeDjinni && f.IncludeRobotaUa
         };
         if (!sourceMatches)
         {
@@ -1135,58 +1234,58 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         }
 
         // 2. Широка канонічна категорія (уніфікована для всіх 4 сайтів)
-        if (SelectedCategoryGroup != CategoryGroupOptions[0])
+        if (f.SelectedCategoryGroup != CategoryGroupOptions[0])
         {
             string group = !string.IsNullOrWhiteSpace(v.CategoryGroup)
                 ? v.CategoryGroup
                 : VacancyCategoryMap.Resolve(v.Category);
-            if (!string.Equals(group, SelectedCategoryGroup, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(group, f.SelectedCategoryGroup, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
         }
 
         // 3. Точна категорія
-        if (SelectedCategory != "Усі категорії" &&
-            !string.Equals(v.Category?.Trim(), SelectedCategory, StringComparison.OrdinalIgnoreCase))
+        if (f.SelectedCategory != "Усі категорії" &&
+            !string.Equals(v.Category?.Trim(), f.SelectedCategory, StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
         // 4. Формат роботи (нормалізовані прапорці + текстовий фолбек)
-        if (!MatchesWorkFormat(v, SelectedWorkFormat))
+        if (!MatchesWorkFormat(v, f.SelectedWorkFormat))
         {
             return false;
         }
 
         // 5. Досвід роботи (нормалізовані місяці + текстовий фолбек)
-        if (!MatchesExperience(v, SelectedExperience))
+        if (!MatchesExperience(v, f.SelectedExperience))
         {
             return false;
         }
 
         // 6. Локація / місто (випадаючий список + вільний текст)
-        if (SelectedLocation != "Усі міста" && !MatchesLocation(v, SelectedLocation))
+        if (f.SelectedLocation != "Усі міста" && !MatchesLocation(v, f.SelectedLocation))
         {
             return false;
         }
 
-        if (!string.IsNullOrWhiteSpace(LocationFilter) && !MatchesLocation(v, LocationFilter.Trim()))
+        if (!string.IsNullOrWhiteSpace(f.LocationFilter) && !MatchesLocation(v, f.LocationFilter.Trim()))
         {
             return false;
         }
 
         // 7. Компанія
-        if (!string.IsNullOrWhiteSpace(CompanyFilter) &&
-            !v.Company.Contains(CompanyFilter.Trim(), StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(f.CompanyFilter) &&
+            !v.Company.Contains(f.CompanyFilter.Trim(), StringComparison.OrdinalIgnoreCase))
         {
             return false;
         }
 
         // 8. Обов'язкові навички (через кому, всі мають бути в навичках/назві/описі)
-        if (!string.IsNullOrWhiteSpace(SkillsFilter))
+        if (!string.IsNullOrWhiteSpace(f.SkillsFilter))
         {
-            string[] requiredSkills = SkillsFilter.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            string[] requiredSkills = f.SkillsFilter.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
             if (requiredSkills.Any(skill => !VacancyFilterEngine.ContainsWord(v, skill, titleOnly: false, includeLocationFields: true)))
             {
                 return false;
@@ -1194,48 +1293,48 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         }
 
         // 9. Зарплата з крос-валютною конвертацією (USD / UAH / EUR)
-        if (!VacancyFilterEngine.MatchesSalary(v, OnlyWithSalary, MinSalaryFilter, MaxSalaryFilter, SelectedSalaryCurrency, IncludeNoSalary))
+        if (!VacancyFilterEngine.MatchesSalary(v, f.OnlyWithSalary, f.MinSalaryFilter, f.MaxSalaryFilter, f.SelectedSalaryCurrency, f.IncludeNoSalary))
         {
             return false;
         }
 
         // 10. Період публікації
-        if (!MatchesFreshness(v, SelectedFreshness, _time.GetUtcNow()))
+        if (!MatchesFreshness(v, f.SelectedFreshness, f.Now))
         {
             return false;
         }
 
         // 11. Статус активності
-        if (SelectedStatus == "Лише активні" && !v.IsActive)
+        if (f.SelectedStatus == "Лише активні" && !v.IsActive)
         {
             return false;
         }
 
-        if (SelectedStatus == "Лише архівні" && v.IsActive)
+        if (f.SelectedStatus == "Лише архівні" && v.IsActive)
         {
             return false;
         }
 
         // 12. Обране та переглянуті
-        if (OnlySaved && !v.IsSaved)
+        if (f.OnlySaved && !v.IsSaved)
         {
             return false;
         }
 
-        if (HideViewed && (v.IsViewed || _viewedIds.Contains(v.Id)))
+        if (f.HideViewed && (v.IsViewed || f.ViewedIds.Contains(v.Id)))
         {
             return false;
         }
 
         // 13–14. Вайт-лист та Бан-лист слів
-        if (!VacancyFilterEngine.MatchesWordLists(v, WhiteListWords, WhiteListMatchAll, BanListWords, TitleOnly, includeLocationFields: true))
+        if (!VacancyFilterEngine.MatchesWordLists(v, f.WhiteListWords, f.WhiteListMatchAll, f.BanListWords, f.TitleOnly, includeLocationFields: true))
         {
             return false;
         }
 
         // 15. Повнотекстовий пошук
-        if (!string.IsNullOrWhiteSpace(SearchText) &&
-            !VacancyFilterEngine.ContainsAllWords(v, SearchText.Trim(), TitleOnly, includeLocationFields: true))
+        if (!string.IsNullOrWhiteSpace(f.SearchText) &&
+            !VacancyFilterEngine.ContainsAllWords(v, f.SearchText.Trim(), f.TitleOnly, includeLocationFields: true))
         {
             return false;
         }
@@ -1324,6 +1423,45 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
         return first;
     }
+
+    /// <summary>Незмінний знімок фільтрів: фоновий прохід не читає мутований стан вкладки.</summary>
+    private sealed record FilterSnapshot(
+        bool IncludeDou,
+        bool IncludeWorkUa,
+        bool IncludeDjinni,
+        bool IncludeRobotaUa,
+        string SelectedCategoryGroup,
+        string SelectedCategory,
+        string SelectedWorkFormat,
+        string SelectedExperience,
+        string SelectedLocation,
+        string LocationFilter,
+        string CompanyFilter,
+        string SkillsFilter,
+        bool OnlyWithSalary,
+        string MinSalaryFilter,
+        string MaxSalaryFilter,
+        string SelectedSalaryCurrency,
+        bool IncludeNoSalary,
+        string SelectedFreshness,
+        DateTimeOffset Now,
+        string SelectedStatus,
+        bool OnlySaved,
+        bool HideViewed,
+        HashSet<Guid> ViewedIds,
+        string[] WhiteListWords,
+        bool WhiteListMatchAll,
+        string[] BanListWords,
+        bool TitleOnly,
+        string SearchText,
+        string SelectedSortOption);
+
+    private readonly record struct OpenResult(
+        List<string> Categories,
+        List<string> Locations,
+        string RestoredCategory,
+        string RestoredLocation,
+        List<VacancyItemViewModel> Cards);
 
     private static void ReplaceCollection(ObservableCollection<string> target, IReadOnlyList<string> values)
     {

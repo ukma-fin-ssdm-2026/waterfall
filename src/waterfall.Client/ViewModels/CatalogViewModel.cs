@@ -60,6 +60,7 @@ public partial class CatalogViewModel : ObservableObject
     // Вакансії, переглянуті в цьому сеансі (сервер позначає IsViewed лише на момент пошуку)
     private readonly HashSet<Guid> _viewedIds = [];
     private bool _isLocalFilterActive;
+    private int _fetchGeneration;
     private bool _isSyncingSort;
     private bool _hasExplicitSiteSelection;
     private bool _isSyncingPlatformFlags;
@@ -1792,7 +1793,7 @@ public partial class CatalogViewModel : ObservableObject
             status = await _gateway.GetSiteSearchAsync(status.Id, ct);
         }
 
-        ShowSiteSearchResult(site, status);
+        await ShowSiteSearchResultAsync(site, status);
 
         if (status.State == SiteSearchStatusDto.Completed)
         {
@@ -1824,7 +1825,7 @@ public partial class CatalogViewModel : ObservableObject
             status = await _gateway.GetMultiSiteSearchAsync(status.Id, ct);
         }
 
-        ShowMultiSiteSearchResult(status);
+        await ShowMultiSiteSearchResultAsync(status);
 
         if (status.State == SiteSearchStatusDto.Completed)
         {
@@ -1849,7 +1850,7 @@ public partial class CatalogViewModel : ObservableObject
             IReadOnlyList<VacancyDto> offlineFound = await _offlineCollector.CollectAsync(requests, ct);
             List<VacancyDto> foundList = offlineFound.ToList();
 
-            ApplyFetchedVacancies(foundList);
+            await ApplyFetchedVacanciesAsync(foundList);
             await PersistFetchedLocallyAsync(foundList, isSynced: false);
 
             string unsupportedNote = requests.Any(r => !_offlineCollector.Supports(r.Source))
@@ -1923,7 +1924,7 @@ public partial class CatalogViewModel : ObservableObject
         SiteSearchStatusText = $"Парсинг ({status.Sites.Count}): {status.PagesDone}/{status.PagesTotal}, знайдено {status.Found} — {perSite}";
     }
 
-    private void ShowSiteSearchResult(string site, SiteSearchStatusDto status)
+    private async Task ShowSiteSearchResultAsync(string site, SiteSearchStatusDto status)
     {
         SiteSearchProgress = 1;
         if (status.State != SiteSearchStatusDto.Completed)
@@ -1933,7 +1934,7 @@ public partial class CatalogViewModel : ObservableObject
         }
 
         List<VacancyDto> found = status.Vacancies ?? [];
-        ApplyFetchedVacancies(found);
+        await ApplyFetchedVacanciesAsync(found);
 
         string cache = status.FromCache ? " (кеш, протягом 3 годин)" : string.Empty;
         string shown = Vacancies.Count < found.Count ? $", за фільтрами списку показано {Vacancies.Count}" : string.Empty;
@@ -1942,7 +1943,7 @@ public partial class CatalogViewModel : ObservableObject
             : $"{site}: знайдено {found.Count} вакансій{cache}{shown}";
     }
 
-    private void ShowMultiSiteSearchResult(MultiSiteSearchStatusDto status)
+    private async Task ShowMultiSiteSearchResultAsync(MultiSiteSearchStatusDto status)
     {
         SiteSearchProgress = 1;
         if (status.State != SiteSearchStatusDto.Completed)
@@ -1952,7 +1953,7 @@ public partial class CatalogViewModel : ObservableObject
         }
 
         List<VacancyDto> found = status.Vacancies ?? [];
-        ApplyFetchedVacancies(found);
+        await ApplyFetchedVacanciesAsync(found);
 
         string breakdown = string.Join(", ", status.Sites.Select(s =>
             s.State == SiteSearchStatusDto.Failed
@@ -1967,24 +1968,56 @@ public partial class CatalogViewModel : ObservableObject
             : $"Спарсено {status.Sites.Count} сайти ({breakdown}): {found.Count} вакансій{cache}{shown}{warning}";
     }
 
-    private void ApplyFetchedVacancies(List<VacancyDto> found)
+    private async Task ApplyFetchedVacanciesAsync(List<VacancyDto> found)
     {
         _loadedDtos.Clear();
         _loadedDtos.AddRange(found);
 
-        ErrorMessage = null;
-        HasLoaded = true;
-        TotalCount = found.Count;
-        if (_isLocalFilterActive || HasActiveLocalFilterOrSort())
+        int generation = ++_fetchGeneration;
+
+        // Локальна фільтрація/сортування лишаються на UI-потоці (дешеві), а створення карток
+        // (по одному VM на вакансію) виконується поза UI-потоком.
+        List<VacancyDto> toCreate = _isLocalFilterActive || HasActiveLocalFilterOrSort()
+            ? BuildLocalFilteredDtos()
+            : found;
+
+        List<VacancyItemViewModel> cards = await Task.Run(() => CreateCards(toCreate));
+
+        if (generation != _fetchGeneration)
         {
-            ApplyLocalFilterAndSort();
-        }
-        else
-        {
-            _vacancies.ReplaceAll(found.Select(CreateVacancyItemViewModel));
+            // Новіший результат пошуку вже замінив список — застарілий тихо відкидаємо.
+            return;
         }
 
+        ErrorMessage = null;
+        HasLoaded = true;
+        ApplyCardsToUi(cards);
+    }
+
+    private List<VacancyItemViewModel> CreateCards(List<VacancyDto> dtos)
+    {
+        List<VacancyItemViewModel> cards = new(dtos.Count);
+        foreach (VacancyDto dto in dtos)
+        {
+            cards.Add(CreateVacancyItemViewModel(dto));
+        }
+
+        return cards;
+    }
+
+    private void ApplyCardsToUi(List<VacancyItemViewModel> cards)
+    {
+        _vacancies.ReplaceAll(cards);
+
+        _distancePrefetchCts?.Cancel();
+        CancellationTokenSource prefetchCts = new();
+        _distancePrefetchCts = prefetchCts;
+        _ = VacancyFilterEngine.PrefetchDistancesAsync(cards, _distanceService, prefetchCts.Token);
+
+        TotalCount = cards.Count;
         OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(HasActiveLocalFilters));
+        OnPropertyChanged(nameof(IsFilterHighlightActive));
     }
 
     /// <summary>З якої сторінки списку почати пошук на активному сайті (синхронізується з індивідуальною сторінкою платформи).</summary>
@@ -2627,7 +2660,7 @@ public partial class CatalogViewModel : ObservableObject
                 return;
             }
 
-            ApplyFetchedVacancies(imported);
+            await ApplyFetchedVacanciesAsync(imported);
             await PersistFetchedLocallyAsync(imported, isSynced: false);
             StaleCacheText = $"Імпортовано {imported.Count} вакансій із {path}";
         }
@@ -2793,34 +2826,29 @@ public partial class CatalogViewModel : ObservableObject
 
     private void ApplyLocalFilterAndSort()
     {
+        ApplyCardsToUi(CreateCards(BuildLocalFilteredDtos()));
+    }
+
+    private List<VacancyDto> BuildLocalFilteredDtos()
+    {
         bool titleOnly = UnifiedTitleOnly
             || (SelectedPlatform == "WorkUa" && WorkUaTitleOnly)
             || (SelectedPlatform == "Djinni" && DjinniSelectedSearchType.Contains("title-only", StringComparison.OrdinalIgnoreCase));
 
         IEnumerable<VacancyDto> query = _loadedDtos.Where(v => MatchesLocalFilters(v, titleOnly));
-        var sorted = VacancyFilterEngine.SortVacancies(query, SelectedSortOption, GetDistanceKm).ToList();
+        List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(query, SelectedSortOption, GetDistanceKm).ToList();
 
-        var savedStates = Vacancies.ToDictionary(v => v.Id, v => v.IsSaved);
-        List<VacancyItemViewModel> nextCards = new(sorted.Count);
-        foreach (VacancyDto dto in sorted)
+        Dictionary<Guid, bool> savedStates = Vacancies.ToDictionary(v => v.Id, v => v.IsSaved);
+        for (int i = 0; i < sorted.Count; i++)
         {
-            VacancyDto adjusted = savedStates.TryGetValue(dto.Id, out bool isSaved) && isSaved != dto.IsSaved
-                ? dto with { IsSaved = isSaved }
-                : dto;
-            nextCards.Add(CreateVacancyItemViewModel(adjusted));
+            VacancyDto dto = sorted[i];
+            if (savedStates.TryGetValue(dto.Id, out bool isSaved) && isSaved != dto.IsSaved)
+            {
+                sorted[i] = dto with { IsSaved = isSaved };
+            }
         }
 
-        _vacancies.ReplaceAll(nextCards);
-
-        _distancePrefetchCts?.Cancel();
-        CancellationTokenSource prefetchCts = new();
-        _distancePrefetchCts = prefetchCts;
-        _ = VacancyFilterEngine.PrefetchDistancesAsync(nextCards, _distanceService, prefetchCts.Token);
-
-        TotalCount = Vacancies.Count;
-        OnPropertyChanged(nameof(IsEmpty));
-        OnPropertyChanged(nameof(HasActiveLocalFilters));
-        OnPropertyChanged(nameof(IsFilterHighlightActive));
+        return sorted;
     }
 
     private bool MatchesLocalFilters(VacancyDto v, bool titleOnly)

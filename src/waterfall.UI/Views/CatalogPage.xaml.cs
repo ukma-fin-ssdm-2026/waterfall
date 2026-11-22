@@ -11,6 +11,7 @@ public partial class CatalogPage : ContentPage, IHostedPage
     private readonly CatalogViewModel _viewModel;
     private readonly OverlaySheetAnimator.SheetState _parseSheetAnimState = new();
     private readonly OverlaySheetAnimator.SheetState _localFilterSheetAnimState = new();
+    private bool _sheetsPrewarmed;
 
     public CatalogPage(CatalogViewModel viewModel)
     {
@@ -91,6 +92,18 @@ public partial class CatalogPage : ContentPage, IHostedPage
     {
         base.OnAppearing();
         _viewModel.EnsureLoadedCommand.Execute(null);
+
+        if (_sheetsPrewarmed)
+        {
+            return;
+        }
+
+        _sheetsPrewarmed = true;
+        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(600), () =>
+        {
+            OverlaySheetAnimator.Prewarm(ParseSheetHost, Resources, "ParseSheetTemplate", _viewModel);
+            OverlaySheetAnimator.Prewarm(LocalFilterSheetHost, Resources, "LocalFilterSheetTemplate", _viewModel);
+        });
     }
 
     protected override bool OnBackButtonPressed()

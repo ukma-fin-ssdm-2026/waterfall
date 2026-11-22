@@ -22,6 +22,43 @@ public partial class VacancyCard : ContentView
         Color Danger,
         Color DangerSurface)
     {
+        private static readonly CardPalette Default = new(
+            BgSurface: Color.FromArgb("#22201E"),
+            BgRail: Color.FromArgb("#141312"),
+            CardBorder: Color.FromArgb("#2D2A26"),
+            TonalSurface: Color.FromArgb("#2C2926"),
+            Divider: Color.FromArgb("#2E2B27"),
+            TextPrimary: Color.FromArgb("#F2EFEA"),
+            TextSecondary: Color.FromArgb("#ABA49A"),
+            TextMuted: Color.FromArgb("#767068"),
+            Primary: Color.FromArgb("#D4745E"),
+            PrimarySurface: Color.FromArgb("#32221E"),
+            Danger: Color.FromArgb("#E06C6C"),
+            DangerSurface: Color.FromArgb("#331D1D"));
+
+        /// <summary>
+        /// Чи збігається завантажена палітра з дефолтною темною, уже зашитою у VacancyCard.xaml.
+        /// </summary>
+        public bool IsDefault =>
+            IsSameColor(BgSurface, Default.BgSurface)
+            && IsSameColor(BgRail, Default.BgRail)
+            && IsSameColor(CardBorder, Default.CardBorder)
+            && IsSameColor(TonalSurface, Default.TonalSurface)
+            && IsSameColor(Divider, Default.Divider)
+            && IsSameColor(TextPrimary, Default.TextPrimary)
+            && IsSameColor(TextSecondary, Default.TextSecondary)
+            && IsSameColor(TextMuted, Default.TextMuted)
+            && IsSameColor(Primary, Default.Primary)
+            && IsSameColor(PrimarySurface, Default.PrimarySurface)
+            && IsSameColor(Danger, Default.Danger)
+            && IsSameColor(DangerSurface, Default.DangerSurface);
+
+        private static bool IsSameColor(Color left, Color right) =>
+            left.Red == right.Red
+            && left.Green == right.Green
+            && left.Blue == right.Blue
+            && left.Alpha == right.Alpha;
+
         public static CardPalette Load()
         {
             ResourceDictionary? res = Application.Current?.Resources;
@@ -46,17 +83,26 @@ public partial class VacancyCard : ContentView
                 : Color.FromArgb(fallbackHex);
     }
 
+    private const int LiveCardsPruneThreshold = 96;
     private static readonly List<WeakReference<VacancyCard>> LiveCards = [];
     private static CardPalette s_palette = CardPalette.Load();
+    private static bool s_paletteIsDefault;
+    private static SolidColorBrush s_heartPrimaryBrush = new(Color.FromArgb("#D4745E"));
+    private static SolidColorBrush s_heartMutedBrush = new(Color.FromArgb("#767068"));
+    private static SolidColorBrush s_cardBorderBrush = new(Color.FromArgb("#2D2A26"));
 
     static VacancyCard()
     {
+        s_paletteIsDefault = s_palette.IsDefault;
+        if (!s_paletteIsDefault)
+        {
+            CreatePaletteBrushes();
+        }
+
         ThemeService.PaletteChanged += OnGlobalPaletteChanged;
     }
 
     private readonly TapGestureRecognizer _sourceTapRecognizer;
-    private SolidColorBrush _heartPrimaryBrush = new(Color.FromArgb("#D4745E"));
-    private SolidColorBrush _heartMutedBrush = new(Color.FromArgb("#767068"));
     private VacancyItemViewModel? _currentViewModel;
     private WebView? _mapWebView;
 
@@ -68,13 +114,28 @@ public partial class VacancyCard : ContentView
         _sourceTapRecognizer.Tapped += OnOpenSourceTapped;
 
         RegisterLiveCard(this);
-        ApplyThemeColors();
+        if (!s_paletteIsDefault)
+        {
+            ApplyThemeColors();
+        }
+
         BindingContextChanged += OnBindingContextChanged;
+    }
+
+    private static void CreatePaletteBrushes()
+    {
+        s_heartPrimaryBrush = new SolidColorBrush(s_palette.Primary);
+        s_heartMutedBrush = new SolidColorBrush(s_palette.TextMuted);
+        s_cardBorderBrush = new SolidColorBrush(s_palette.CardBorder);
     }
 
     private static void RegisterLiveCard(VacancyCard card)
     {
-        PruneDeadCards();
+        if (LiveCards.Count > LiveCardsPruneThreshold)
+        {
+            PruneDeadCards();
+        }
+
         LiveCards.Add(new WeakReference<VacancyCard>(card));
     }
 
@@ -103,6 +164,8 @@ public partial class VacancyCard : ContentView
     private static void RefreshAllLiveCards()
     {
         s_palette = CardPalette.Load();
+        s_paletteIsDefault = s_palette.IsDefault;
+        CreatePaletteBrushes();
         for (int i = LiveCards.Count - 1; i >= 0; i--)
         {
             if (LiveCards[i].TryGetTarget(out VacancyCard? card))
@@ -119,10 +182,8 @@ public partial class VacancyCard : ContentView
     private void ApplyThemeColors()
     {
         CardPalette p = s_palette;
-        _heartPrimaryBrush = new SolidColorBrush(p.Primary);
-        _heartMutedBrush = new SolidColorBrush(p.TextMuted);
         CardBorder.BackgroundColor = p.BgSurface;
-        CardBorder.Stroke = new SolidColorBrush(p.CardBorder);
+        CardBorder.Stroke = s_cardBorderBrush;
 
         TitleLabel.TextColor = p.TextPrimary;
         CompanyLabel.TextColor = p.TextSecondary;
@@ -170,7 +231,7 @@ public partial class VacancyCard : ContentView
             SalaryLabel.TextColor = p.TextPrimary;
             MetaLabel.TextColor = p.TextMuted;
             HeartPath.Fill = Brush.Transparent;
-            HeartPath.Stroke = _heartMutedBrush;
+            HeartPath.Stroke = s_heartMutedBrush;
             DetailsChevronLabel.TextColor = p.TextMuted;
         }
     }
@@ -268,7 +329,7 @@ public partial class VacancyCard : ContentView
         HeartPath.CancelAnimations();
         HeartPath.Scale = 1.0;
         HeartPath.Fill = Brush.Transparent;
-        HeartPath.Stroke = _heartMutedBrush;
+        HeartPath.Stroke = s_heartMutedBrush;
         ReleaseMapHost();
         DetailsHost.Content = null;
         DetailsHost.IsVisible = false;
@@ -295,13 +356,13 @@ public partial class VacancyCard : ContentView
     {
         if (vm.IsSaved)
         {
-            HeartPath.Fill = _heartPrimaryBrush;
-            HeartPath.Stroke = _heartPrimaryBrush;
+            HeartPath.Fill = s_heartPrimaryBrush;
+            HeartPath.Stroke = s_heartPrimaryBrush;
         }
         else
         {
             HeartPath.Fill = Brush.Transparent;
-            HeartPath.Stroke = _heartMutedBrush;
+            HeartPath.Stroke = s_heartMutedBrush;
         }
 
         SemanticProperties.SetDescription(HeartBorder, vm.SaveButtonText);
@@ -460,6 +521,11 @@ public partial class VacancyCard : ContentView
     {
         if (_currentViewModel is not { HasAddress: true, IsMapExpanded: true } vm)
         {
+            if (CardMapHost.Content is null && !CardMapHost.IsVisible && _mapWebView is null)
+            {
+                return;
+            }
+
             ReleaseMapHost();
             return;
         }
@@ -682,6 +748,11 @@ public partial class VacancyCard : ContentView
     {
         if (_currentViewModel is null || !_currentViewModel.IsDetailsExpanded)
         {
+            if (DetailsHost.Content is null && !DetailsHost.IsVisible)
+            {
+                return;
+            }
+
             if (DetailsHost.Content is not null)
             {
                 DetailsHost.Content = null;

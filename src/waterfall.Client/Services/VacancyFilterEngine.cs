@@ -221,7 +221,8 @@ public static class VacancyFilterEngine
         IDistanceCalculatorService? distanceService,
         CancellationToken ct,
         int maxCount = 20,
-        int initialDelayMs = 350)
+        int initialDelayMs = 600,
+        int interCardDelayMs = 100)
     {
         if (distanceService is null || string.IsNullOrWhiteSpace(distanceService.UserAddress) || cards.Count == 0)
         {
@@ -240,6 +241,11 @@ public static class VacancyFilterEngine
             {
                 ct.ThrowIfCancellationRequested();
                 await cards[i].EnsureDistanceLoadedAsync(ct);
+
+                if (i < limit - 1 && interCardDelayMs > 0)
+                {
+                    await Task.Delay(interCardDelayMs, ct);
+                }
             }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)

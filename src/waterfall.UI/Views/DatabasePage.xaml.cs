@@ -7,6 +7,7 @@ public partial class DatabasePage : ContentPage, IHostedPage
 {
     private readonly DatabaseViewModel _viewModel;
     private readonly OverlaySheetAnimator.SheetState _filterSheetAnimState = new();
+    private bool _sheetsPrewarmed;
 
     public DatabasePage(DatabaseViewModel viewModel)
     {
@@ -69,6 +70,15 @@ public partial class DatabasePage : ContentPage, IHostedPage
     {
         base.OnAppearing();
         _viewModel.EnsureLoadedCommand.Execute(null);
+
+        if (_sheetsPrewarmed)
+        {
+            return;
+        }
+
+        _sheetsPrewarmed = true;
+        Dispatcher.DispatchDelayed(TimeSpan.FromMilliseconds(600), () =>
+            OverlaySheetAnimator.Prewarm(FilterSheetHost, Resources, "FilterSheetTemplate", _viewModel));
     }
 
     protected override bool OnBackButtonPressed()
