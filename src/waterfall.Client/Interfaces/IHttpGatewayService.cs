@@ -21,6 +21,16 @@ public interface IHttpGatewayService
     Task<PagedResult<VacancyDto>> GetVacanciesAsync(string? search, int page, int pageSize, CancellationToken ct = default);
 
     /// <summary>
+    /// Сторінка каталогу вакансій із розширеними параметрами фільтрації та сортування (GET /api/v1/vacancies).
+    /// </summary>
+    Task<PagedResult<VacancyDto>> GetVacanciesAsync(VacancyQueryOptions options, CancellationToken ct = default);
+
+    /// <summary>
+    /// Двостороння синхронізація бази вакансій із сервером (POST /api/v1/vacancies/sync).
+    /// </summary>
+    Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default);
+
+    /// <summary>
     /// Персоналізовані рекомендації на основі збережених вакансій та історії пошуків.
     /// </summary>
     Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default);
@@ -37,6 +47,12 @@ public interface IHttpGatewayService
 
     /// <summary>Стан пошуку на сайті: прогрес, а коли завершено — знайдені вакансії.</summary>
     Task<SiteSearchStatusDto> GetSiteSearchAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Запускає одночасний пошук на кількох сайтах (POST /api/v1/site-searches/batch); потрібен вхід.</summary>
+    Task<MultiSiteSearchStatusDto> StartMultiSiteSearchAsync(MultiSiteSearchRequest request, CancellationToken ct = default);
+
+    /// <summary>Стан одночасного пошуку на кількох сайтах: загальний прогрес, прогрес кожного сайту та вакансії.</summary>
+    Task<MultiSiteSearchStatusDto> GetMultiSiteSearchAsync(Guid id, CancellationToken ct = default);
 
     Task<IReadOnlyList<SavedVacancyDto>> GetSavedVacanciesAsync(CancellationToken ct = default);
 
@@ -102,6 +118,8 @@ public interface IHttpGatewayService
     /// Записати перегляд вакансії в історію (FR-007).
     /// </summary>
     Task<bool> RecordVacancyViewAsync(Guid vacancyId, CancellationToken ct = default);
+
+    /// <summary>
     /// Чат з ШІ-консультантом (FR-002, FR-009). Події стрімляться в міру надходження; сервер сам
     /// зберігає контекст сесії, тож <paramref name="sessionId"/> = null починає новий діалог.
     /// Помилки до початку потоку — <see cref="AiConsultantException"/> з кодом сервера

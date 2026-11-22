@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Helpers;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
+using Waterfall.Repository.Normalization;
 
 namespace Waterfall.Client.ViewModels;
 
@@ -56,6 +57,10 @@ public partial class VacancyItemViewModel : ObservableObject
         _distanceService = distanceService;
         _onDistanceCalculated = onDistanceCalculated;
         IsSaved = vacancy.IsSaved;
+        Category = string.IsNullOrWhiteSpace(vacancy.Category) ? "Інше" : vacancy.Category;
+        CategoryGroup = !string.IsNullOrWhiteSpace(vacancy.CategoryGroup)
+            ? vacancy.CategoryGroup
+            : VacancyCategoryMap.Resolve(Category);
 
         if (initialDistanceKm.HasValue)
         {
@@ -123,7 +128,18 @@ public partial class VacancyItemViewModel : ObservableObject
     public string? FullAddress => Vacancy.FullAddress;
     public string? Schedule => Vacancy.Schedule;
     public string? Experience => Vacancy.Experience;
-    public string Category => Vacancy.Category;
+
+    public string Category { get; }
+
+    public string CategoryGroup { get; }
+
+    /// <summary>Читабельний рядок категорії та її канонічної групи (наприклад, «.NET · Software Development»).</summary>
+    public string CategoryDisplay =>
+        string.IsNullOrWhiteSpace(Category)
+            ? CategoryGroup
+            : string.Equals(Category, CategoryGroup, StringComparison.OrdinalIgnoreCase)
+                ? Category
+                : $"{Category} · {CategoryGroup}";
 
     public bool HasSchedule => !string.IsNullOrWhiteSpace(Schedule);
     public bool HasExperience => !string.IsNullOrWhiteSpace(Experience);

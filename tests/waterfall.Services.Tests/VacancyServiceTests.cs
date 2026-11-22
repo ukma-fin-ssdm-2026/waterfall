@@ -480,4 +480,45 @@ public sealed class VacancyServiceTests
         Assert.Contains("C#", resultValid);
         Assert.Contains(".NET", resultValid);
     }
+
+    [Fact]
+    public async Task SyncVacanciesAsync_SanitizesMergesInvalidatesCacheAndReturnsServerData()
+    {
+        VacancyDB serverExisting = CreateEntity("Server Collected Job", source: "Dou");
+        serverExisting.ExternalId = "dou-1";
+        serverExisting.LastSeenAt = DateTimeOffset.UtcNow;
+        _vacancyRepo.Vacancies.Add(serverExisting);
+
+        VacancySyncRequestDto request = new()
+        {
+            FullSync = true,
+            ClientVacancies =
+            [
+                new VacancySyncItemDto
+                {
+                    Id = Guid.NewGuid(),
+                    ExternalId = "dj-offline-1",
+                    Title = "  Offline Collected Developer  ",
+                    Company = "OfflineCorp",
+                    Description = "Built offline",
+                    Category = "Python",
+                    Location = "Львів",
+                    Currency = "usd",
+                    Source = JobSource.Djinni,
+                    SourceUrl = "https://djinni.co/jobs/offline-1/",
+                    Skills = ["Python", "SQL", "python"]
+                },
+                // Невалідний запис (назва < 2 символів) має бути відкинутий
+                new VacancySyncItemDto { Title = "X" }
+            ]
+        };
+
+        VacancySyncResponseDto response = await _service.SyncVacanciesAsync(request);
+
+        Assert.Equal(1, response.ReceivedFromClient);
+        Assert.Equal(1, response.CreatedOnServer);
+        Assert.Equal(2, response.TotalServerVacancies);
+        Assert.Equal(2, response.ServerVacancies.Count);
+        Assert.Equal(1, _cacheService.InvalidateCatalogCallCount);
+    }
 }

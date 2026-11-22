@@ -12,12 +12,21 @@
 
 ## Опис набору тестів
 
-39 сфокусованих тестових випадків у 2 класах тестів (тривіальні обгортки CRUD над EF Core вилучено під час рев'ю для концентрації на реальній бізнес- та запитовій логіці):
+145 тестових випадків в 11 класах на реальній in-memory SQLite (актуалізовано 20.11.2026):
 
 | Клас тесту | Кількість випадків | Що перевіряє |
 | :--- | :---: | :--- |
-| [`EfVacancyRepositoryTests`](EfVacancyRepositoryTests.cs) | 26 | `GetAllAsync`: сортування desc/asc за 5 полями (заголовок, зарплата min/max, дата появи); фільтри пошуку за заголовком, описом, компанією та JSON-навичками; пошук і фільтри кирилицею без урахування регістру; фільтри категорії (з нормалізацією регістру та пробілів), досвіду, локації, графіку, джерела; межі вилки зарплат; конкатенація активних та архівних записів; віконна пагінація; пакетний `BulkUpsertAsync` зі збереженням первинних ключів і дат |
-| [`EfSavedVacancyRepositoryTests`](EfSavedVacancyRepositoryTests.cs) | 13 | отримання активних та архівних збережених вакансій, ізоляція користувачів (чужі закладки не відображаються), отримання за `Id` або `VacancyId`, перевірка прав доступу при читанні й видаленні, автогенерація `Guid` і часової мітки `SavedAt`, перевірка зв'язку з `VacancyDB`, метод `ExistsForVacancyAsync` (включно з `userId == null`), пакетне витягування збережених `GetSavedVacancyIdsAsync` з обробкою порожнього входу |
+| [`EfVacancyRepositoryTests`](EfVacancyRepositoryTests.cs) | 39 | `GetAllAsync` (сортування, пошук кирилицею, усі фільтри: `CategoryGroup`, `WorkFormat`, `ExperienceMonths`, `Location`, `Skills`, зарплати, джерела, пагінація), `BulkUpsertAsync`, `SyncMergeAsync` (дедуплікація та Last-Write-Wins), `GetAllForSyncAsync` (повна та дельта-вибірка), архівація застарілих |
+| [`VacancyNormalizerTests`](VacancyNormalizerTests.cs) | 34 | обчислення `CategoryGroup`, `WorkFormat`, `ExperienceMonths`, `SearchText` |
+| [`VacancyExperienceParserTests`](VacancyExperienceParserTests.cs) | 27 | розбір досвіду роботи з текстів українською й англійською у місяці |
+| [`EfChatSessionRepositoryTests`](EfChatSessionRepositoryTests.cs) | 13 | діалоги ШІ, вікно історії, FK-захист від вигаданих вакансій (FUNC-001) |
+| [`EfSavedVacancyRepositoryTests`](EfSavedVacancyRepositoryTests.cs) | 9 | закладки, ізоляція користувачів, перевірки існування та пакетне `GetSavedVacancyIdsAsync` |
+| [`EfGeoLocationCacheRepositoryTests`](EfGeoLocationCacheRepositoryTests.cs) | 7 | кешування й нормалізація адрес геокодування |
+| [`EfSearchQueryRepositoryTests`](EfSearchQueryRepositoryTests.cs) | 5 | збереження, отримання й очищення історії пошукових запитів |
+| [`EfUserRepositoryTests`](EfUserRepositoryTests.cs) | 3 | пошук і збереження облікових записів користувачів |
+| [`EfVacancyViewRepositoryTests`](EfVacancyViewRepositoryTests.cs) | 3 | фіксація та підрахунок переглядів вакансій |
+| [`NonFunctionalPerformanceTests`](NonFunctionalPerformanceTests.cs) | 2 | виконувані NFR-тести: `PERF_001` (p95 < 1000 мс на 10 000 записів) та `SEC_001` (0 паролів у відкритому вигляді) |
+| [`WaterfallDbSeederTests`](WaterfallDbSeederTests.cs) | 3 | ідемпотентне сідування початкових даних, геокешу та автоматичний апгрейд legacy SQLite схеми |
 
 ---
 

@@ -52,3 +52,41 @@ public sealed record SiteSearchStatusDto
     [JsonIgnore]
     public double Progress => PagesTotal > 0 ? Math.Clamp((double)PagesDone / PagesTotal, 0, 1) : 0;
 }
+
+/// <summary>Запит POST /api/v1/site-searches/batch: одночасний парсинг кількох сайтів із власними фільтрами кожного.</summary>
+public sealed record MultiSiteSearchRequest
+{
+    public List<SiteSearchRequest> Requests { get; init; } = [];
+}
+
+/// <summary>Прогрес окремого сайту в межах багатосайтового пошуку.</summary>
+public sealed record SiteSearchItemStatusDto
+{
+    public JobSource Source { get; init; }
+    public string State { get; init; } = SiteSearchStatusDto.Queued;
+    public int PagesDone { get; init; }
+    public int PagesTotal { get; init; }
+    public int Found { get; init; }
+    public bool FromCache { get; init; }
+    public string? Message { get; init; }
+}
+
+/// <summary>Агрегований стан одночасного пошуку на кількох сайтах.</summary>
+public sealed record MultiSiteSearchStatusDto
+{
+    public Guid Id { get; init; }
+    public string State { get; init; } = SiteSearchStatusDto.Queued;
+    public int PagesDone { get; init; }
+    public int PagesTotal { get; init; }
+    public int Found { get; init; }
+    public bool AllFromCache { get; init; }
+    public string? Message { get; init; }
+    public List<SiteSearchItemStatusDto> Sites { get; init; } = [];
+    public List<VacancyDto>? Vacancies { get; init; }
+
+    [JsonIgnore]
+    public bool IsInProgress => State is SiteSearchStatusDto.Queued or SiteSearchStatusDto.Running;
+
+    [JsonIgnore]
+    public double Progress => PagesTotal > 0 ? Math.Clamp((double)PagesDone / PagesTotal, 0, 1) : 0;
+}

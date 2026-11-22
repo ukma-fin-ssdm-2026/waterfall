@@ -22,22 +22,36 @@
             <Label Text="{Binding Title}"
                    Style="{StaticResource CardTitle}"
                    LineBreakMode="TailTruncation"
-                   MaxLines="1" />
+                   MaxLines="1"
+                   VerticalOptions="Center" />
 
-            <!-- Бейдж активності (Активна / Архівна) -->
-            <Border Grid.Column="1"
-                    Style="{StaticResource StatusBadge}"
-                    Padding="8,2">
-                <Border.Triggers>
-                    <DataTrigger TargetType="Border" Binding="{Binding IsActive}" Value="False">
-                        <Setter Property="BackgroundColor" Value="{StaticResource DarkBg2}" />
-                        <Setter Property="Stroke" Value="{StaticResource Gray400}" />
-                    </DataTrigger>
-                </Border.Triggers>
-                <Label Text="{Binding StatusText}"
-                       Style="{StaticResource BadgeLabel}"
-                       FontSize="11" />
-            </Border>
+            <!-- Бейджі категорії та активності (Активна / Архівна) -->
+            <HorizontalStackLayout Grid.Column="1" Spacing="6" HorizontalOptions="End" VerticalOptions="Center">
+                <Border StrokeShape="RoundRectangle 8"
+                        StrokeThickness="1"
+                        Stroke="{StaticResource Secondary}"
+                        BackgroundColor="{StaticResource DarkBg2}"
+                        Padding="8,2"
+                        VerticalOptions="Center">
+                    <Label Text="{Binding CategoryDisplay, StringFormat='🏷️ {0}'}"
+                           FontSize="11"
+                           TextColor="{StaticResource Accent}"
+                           LineBreakMode="TailTruncation"
+                           MaxLines="1" />
+                </Border>
+                <Border Style="{StaticResource StatusBadge}"
+                        Padding="8,2">
+                    <Border.Triggers>
+                        <DataTrigger TargetType="Border" Binding="{Binding IsActive}" Value="False">
+                            <Setter Property="BackgroundColor" Value="{StaticResource DarkBg2}" />
+                            <Setter Property="Stroke" Value="{StaticResource Gray400}" />
+                        </DataTrigger>
+                    </Border.Triggers>
+                    <Label Text="{Binding StatusText}"
+                           Style="{StaticResource BadgeLabel}"
+                           FontSize="11" />
+                </Border>
+            </HorizontalStackLayout>
 
             <!-- Компанія та локація -->
             <Label Grid.Row="1"
@@ -286,7 +300,7 @@
                            FontFamily="OpenSansSemibold"
                            FontSize="13"
                            TextColor="{StaticResource White}" />
-                    <Label Text="{Binding Category, StringFormat='Категорія: {0}'}"
+                    <Label Text="{Binding CategoryDisplay, StringFormat='Категорія: {0}'}"
                            Style="{StaticResource MutedLabel}"
                            FontSize="12" />
                     <Label Text="{Binding Schedule, StringFormat='Графік: {0}'}"

@@ -639,4 +639,230 @@ public sealed class SiteSearchServiceTests : IDisposable
 
         public override DateTimeOffset GetUtcNow() => _now;
     }
+
+    [Fact]
+    public async Task BatchSearch_CrawlsMultipleSitesWithOwnSettings_AndMergesAllResults()
+    {
+        SiteSearchRequest douReq = new() { Source = JobSource.Dou, Categories = ["Python"] };
+        SiteSearchRequest djinniReq = new() { Source = JobSource.Djinni, Categories = [".NET"], Pages = 1 };
+        SiteSearchRequest workReq = new() { Source = JobSource.WorkUa, Keywords = "qa", ListOnly = true, Pages = 1 };
+        SiteSearchRequest robotaReq = new() { Source = JobSource.RobotaUa, Keywords = "java", Pages = 1 };
+
+        _sites.Pages[SiteSearchService.ListPageUrl(douReq, 1)!] = DouPageTests.Feed(DouPageTests.Item(701));
+        _sites.Pages[SiteSearchService.ListPageUrl(djinniReq, 1)!] = DjinniPageTests.Page(DjinniPageTests.Job(702));
+        _browser.Pages[SiteSearchService.ListPageUrl(workReq, 1)!] = WorkUaPageTests.ListPage(WorkUaPageTests.Card(703, "Work QA"));
+        _browser.Pages[SiteSearchService.ListPageUrl(robotaReq, 1)!] = """<main><a href="/company7/vacancy704"><h2>Robota Java</h2></a></main>""";
+        _browser.Pages["https://robota.ua/company7/vacancy704"] = """<main><h1>Robota Java</h1><div itemprop="description">Java Spring Boot</div></main>""";
+
+        MultiSiteSearchStart start = _search.StartBatch(
+            new MultiSiteSearchRequest { Requests = [douReq, djinniReq, workReq, robotaReq] },
+            User);
+        Assert.NotNull(start.Status);
+        Assert.Equal(4, start.Status.Sites.Count);
+
+        MultiSiteSearchStatusDto done = await WaitBatchDoneAsync(start.Status.Id);
+
+        Assert.Equal(SiteSearchStates.Completed, done.State);
+        Assert.False(done.AllFromCache);
+        Assert.Equal(4, done.Vacancies!.Count);
+        Assert.Equal(
+            new HashSet<JobSource> { JobSource.Dou, JobSource.Djinni, JobSource.WorkUa, JobSource.RobotaUa },
+            done.Vacancies.Select(v => v.Source).ToHashSet());
+        Assert.All(done.Sites, site => Assert.Equal(SiteSearchStates.Completed, site.State));
+
+        // Повторний пакетний запит протягом 3 годин бере всі 4 сайти з кешу без мережевих запитів
+        int httpBefore = _sites.Requested.Count;
+        int browserBefore = _browser.Urls.Count;
+        MultiSiteSearchStart cached = _search.StartBatch(
+            new MultiSiteSearchRequest { Requests = [douReq, djinniReq, workReq, robotaReq] },
+            Guid.NewGuid());
+        Assert.True(cached.Status!.AllFromCache);
+        Assert.Equal(SiteSearchStates.Completed, cached.Status.State);
+        Assert.Equal((httpBefore, browserBefore), (_sites.Requested.Count, _browser.Urls.Count));
+    }
+
+    [Fact]
+    public async Task BatchSearch_RejectsWhenAnotherJobIsActive_AndReturnsNullForOtherUser()
+    {
+        SiteSearchRequest heldReq = new() { Source = JobSource.Djinni, Pages = 2 };
+        string page1 = SiteSearchService.ListPageUrl(heldReq, 1)!;
+        string page2 = SiteSearchService.ListPageUrl(heldReq, 2)!;
+        _sites.Pages[page1] = DjinniPageTests.Page(DjinniPageTests.Job(801));
+        _sites.Pages[page2] = DjinniPageTests.Page(DjinniPageTests.Job(802));
+        _sites.Hold(page2);
+
+        MultiSiteSearchStart first = _search.StartBatch(new MultiSiteSearchRequest { Requests = [heldReq] }, User);
+        Assert.NotNull(first.Status);
+
+        MultiSiteSearchStart second = _search.StartBatch(new MultiSiteSearchRequest { Requests = [new SiteSearchRequest { Source = JobSource.Dou }] }, User);
+        Assert.Null(second.Status);
+        Assert.Contains("ще триває", second.Rejection, StringComparison.Ordinal);
+
+        _sites.Release(page2);
+        await WaitBatchDoneAsync(first.Status.Id);
+
+        Assert.Null(await _search.GetBatchAsync(first.Status.Id, Guid.NewGuid()));
+    }
+
+    [Fact]
+    public void MultiSiteSearchRequest_ValidatesEmptyDuplicatesAndMaxSites()
+    {
+        MultiSiteSearchRequest empty = new() { Requests = [] };
+        List<ValidationResult> emptyErrors = [];
+        Validator.TryValidateObject(empty, new ValidationContext(empty), emptyErrors, true);
+        Assert.NotEmpty(emptyErrors);
+
+        MultiSiteSearchRequest tooMany = new()
+        {
+            Requests =
+            [
+                new SiteSearchRequest { Source = JobSource.Dou },
+                new SiteSearchRequest { Source = JobSource.Djinni },
+                new SiteSearchRequest { Source = JobSource.WorkUa },
+                new SiteSearchRequest { Source = JobSource.RobotaUa },
+                new SiteSearchRequest { Source = JobSource.Dou }
+            ]
+        };
+        List<ValidationResult> tooManyErrors = [];
+        Validator.TryValidateObject(tooMany, new ValidationContext(tooMany), tooManyErrors, true);
+        Assert.Contains(tooManyErrors, e => e.ErrorMessage!.Contains("4 сайтів", StringComparison.Ordinal));
+
+        MultiSiteSearchRequest dup = new()
+        {
+            Requests = [new SiteSearchRequest { Source = JobSource.Dou }, new SiteSearchRequest { Source = JobSource.Dou }]
+        };
+        List<ValidationResult> dupErrors = [];
+        Validator.TryValidateObject(dup, new ValidationContext(dup), dupErrors, true);
+        Assert.Contains(dupErrors, e => e.ErrorMessage!.Contains("більше одного разу", StringComparison.Ordinal));
+
+        MultiSiteSearchRequest invalidChild = new()
+        {
+            Requests = [new SiteSearchRequest { Source = JobSource.Dou, FromPage = 3 }]
+        };
+        List<ValidationResult> childErrors = [];
+        Validator.TryValidateObject(invalidChild, new ValidationContext(invalidChild), childErrors, true);
+        Assert.Contains(childErrors, e => e.ErrorMessage!.Contains("fromPage", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task BatchSearch_CachesEachSiteIndependently_InMemoryAndDatabase_ForSingleAndPartialBatchReuse()
+    {
+        MutableTimeProvider clock = new(new DateTimeOffset(2026, 11, 20, 10, 0, 0, TimeSpan.Zero));
+        SiteSearchRequest douQa = new() { Source = JobSource.Dou, Categories = ["QA"] };
+        SiteSearchRequest djinniNet = new() { Source = JobSource.Djinni, Categories = [".NET"], Pages = 1 };
+        SiteSearchRequest douDevOps = new() { Source = JobSource.Dou, Categories = ["DevOps"] };
+
+        _sites.Pages[SiteSearchService.ListPageUrl(douQa, 1)!] = DouPageTests.Feed(DouPageTests.Item(901));
+        _sites.Pages[SiteSearchService.ListPageUrl(djinniNet, 1)!] = DjinniPageTests.Page(DjinniPageTests.Job(902));
+        _sites.Pages[SiteSearchService.ListPageUrl(douDevOps, 1)!] = DouPageTests.Feed(DouPageTests.Item(903));
+
+        SiteSearchService service = new(
+            _services.GetRequiredService<IServiceScopeFactory>(),
+            _sites,
+            Options.Create(new IngestionOptions { RequestDelay = TimeSpan.Zero }),
+            new Lifetime(),
+            NullLogger<SiteSearchService>.Instance,
+            _browser,
+            clock);
+
+        // 1. Перший батч (DOU QA + Djinni .NET) -> обидва сайти парсяться і кешуються окремо під свої ключі
+        MultiSiteSearchStart batch1 = service.StartBatch(new MultiSiteSearchRequest { Requests = [douQa, djinniNet] }, User);
+        Assert.NotNull(batch1.Status);
+        MultiSiteSearchStatusDto done1 = await WaitBatchDoneForAsync(service, batch1.Status.Id, User);
+        Assert.Equal(SiteSearchStates.Completed, done1.State);
+        Assert.False(done1.AllFromCache);
+        Assert.Equal(2, done1.Vacancies!.Count);
+
+        using (IServiceScope scope = _services.CreateScope())
+        {
+            WaterfallDbContext db = scope.ServiceProvider.GetRequiredService<WaterfallDbContext>();
+            List<string> keys = db.SiteSearchCache.Select(c => c.CacheKey).ToList();
+            Assert.Equal(2, keys.Count);
+            Assert.Contains(keys, k => k.StartsWith("Dou|", StringComparison.Ordinal));
+            Assert.Contains(keys, k => k.StartsWith("Djinni|", StringComparison.Ordinal));
+        }
+
+        // 2. Одиночний пошук Djinni .NET миттєво бере кеш, створений батчем, без жодного мережевого запиту
+        int reqsAfterBatch1 = _sites.Requested.Count;
+        SiteSearchStart singleCached = service.Start(djinniNet, User);
+        Assert.NotNull(singleCached.Status);
+        Assert.True(singleCached.Status.FromCache);
+        Assert.Equal(reqsAfterBatch1, _sites.Requested.Count);
+
+        // 3. Частково кешований батч (Djinni .NET із кешу + новий DOU DevOps із мережі)
+        MultiSiteSearchStart batch2 = service.StartBatch(new MultiSiteSearchRequest { Requests = [djinniNet, douDevOps] }, User);
+        Assert.NotNull(batch2.Status);
+        Assert.False(batch2.Status.AllFromCache);
+        MultiSiteSearchStatusDto done2 = await WaitBatchDoneForAsync(service, batch2.Status.Id, User);
+        Assert.Equal(SiteSearchStates.Completed, done2.State);
+        Assert.True(done2.Sites.Single(s => s.Source == JobSource.Djinni).FromCache);
+        Assert.False(done2.Sites.Single(s => s.Source == JobSource.Dou).FromCache);
+        Assert.Equal(2, done2.Vacancies!.Count);
+        Assert.DoesNotContain(_sites.Requested.Skip(reqsAfterBatch1), u => u.Contains("djinni.co", StringComparison.OrdinalIgnoreCase));
+
+        // 4. Після «перезапуску» (новий екземпляр з порожнім in-memory кешем) повтор батчу бере обидва сайти з БД-кешу
+        int reqsAfterBatch2 = _sites.Requested.Count;
+        clock.Advance(TimeSpan.FromHours(1));
+        SiteSearchService restarted = new(
+            _services.GetRequiredService<IServiceScopeFactory>(),
+            _sites,
+            Options.Create(new IngestionOptions { RequestDelay = TimeSpan.Zero }),
+            new Lifetime(),
+            NullLogger<SiteSearchService>.Instance,
+            _browser,
+            clock);
+
+        MultiSiteSearchStart fromDbCache = restarted.StartBatch(new MultiSiteSearchRequest { Requests = [douQa, djinniNet] }, User);
+        Assert.NotNull(fromDbCache.Status);
+        Assert.True(fromDbCache.Status.AllFromCache);
+        Assert.All(fromDbCache.Status.Sites, s => Assert.True(s.FromCache));
+        Assert.Equal(reqsAfterBatch2, _sites.Requested.Count);
+    }
+
+    [Fact]
+    public async Task Search_HasNoHourlyQuotaLimit_AllowsMoreThanTwentySequentialSearches()
+    {
+        for (int i = 1; i <= 25; i++)
+        {
+            SiteSearchRequest req = new() { Source = JobSource.Dou, Keywords = $"q{i}" };
+            _sites.Pages[SiteSearchService.ListPageUrl(req, 1)!] = DouPageTests.Feed(DouPageTests.Item(1000 + i));
+
+            SiteSearchStart started = _search.Start(req, User);
+            Assert.NotNull(started.Status);
+            SiteSearchStatusDto done = await WaitDoneAsync(started.Status.Id);
+            Assert.Equal(SiteSearchStates.Completed, done.State);
+        }
+    }
+
+    private static async Task<MultiSiteSearchStatusDto> WaitBatchDoneForAsync(SiteSearchService service, Guid id, Guid userId)
+    {
+        DateTimeOffset deadline = DateTimeOffset.UtcNow + WaitLimit;
+        while (DateTimeOffset.UtcNow < deadline)
+        {
+            MultiSiteSearchStatusDto status = (await service.GetBatchAsync(id, userId))!;
+            if (status.State is SiteSearchStates.Completed or SiteSearchStates.Failed)
+            {
+                return status;
+            }
+
+            await Task.Delay(10);
+        }
+
+        throw new TimeoutException("Пакетний пошук не завершився вчасно.");
+    }
+
+    private async Task<MultiSiteSearchStatusDto> WaitBatchDoneAsync(Guid id)
+    {
+        using CancellationTokenSource limit = new(WaitLimit);
+        while (true)
+        {
+            MultiSiteSearchStatusDto status = (await _search.GetBatchAsync(id, User, limit.Token))!;
+            if (status.State is SiteSearchStates.Completed or SiteSearchStates.Failed)
+            {
+                return status;
+            }
+
+            await Task.Delay(10, limit.Token);
+        }
+    }
 }

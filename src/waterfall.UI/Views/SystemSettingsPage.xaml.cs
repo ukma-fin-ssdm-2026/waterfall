@@ -17,5 +17,11 @@ public partial class SystemSettingsPage : ContentPage
         InitializeComponent();
         BindingContext = _viewModel = viewModel;
     }
+
+    protected override void OnAppearing()
+    {
+        base.OnAppearing();
+        _ = _viewModel.RefreshSyncStatsAsync();
+    }
 }
 

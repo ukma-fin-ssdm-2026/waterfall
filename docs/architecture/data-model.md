@@ -83,6 +83,19 @@
 
 Аналітика працює лише з вакансіями й ніколи не використовує дані окремих користувачів (див. розділ 5).
 
+### Серверна реалізація EF Core (`WaterfallDbContext`) та клієнтська офлайн-БД (`ClientWaterfallDbContext`)
+
+У фактичній реалізації Entity Framework Core окрім базових логічних сутностей моделі використовуються також допоміжні таблиці та клієнтське локальне сховище:
+
+- **Серверна БД (`WaterfallDbContext`):**
+  - `Vacancies` (`VacancyDB`) — PK `Guid Id`, поля `ExternalId`, `Source`, `SourceUrl`, `Title`, `Company`, `Description`, `Category`, `CategoryGroup`, `Location`, `FullAddress`, `Schedule`, `Experience`, `ExperienceMonths`, `WorkFormat`, `SalaryMin`, `SalaryMax`, `Currency`, `SkillsJson`, `SearchText`, `PublishedAt`, `FirstSeenAt`, `LastSeenAt`, `IsActive`. Усі похідні поля нормалізації автоматично перераховуються в `SaveChanges`/`SaveChangesAsync` (`VacancyNormalizer.Apply`).
+  - `SavedVacancies` (`SavedVacancyDB`), `Users` (`UserDB`), `UserPersonalData` (`UserPersonalDataDB`, 1:1 адреса профілю користувача), `SearchQueries` (`SearchQueryDB`), `VacancyViews` (`VacancyViewDB`), `ChatSessions` (`ChatSessionDB`), `ChatMessages` (`ChatMessageDB`), `ChatMessageVacancies` (`ChatMessageVacancyDB`).
+  - `GeoLocationCache` (`GeoLocationCacheDB`) — постійний кеш геокодування адрес (`NormalizedAddress`, `Latitude`, `Longitude`, `CreatedAt`).
+  - `SiteSearchCache` (`SiteSearchCacheDB`) — кеш результатів пошуку на сайтах (`CacheKey`, `ExternalIdsJson`, `CachedAt`, TTL 3 години).
+- **Клієнтська локальна SQLite БД (`ClientWaterfallDbContext` у `waterfall.Client`):**
+  - Дзеркалить таблиці `Vacancies`, `SavedVacancies`, `Users`, `UserPersonalData`, `GeoLocationCache`, використовуючи розширені сутності `ClientVacancyDB` (додає `IsSynced` та `LocalUpdatedAt`) і `ClientGeoLocationCacheDB` (додає `IsSynced`), а також службову таблицю **`SyncState` (`ClientSyncStateDB`)** з полями `Key`, `LastSyncedAt`, `LastSummary`.
+  - Під час двосторонньої синхронізації (`POST /api/v1/vacancies/sync` + `EfVacancyRepository.SyncMergeAsync` + `EfLocalVacancyStore`) виконується дедуплікація за ключем `(Source, ExternalId)` → `Id` → `(Source, SourceUrl)` та розв'язання конфліктів за стратегією **Last-Write-Wins** (`LastSeenAt`) зі збереженням повнішого опису й дозаповненням відсутніх необов'язкових полів. Існуючі файли `waterfall_local.db` автоматично оновлюються через ідемпотентний `ALTER TABLE` / `CREATE TABLE IF NOT EXISTS`.
+
 ## 4. Зв'язки та кардинальність
 
 | Зв'язок | Тип | Кардинальність | Зміст |
@@ -126,8 +139,8 @@
 
 - **API-ключі LLM.** У моделі вони вважаються системними секретами: зберігаються в конфігурації сервера й шифруються `Security Service`, а не лежать у БД. Якщо користувачі вводитимуть власні ключі, потрібна сутність `UserApiKey` (1:1 з `User`, шифрування AES-256 за SEC-001).
 - **Термін зберігання поведінкових даних.** Перегляди, пошукові запити й діалоги з ШІ зараз зберігаються безстроково. Пропозиція — видаляти записи, старші за 30 днів; потрібне рішення команди.
-- **SQLite.** Модель припускає, що SQLite використовується лише для локальної розробки. Якщо база житиме на пристрої користувача, позначки з розділу 5 стосуються й цього пристрою, а в моделі загроз з'являється нова межа довіри.
-- **Валюта нормалізації.** USD обрано як пропозицію, бо частина джерел (Djinni) публікує зарплати в доларах. Альтернатива — гривня.
+- **SQLite на клієнті (реалізовано).** Клієнтський застосунок .NET MAUI зберігає локальну офлайн-базу `waterfall_local.db` (`ClientWaterfallDbContext`) для автономного перегляду, офлайн-збору DOU/Djinni та двосторонньої синхронізації з сервером (`POST /api/v1/vacancies/sync`, `POST /api/v1/geo/sync`). Локальна БД зберігає публічні дані вакансій і геокеш; токени автентифікації зберігаються окремо в захищеному сховищі ОС (`SecureStorage`).
+- **Валюта нормалізації.** Вакансії зберігають оригінальну валюту джерела (`USD`, `UAH`, `EUR`); крос-валютне порівняння та фільтрація зарплат у клієнті («Каталог» і «База вакансій») виконуються з автоматичною конвертацією за обраною валютою фільтра.
 
 ## Використання ШІ та внесок
 

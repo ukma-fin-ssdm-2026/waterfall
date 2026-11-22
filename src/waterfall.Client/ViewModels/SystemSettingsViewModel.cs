@@ -5,7 +5,10 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.SystemSettings;
+using Waterfall.Client.Models.Vacancies;
+using Waterfall.Client.Services;
 
 namespace Waterfall.Client.ViewModels;
 
@@ -36,10 +39,25 @@ public partial class SystemSettingsViewModel : ObservableObject
     private const string LegacyOneDayInterval = "24:00:00";
 
     private readonly string? _settingsFilePath;
+    private readonly ILocalVacancyStore? _localVacancyStore;
+    private readonly IVacancySyncService? _vacancySyncService;
+    private readonly IDistanceCalculatorService? _distanceService;
     private string? _loadedFilePath;
 
     public SystemSettingsViewModel() : this(LocateAppSettingsFile())
     {
+    }
+
+    public SystemSettingsViewModel(
+        ILocalVacancyStore? localVacancyStore,
+        IVacancySyncService? vacancySyncService,
+        IDistanceCalculatorService? distanceService = null,
+        string? settingsFilePath = null)
+        : this(settingsFilePath ?? LocateAppSettingsFile())
+    {
+        _localVacancyStore = localVacancyStore;
+        _vacancySyncService = vacancySyncService;
+        _distanceService = distanceService;
     }
 
     /// <summary>
@@ -101,7 +119,82 @@ public partial class SystemSettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _isSuccessStatus;
 
+    [ObservableProperty]
+    private int _localVacanciesCount;
+
+    [ObservableProperty]
+    private int _unsyncedVacanciesCount;
+
+    [ObservableProperty]
+    private string _lastVacancySyncText = "Ще не синхронізовано";
+
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SyncDatabasesNowCommand))]
+    private bool _isSyncingDatabases;
+
     public bool HasStatusMessage => !string.IsNullOrWhiteSpace(StatusMessage);
+
+    public async Task RefreshSyncStatsAsync(CancellationToken ct = default)
+    {
+        if (_localVacancyStore is null)
+        {
+            return;
+        }
+
+        try
+        {
+            LocalVacancyStats stats = await _localVacancyStore.GetStatsAsync(ct);
+            LocalVacanciesCount = stats.TotalCount;
+            UnsyncedVacanciesCount = stats.UnsyncedCount;
+            LastVacancySyncText = stats.LastSyncedAt.HasValue
+                ? stats.LastSyncedAt.Value.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                : "Ще не синхронізовано";
+        }
+        catch
+        {
+            // Ігноруємо помилку читання локальної статистики
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanSyncDatabasesNow))]
+    public async Task SyncDatabasesNowAsync()
+    {
+        if (_vacancySyncService is null)
+        {
+            StatusMessage = "Сервіс синхронізації бази вакансій не налаштовано.";
+            IsSuccessStatus = false;
+            return;
+        }
+
+        IsSyncingDatabases = true;
+        try
+        {
+            VacancySyncResult result = await _vacancySyncService.SyncWithServerAsync(fullSync: true);
+            int geoSynced = 0;
+            if (_distanceService is GeoDistanceService geoService)
+            {
+                geoSynced = await geoService.SyncWithServerAsync();
+            }
+
+            await RefreshSyncStatsAsync();
+            if (result.Succeeded)
+            {
+                StatusMessage = $"✓ Синхронізовано: надіслано {result.UploadedToServer} офлайн-вакансій, отримано {result.DownloadedFromServer} із сервера (нових локально: {result.AddedLocally}), геокеш: {geoSynced}.";
+                IsSuccessStatus = true;
+            }
+            else
+            {
+                StatusMessage = $"⚠️ Не вдалося синхронізувати базу: {result.ErrorMessage}";
+                IsSuccessStatus = false;
+            }
+        }
+        finally
+        {
+            IsSyncingDatabases = false;
+        }
+    }
+
+    private bool CanSyncDatabasesNow() => !IsSyncingDatabases;
 
     public string StatusLabelText => IsBackgroundParsingEnabled ? "Увімкнено" : "Вимкнено";
 

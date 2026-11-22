@@ -59,4 +59,25 @@ public interface IVacancyRepository
     /// Позначає неактивними (IsActive = false) усі активні вакансії, опубліковані до <paramref name="publishedBefore"/>.
     /// </summary>
     Task<int> DeactivateExpiredAsync(DateTimeOffset publishedBefore, CancellationToken ct = default);
+
+    /// <summary>
+    /// Повертає вакансії для синхронізації з клієнтом: усі, якщо <paramref name="since"/> == null,
+    /// або додані/оновлені не раніше <paramref name="since"/> (плюс обов'язкові <paramref name="includeIds"/>).
+    /// </summary>
+    Task<IReadOnlyList<VacancyDB>> GetAllForSyncAsync(
+        DateTimeOffset? since = null,
+        IReadOnlyCollection<Guid>? includeIds = null,
+        CancellationToken ct = default);
+
+    /// <summary>Загальна кількість вакансій у базі даних (активних і архівних).</summary>
+    Task<int> CountAllAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Двостороннє злиття офлайн-вакансій клієнта з серверною БД: дедуплікація за (Source, ExternalId),
+    /// Id або SourceUrl; конфлікти вирішуються за LastSeenAt (Last-Write-Wins) зі збереженням повніших даних.
+    /// </summary>
+    Task<VacancySyncMergeResult> SyncMergeAsync(IReadOnlyList<VacancyDB> vacancies, CancellationToken ct = default);
 }
+
+/// <summary>Результат злиття клієнтських вакансій із серверною БД під час синхронізації.</summary>
+public sealed record VacancySyncMergeResult(int Created, int Updated, IReadOnlyList<Guid> CanonicalIds);

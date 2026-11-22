@@ -16,4 +16,11 @@ public interface IVacancyService
     Task<VacancyDto> CreateAsync(CreateVacancyRequest request, CancellationToken ct = default);
     Task<VacancyDto?> UpdateAsync(Guid id, UpdateVacancyRequest request, CancellationToken ct = default);
     Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// Двостороння синхронізація бази вакансій між клієнтом та сервером:
+    /// приймає офлайн-зібрані або змінені клієнтом вакансії, об'єднує їх із БД сервера
+    /// та повертає актуальні серверні вакансії.
+    /// </summary>
+    Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default);
 }

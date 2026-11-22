@@ -7,7 +7,7 @@
 - **Бекенд-платформа:** ASP.NET Core Web API (.NET 10, C#)
 - **Формат обміну даними:** JSON (`application/json`)
 - **Стратегія версіонування:** Версія в шляху URL (`/api/v1/...`). Це забезпечує явність контракту, зворотну сумісність для мобільних клієнтів .NET MAUI та легку підтримку життєвого циклу API.
-- **Автентифікація:** Відкритий доступ для каталогу вакансій, пошуку, реєстрації/входу та геокодування; JWT Bearer — для збережених вакансій (`/saved-vacancies`) і профілю (`/profile`). Access-JWT (HS256) діє 15 хвилин, роль міститься в claims.
+- **Автентифікація:** Відкритий доступ (`AllowAnonymous`) для каталогу вакансій, пошуку, синхронізації бази вакансій (`/vacancies/sync`), реєстрації/входу, геокодування (`/geo/*`) та перевірок здоров'я (`/health`, `/health/live`); JWT Bearer — для збережених вакансій (`/saved-vacancies`), рекомендацій (`/vacancies/recommendations`), профілю (`/profile/*`), пошуку на сайтах (`/site-searches/*`), ШІ-консультанта (`/ai-consultant/*`, роль `JobSeeker`) та ринкової аналітики (`/analytics`, роль `Analyst`). Access-JWT (HS256) діє 15 хвилин, роль міститься в claims.
 
 ---
 
@@ -18,7 +18,8 @@
 - **Опис:** Централізований каталог стандартизованих вакансій, зібраних із різних зовнішніх ресурсів (Djinni, Work.ua, Robota.ua, Dou) або розміщених роботодавцями напряму.
 - **Атрибути:**
   - `id` (uuid): Унікальний ідентифікатор вакансії.
-  - `title` (string, 3–150 символів): Назва посади.
+  - `external_id` (string/null): Зовнішній ідентифікатор вакансії на сайті-джерелі (використовується для дедуплікації при парсингу та двосторонній синхронізації клієнт ↔ сервер).
+  - `title` (string, 3–200 символів): Назва посади.
   - `company` (string, 2–100 символів): Назва компанії-роботодавця.
   - `description` (string, min 20 символів): Детальний опис вакансії та вимоги.
   - `category` (string): Спеціалізація (наприклад, `.NET`, `QA`, `Mobile`, `DevOps`).
@@ -79,12 +80,23 @@
 - **Зв'язки:** Кеш спільний для всіх користувачів і не містить `user_id`; результати Wikipedia не кешуються.
 
 
-### 2.6. Ресурс SiteSearches (Пошук на сайтах на запит)
-- **Кінцева точка (URI):** `/api/v1/site-searches`
-- **Опис:** Користувач обирає сайт (Djinni, DOU, Work.ua чи Robota.ua) і фільтри — сервер читає сторінки списку з цими фільтрами (Djinni — сторінка пошуку, DOU — офіційна RSS-стрічка, 25 найсвіжіших; Work.ua і Robota.ua — браузером разом зі сторінкою кожної вакансії; для Work.ua `listOnly: true` — швидко, лише картки списку), зберігає вакансії і повертає їх. Поки йде обхід, клієнт опитує стан і показує шкалу прогресу.
-- **Запит (`SiteSearchRequest`):** `source` (`Djinni` | `Dou` | `WorkUa` | `RobotaUa`), `categories`, `experience`, `city`, `remote`, `employment`, `salaryFrom`, `keywords`, `options` (інші фільтри Work.ua чи Robota.ua як пари «назва=значення»; кілька значень через кому, `category=1,9` на Work.ua стає `category=1+9`) — у позначеннях сайту; `pages` 1–5 (DOU — завжди 1); `fromPage` 1–50 — з якої сторінки почати (читаються `fromPage` … `fromPage + pages − 1`; для DOU лише 1); `listOnly` (лише Work.ua).
-- **Стан (`SiteSearchStatusDto`):** `id`, `state` (`queued` | `running` | `completed` | `failed`), `pagesDone`, `pagesTotal`, `found`, `fromCache`, `message`, `vacancies` (лише коли `completed`; кожна з `isSaved` і `isViewed` — чи користувач уже переглядав вакансію).
-- **Обмеження:** потрібен JWT; один активний пошук на користувача й до 20 пошуків на годину (`429 SITE_SEARCH_LIMIT`); до одного сайту одночасно йде один обхід (решта — `queued`); такий самий пошук протягом 3 годин віддається з бази без звернення до сайту (`fromCache = true`). Стан пошуків зберігається в пам'яті API.
+### 2.6. Ресурс SiteSearches (Пошук на сайтах на запит — 1 або 1–4 сайти одночасно)
+- **Кінцеві точки (URI):** `/api/v1/site-searches` (один сайт) та `/api/v1/site-searches/batch` (кілька сайтів одночасно)
+- **Опис:** Користувач обирає один сайт або довільну комбінацію з 1–4 сайтів (Djinni, DOU, Work.ua, Robota.ua) із незалежними фільтрами й параметрами для кожного — сервер читає сторінки списку з цими фільтрами (Djinni — сторінка пошуку, DOU — офіційна RSS-стрічка, 25 найсвіжіших; Work.ua і Robota.ua — браузером разом зі сторінкою кожної вакансії; для Work.ua `listOnly: true` — швидко, лише картки списку), зберігає вакансії в БД і повертає їх. Поки йде обхід, клієнт опитує стан і показує шкалу прогресу (для пакетного пошуку — загальний прогрес і деталізацію по кожному сайту).
+- **Запит одного сайту (`SiteSearchRequest`):** `source` (`Djinni` | `Dou` | `WorkUa` | `RobotaUa`), `categories`, `experience`, `city`, `remote`, `employment`, `salaryFrom`, `keywords`, `options` (інші фільтри Work.ua чи Robota.ua як пари «назва=значення»; кілька значень через кому, `category=1,9` на Work.ua стає `category=1+9`) — у позначеннях сайту; `pages` 1–5 (DOU — завжди 1); `fromPage` 1–50 — з якої сторінки почати (читаються `fromPage` … `fromPage + pages − 1`; для DOU лише 1); `listOnly` (лише Work.ua).
+- **Запит кількох сайтів (`MultiSiteSearchRequest`):** `requests` — масив з 1–4 елементів `SiteSearchRequest` без повторення `source` (кожен елемент валідується рекурсивно).
+- **Стан одного сайту (`SiteSearchStatusDto`):** `id`, `state` (`queued` | `running` | `completed` | `failed`), `pagesDone`, `pagesTotal`, `found`, `fromCache`, `message`, `vacancies` (лише коли `completed`; кожна з `isSaved` і `isViewed`).
+- **Стан пакетного пошуку (`MultiSiteSearchStatusDto`):** `id`, `state`, `pagesDone`, `pagesTotal`, `found`, `fromCache`, `message`, `items` (`List<SiteSearchItemStatusDto>` — джерело, стан, прогрес, `found`, `fromCache`, `message` по кожному сайту), `vacancies` (об'єднаний дедуплікований список після завершення).
+- **Обмеження:** потрібен JWT; один активний некешований пошук (одиночний або пакетний) на користувача (`429 SITE_SEARCH_LIMIT`); до одного сайту одночасно йде один обхід (решта — `queued`); кожен окремий сайт у пакетному чи одиночному пошуку кешується незалежно на 3 години в БД (`SiteSearchCache`) без повторного звернення до сайту (`fromCache = true`). Збій одного сайту в пакетному пошуку не зупиняє решту.
+
+### 2.7. Двостороння синхронізація вакансій
+- **Двостороння синхронізація (`POST /api/v1/vacancies/sync`):** приймає `VacancySyncRequestDto` (`client_vacancies` до 500 записів за пакет, опційне `last_synced_at`, `full_sync`), об'єднує дані з серверною БД (дедуплікація за `(Source, ExternalId)` → `Id` → `SourceUrl`; розв'язання конфліктів Last-Write-Wins за `last_seen_at` зі збереженням повнішого опису та заповненням відсутніх полів) і повертає `VacancySyncResponseDto` з актуальними серверними вакансіями (`server_vacancies`), лічильниками створених/оновлених записів і міткою `server_time`.
+
+### 2.8. Ресурси Recommendations, Analytics, AI Consultant та Health Checks
+- **Рекомендації (`GET /api/v1/vacancies/recommendations?limit=20`):** потребує JWT; формує персоналізовану добірку (`RecommendationsResultDto`) на основі збережених вакансій та історії переглядів/пошуків, виключаючи вже збережені.
+- **Ринкова аналітика (`GET /api/v1/analytics?category=&months=3`):** потребує JWT із роллю `Analyst` (`403` для інших ролей); повертає `MarketAnalyticsDto` (середня ЗП, частки категорій, зарплати за грейдами/технологіями, динаміка публікацій).
+- **ШІ-консультант (`/api/v1/ai-consultant`):** потребує JWT із роллю `JobSeeker`; `POST /messages` (SSE: `meta` → `vacancies` → `delta*` → `done` або `error`), `POST /analyze` (SSE: `relevance` → `delta*` → `done` для 1–3 вакансій), `DELETE /sessions/{id}`.
+- **Перевірка здоров'я (`/health`, `/health/live`):** відкриті ендпоінти готовності (перевіряє БД `DatabaseHealthCheck` і зовнішній `PhotonGeocodingHealthCheck`) та життєздатності процесу.
 
 ---
 
@@ -93,26 +105,36 @@
 | HTTP Метод | URI | Опис | Тіло запиту | Статус-коди успіху | Статус-коди помилок |
 |:---|:---|:---|:---|:---|:---|
 | **GET** | `/api/v1/vacancies` | Пагінований список вакансій із фільтрацією | — | `200 OK` (`PagedResult<VacancyDto>`) | `400 Bad Request` |
+| **GET** | `/api/v1/vacancies/recommendations` | Персоналізовані рекомендації вакансій | — (JWT, `?limit=`) | `200 OK` (`RecommendationsResultDto`) | `401 Unauthorized` |
 | **GET** | `/api/v1/vacancies/{id}` | Деталі вакансії за ID | — | `200 OK` (`VacancyDto`) | `404 Not Found` |
 | **POST** | `/api/v1/vacancies` | Створення/імпорт вакансії | `CreateVacancyRequest` | `201 Created` (+ `Location`) | `400 Bad Request` |
 | **PUT** | `/api/v1/vacancies/{id}` | Повне оновлення вакансії | `UpdateVacancyRequest` | `200 OK` (`VacancyDto`) | `400 Bad Request`, `404 Not Found` |
+| **POST** | `/api/v1/vacancies/sync` | Двостороння синхронізація бази вакансій (клієнт ↔ сервер) | `VacancySyncRequestDto` | `200 OK` (`VacancySyncResponseDto`) | `400 Bad Request` |
 | **DELETE** | `/api/v1/vacancies/{id}` | Видалення вакансії з каталогу | — | `204 No Content` | `404 Not Found` |
-| **GET** | `/api/v1/saved-vacancies` | Перелік збережених вакансій | — | `200 OK` (`List<SavedVacancyDto>`) | — |
-| **GET** | `/api/v1/saved-vacancies/{id}` | Отримання збереженої вакансії | — | `200 OK` (`SavedVacancyDto`) | `404 Not Found` |
-| **POST** | `/api/v1/saved-vacancies` | Додавання вакансії до збережених | `SaveVacancyRequest` | `201 Created` (+ `Location`) | `400 Bad Request`, `404 Not Found`, `409 Conflict` |
-| **DELETE** | `/api/v1/saved-vacancies/{id}` | Видалення зі збережених | — | `204 No Content` | `404 Not Found` |
+| **GET** | `/api/v1/saved-vacancies` | Перелік збережених вакансій | — (JWT) | `200 OK` (`List<SavedVacancyDto>`) | `401 Unauthorized` |
+| **GET** | `/api/v1/saved-vacancies/{id}` | Отримання збереженої вакансії | — (JWT) | `200 OK` (`SavedVacancyDto`) | `401 Unauthorized`, `404 Not Found` |
+| **POST** | `/api/v1/saved-vacancies` | Додавання вакансії до збережених | `SaveVacancyRequest` | `201 Created` (+ `Location`) | `400 Bad Request`, `401 Unauthorized`, `404 Not Found`, `409 Conflict` |
+| **DELETE** | `/api/v1/saved-vacancies/{id}` | Видалення зі збережених | — (JWT) | `204 No Content` | `401 Unauthorized`, `404 Not Found` |
 | **POST** | `/api/v1/auth/register` | Реєстрація користувача | `RegisterRequest` | `201 Created` (`AuthResponse`) | `400 Bad Request`, `409 Conflict` |
 | **POST** | `/api/v1/auth/login` | Вхід і видача access-JWT | `LoginRequest` | `200 OK` (`AuthResponse`) | `400 Bad Request`, `401 Unauthorized` |
 | **GET** | `/api/v1/profile/address` | Отримання адреси профілю | — (JWT) | `200 OK` (`UserAddressDto`) | `401 Unauthorized` |
 | **PUT** | `/api/v1/profile/address` | Збереження/оновлення адреси | `UserAddressDto` | `200 OK` (`UserAddressDto`) | `400 Bad Request`, `401 Unauthorized` |
-| **GET** | `/api/v1/geo/coordinates` | Координати адреси | — (`?address=`) | `200 OK` (`CoordinatesDto`) | `400 Bad Request`, `404 Not Found` |
-| **POST** | `/api/v1/geo/sync` | Двостороння синхронізація геокешу | `GeoSyncRequestDto` | `200 OK` (`GeoSyncResponseDto`) | `400 Bad Request` |
 | **GET** | `/api/v1/profile/stats` | Отримання персональної статистики | — (JWT) | `200 OK` (`UserStatsDto`) | `401 Unauthorized` |
 | **POST** | `/api/v1/profile/searches` | Записати пошуковий запит | `RecordSearchRequest` | `202 Accepted`, `204 No Content` | `400 Bad Request`, `401 Unauthorized`, `403 Forbidden` |
 | **DELETE** | `/api/v1/profile/searches` | Очистити історію пошукових запитів | — (JWT) | `204 No Content` | `401 Unauthorized` |
 | **POST** | `/api/v1/profile/views` | Відправити запис про перегляд вакансії | `RecordVacancyViewRequest` | `202 Accepted` | `401 Unauthorized`, `403 Forbidden`, `404 Not Found` |
-| **POST** | `/api/v1/site-searches` | Запустити пошук на сайті за фільтрами | `SiteSearchRequest` | `202 Accepted` (`SiteSearchStatusDto`, + `Location`) | `400 Bad Request`, `401 Unauthorized`, `429 Too Many Requests` |
-| **GET** | `/api/v1/site-searches/{id}` | Стан пошуку і знайдені вакансії | — (JWT) | `200 OK` (`SiteSearchStatusDto`) | `401 Unauthorized`, `404 Not Found` |
+| **GET** | `/api/v1/geo/coordinates` | Координати адреси | — (`?address=`) | `200 OK` (`CoordinatesDto`) | `400 Bad Request`, `404 Not Found` |
+| **POST** | `/api/v1/geo/sync` | Двостороння синхронізація геокешу | `GeoSyncRequestDto` | `200 OK` (`GeoSyncResponseDto`) | `400 Bad Request` |
+| **POST** | `/api/v1/site-searches` | Запустити пошук на одному сайті за фільтрами | `SiteSearchRequest` | `202 Accepted` (`SiteSearchStatusDto`, + `Location`) | `400 Bad Request`, `401 Unauthorized`, `429 Too Many Requests` |
+| **GET** | `/api/v1/site-searches/{id}` | Стан пошуку на сайті і знайдені вакансії | — (JWT) | `200 OK` (`SiteSearchStatusDto`) | `401 Unauthorized`, `404 Not Found` |
+| **POST** | `/api/v1/site-searches/batch` | Запустити одночасний пошук на 1–4 сайтах | `MultiSiteSearchRequest` | `202 Accepted` (`MultiSiteSearchStatusDto`, + `Location`) | `400 Bad Request`, `401 Unauthorized`, `429 Too Many Requests` |
+| **GET** | `/api/v1/site-searches/batch/{id}` | Агрегований і посайтовий стан пакетного пошуку | — (JWT) | `200 OK` (`MultiSiteSearchStatusDto`) | `401 Unauthorized`, `404 Not Found` |
+| **GET** | `/api/v1/analytics` | Ринкова аналітика вакансій (роль `Analyst`) | — (JWT, `?category=&months=`) | `200 OK` (`MarketAnalyticsDto`) | `401 Unauthorized`, `403 Forbidden` |
+| **POST** | `/api/v1/ai-consultant/messages` | Повідомлення ШІ-консультанту (SSE-потік) | `AIConsultantMessageRequest` | `200 OK` (`text/event-stream`) | `400`, `401`, `403`, `404`, `429`, `503` |
+| **POST** | `/api/v1/ai-consultant/analyze` | ШІ-аналіз 1–3 обраних вакансій (SSE-потік) | `AIAnalysisRequest` | `200 OK` (`text/event-stream`) | `400`, `401`, `403`, `404`, `429`, `503` |
+| **DELETE** | `/api/v1/ai-consultant/sessions/{id}` | Видалити діалог ШІ-консультанта | — (JWT) | `204 No Content` | `401 Unauthorized`, `403 Forbidden`, `404 Not Found` |
+| **GET** | `/health` | Readiness-перевірка здоров'я (БД + Photon API) | — | `200 OK` (JSON) | `503 Service Unavailable` |
+| **GET** | `/health/live` | Liveness-перевірка працездатності процесу API | — | `200 OK` (`text/plain`, `Healthy`) | — |
 
 ---
 
@@ -176,7 +198,7 @@
 ### 4.5. Автентифікація та авторизація (JWT)
 - Реєстрація та вхід повертають access-JWT (HS256, 15 хв); роль користувача дублюється в claims `role`.
 - `user_id` для операцій із профілем і збереженими вакансіями береться лише з перевіреного токена, а не з параметрів запиту (THR-12).
-- Відкриті ендпоінти: каталог, автентифікація, геокодування; захищені: `/saved-vacancies` і `/profile`.
+- Відкриті ендпоінти: каталог (`/vacancies`), двостороння синхронізація (`/vacancies/sync`, `/geo/sync`), автентифікація (`/auth/*`), геокодування (`/geo/coordinates`), перевірки здоров'я (`/health`, `/health/live`); захищені JWT: `/saved-vacancies`, `/vacancies/recommendations`, `/profile/*`, `/site-searches/*`, `/ai-consultant/*` (роль `JobSeeker`) та `/analytics` (роль `Analyst`).
 - Помилки: `401` — невірні облікові дані або відсутній/прострочений токен; `403` — недостатньо прав для ролі.
 
 ---

@@ -77,6 +77,42 @@ internal sealed class FakeGateway : IHttpGatewayService
         return call.Response.Task;
     }
 
+    public Func<VacancyQueryOptions, CancellationToken, Task<PagedResult<VacancyDto>>>? VacanciesQueryHandler { get; set; }
+
+    public List<VacancyQueryOptions> VacancyQueries { get; } = [];
+
+    public Task<PagedResult<VacancyDto>> GetVacanciesAsync(VacancyQueryOptions options, CancellationToken ct = default)
+    {
+        VacancyQueries.Add(options);
+        if (VacanciesQueryHandler is not null)
+        {
+            return VacanciesQueryHandler(options, ct);
+        }
+
+        return GetVacanciesAsync(options.Search, options.Page, options.PageSize, ct);
+    }
+
+    public List<VacancySyncRequestDto> VacancySyncRequests { get; } = [];
+    public Func<VacancySyncRequestDto, VacancySyncResponseDto>? VacancySyncHandler { get; set; }
+    public Exception? VacancySyncError { get; set; }
+
+    public Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default)
+    {
+        VacancySyncRequests.Add(request);
+        if (VacancySyncError is not null)
+        {
+            return Task.FromException<VacancySyncResponseDto>(VacancySyncError);
+        }
+
+        return Task.FromResult(VacancySyncHandler is not null
+            ? VacancySyncHandler(request)
+            : new VacancySyncResponseDto
+            {
+                ReceivedFromClient = request.ClientVacancies.Count,
+                ServerTime = DateTimeOffset.UtcNow
+            });
+    }
+
     public Task<RecommendationsResultDto> GetRecommendationsAsync(int limit = 20, CancellationToken ct = default)
     {
         RecommendationCall call = new(limit, ct);
@@ -192,6 +228,29 @@ internal sealed class FakeGateway : IHttpGatewayService
         SiteSearchPolls++;
         return Task.FromResult(NextSiteSearchStatus());
     }
+
+    public List<MultiSiteSearchRequest> MultiSiteSearchRequests { get; } = [];
+    public Queue<MultiSiteSearchStatusDto> MultiSiteSearchStatuses { get; } = new();
+    public Exception? MultiSiteSearchError { get; set; }
+    public int MultiSiteSearchPolls { get; private set; }
+
+    public Task<MultiSiteSearchStatusDto> StartMultiSiteSearchAsync(MultiSiteSearchRequest request, CancellationToken ct = default)
+    {
+        MultiSiteSearchRequests.Add(request);
+        Exception? err = MultiSiteSearchError ?? SiteSearchError;
+        return err is null
+            ? Task.FromResult(NextMultiSiteSearchStatus())
+            : Task.FromException<MultiSiteSearchStatusDto>(err);
+    }
+
+    public Task<MultiSiteSearchStatusDto> GetMultiSiteSearchAsync(Guid id, CancellationToken ct = default)
+    {
+        MultiSiteSearchPolls++;
+        return Task.FromResult(NextMultiSiteSearchStatus());
+    }
+
+    private MultiSiteSearchStatusDto NextMultiSiteSearchStatus() =>
+        MultiSiteSearchStatuses.Count > 1 ? MultiSiteSearchStatuses.Dequeue() : MultiSiteSearchStatuses.Peek();
 
     private SiteSearchStatusDto NextSiteSearchStatus() =>
         SiteSearchStatuses.Count > 1 ? SiteSearchStatuses.Dequeue() : SiteSearchStatuses.Peek();

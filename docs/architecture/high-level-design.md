@@ -6,9 +6,10 @@
   - [ADR-001: Модульний моноліт замість мікросервісів](./decisions/ADR-001-modular-monolith.md) — обґрунтування вибору монолітної структури з фоновим воркером.
   - [ADR-002: EF Core Dual DB (MSSQL + SQLite)](./decisions/ADR-002-ef-core-dual-db.md) — абстракція сховища даних для локального та серверного розгортання.
   - [ADR-003: In-Memory Cache-Aside кешування каталогу](./decisions/ADR-003-cache-aside.md) — тактика забезпечення продуктивності пагінації та фільтрації (PERF-001).
-- **Модель даних:** [Модель даних (data-model.md)](./data-model.md) — детальна ER-специфікація 11 сутностей, первинних ключів (UUID для публічних сутностей), обмежень та класифікації чутливих даних.
-- **Модель загроз:** [Модель загроз STRIDE (threat-model.md)](./threat-model.md) — аналіз меж довіри (TB-1…TB-4) та зон Z1…Z5, що відображені на діаграмі розгортання (§4).
-- **Матриця простежуваності:** [Матриця простежуваності (traceability-matrix.md)](./traceability-matrix.md) — мапінг 23 функціональних і якісних вимог на компоненти системи.
+  - [ADR-004: LLM-шлюз на Microsoft.Extensions.AI та офіційних SDK](./decisions/ADR-004-llm-gateway.md) — мультипровайдерний ланцюжок резервування для ШІ-консультанта та аналізу вакансій.
+- **Модель даних:** [Модель даних (data-model.md)](./data-model.md) — детальна ER-специфікація серверної та клієнтської БД, первинних ключів, обмежень, стратегії синхронізації та класифікації чутливих даних.
+- **Модель загроз:** [Модель загроз STRIDE (threat-model.md)](./threat-model.md) — аналіз меж довіри (TB-1…TB-4) та зон Z1…Z5, що відображені на діаграмі розгортання (§5).
+- **Матриця простежуваності:** [Матриця простежуваності (traceability-matrix.md)](./traceability-matrix.md) — мапінг 29 функціональних і якісних вимог на компоненти системи.
 
 ---
 
@@ -65,16 +66,20 @@
 - **Job Parser Service (External Ingestion) → Job Ingestion & Normalization Service (Repository Layer):**
   - **Протокол:** Внутрішні виклики (C# Interfaces / Dependency Injection). 
   - **Функція:** Парсер передає сирі зібрані вакансії через `ProcessRawVacanciesAsync(rawItems)`. Сервіс нормалізації обробляє їх, очищає, стандартизує формати заробітних плат і стек технологій та передає до репозиторіїв для збереження в базі даних. Інвалідація кешу координується сервісом сховища (`StorageService`) або реалізується за часом життя TTL, уникаючи залежностей знизу-вгору до `CacheService`.
-- **Job Parser Service (External Ingestion) ↔ Сайти пошуку роботи (Work.ua, Robota.ua, Djinni):**
-  - **Протокол:** HTTPS (GET-запити через .NET `HttpClient` із дотриманням рейт-ліміту ≤ 2 req/s на джерело).
-  - **Функція:** Отримання відкритих HTML-сторінок із майданчиків працевлаштування для подальшого вилучення та структурування вакансій.
+- **Job Parser Service / SiteSearchService (External Ingestion) ↔ Сайти пошуку роботи (Work.ua, Robota.ua, Djinni, DOU):**
+  - **Протокол:** HTTPS (GET-запити через .NET `HttpClient` для Djinni та DOU; headless Chromium через `PuppeteerSharp` `BrowserFetcher` для Work.ua та Robota.ua із дотриманням рейт-ліміту ≤ 2 req/s на джерело).
+  - **Функція:** Фоновий збір (`JobParserService`) та одночасний пошук на запит користувача для 1–4 сайтів (`SiteSearchService`: `/api/v1/site-searches` і `/api/v1/site-searches/batch`) із нормалізацією та збереженням вакансій у каталог.
 - **Core Services Layer ↔ LLM API (External):**
-  - **Протокол:** HTTPS / REST API (OpenAI, Gemini).
-  - **Функція:** Відправка промптів (`AskConsultantAsync` з таймаутом 30с) через AI Consultant Service та отримання відповідей для користувача.
+  - **Протокол:** HTTPS / REST API через `Microsoft.Extensions.AI` (`OpenRouter`, `OpenAI`, `Anthropic` із ланцюжком резервування, ADR-004).
+  - **Функція:** Витяг структурованих фільтрів, потокові діалогові відповіді (`POST /api/v1/ai-consultant/messages`) та ШІ-аналіз обраних вакансій (`POST /api/v1/ai-consultant/analyze`) із сумарним таймаутом 30 с.
 
 ### 3.2. Клієнтський шар (.NET MAUI Client Application)
-- **HTTP Gateway Service:**
-  - **Призначення:** Централізований мережевий шлюз у клієнтському .NET MAUI застосунку (C#). Відповідає за конфігурацію HTTP-клієнта (`HttpClient`), автоматичну підстановку токенів автентифікації (`Authorization: Bearer <JWT>`), наскрізний заголовок `X-Correlation-Id`, глобальну обробку помилок і статусів відповідей (401, 403, 500) та надійний обмін даними між UI-компонентами (XAML / MVVM) і бекендом (`SendRequestAsync<TRequest, TResponse>`).
+- **HTTP Gateway Service (`IHttpGatewayService` / `HttpGatewayService`):**
+  - **Призначення:** Централізований мережевий шлюз у клієнтському .NET MAUI застосунку (`waterfall.Client`, C#). Відповідає за конфігурацію `HttpClient`, автоматичну підстановку JWT (`Authorization: Bearer <JWT>` через `AuthHeaderHandler`), наскрізний заголовок `X-Correlation-Id`, source-generated JSON (`ClientJsonContext`, безпечний для AOT/trimming) та перетворення мережевих/серверних помилок на типізований `ApiException`.
+- **Локальне сховище та двостороння синхронізація (`ClientWaterfallDbContext`, `EfLocalVacancyStore`, `VacancySyncService`, `EfLocalGeoCacheService`, `OfflineSiteCollector`):**
+  - **Призначення:** Автономна локальна SQLite БД на пристрої користувача (дзеркальна схема з ознаками `IsSynced`, `LocalUpdatedAt` і таблицею `SyncState` та ідемпотентним оновленням схеми старих файлів БД). Забезпечує офлайн-перегляд і фільтрацію повної бази, прямий офлайн-збір із DOU RSS та Djinni JSON-LD та автоматичну/ручну двосторонню синхронізацію із сервером (`POST /api/v1/vacancies/sync`, `POST /api/v1/geo/sync`) при старті застосунку та відновленні мережі.
+- **Вкладки та ViewModels (`waterfall.UI` / `waterfall.Client.ViewModels`):**
+  - «Каталог» (`CatalogViewModel` — мультисайтовий парсинг 1–4 сайтів із незалежними фільтрами), «База вакансій» (`DatabaseViewModel` — повна база всіх 4 сайтів, максимальні фільтри, 13 сортувань, JSON експорт/імпорт), «Обране» (`FavoritesViewModel`), «Рекомендації» (`RecommendationsViewModel`), «Аналітика» (`AnalyticsViewModel`), «ШІ-консультант» (`AIConsultantViewModel`), «Системні налаштування» (`SystemSettingsViewModel`), «Вхід / Профіль» (`LoginViewModel`).
 
 ### 3.3. Рівень представлення (Presentation Layer / ASP.NET Core Web API)
 Рівень представлення побудований за принципом **«Тонких контролерів» (Thin Controllers)**. Контролери не містять важкої бізнес-логіки та не працюють із БД напряму — їхня відповідальність обмежена HTTP-контрактом, валідацією запитів, мапінгом статус-кодів та делегуванням викликів у Core Services Layer:
@@ -83,27 +88,37 @@
    - Уніфікована основа для контролерів платформи Waterfall (`[ApiController]`).
    - Забезпечує підтримку наскрізного ідентифікатора запиту (`X-Correlation-Id` → `X-Request-Id` → `TraceIdentifier`) та стандартизоване формування відповідей з помилками (`ApiErrorResponse`).
 2. **`VacanciesController` (`/api/v1/vacancies`):**
-   - Забезпечує HTTP-ендпоінти для отримання каталогу вакансій із фільтрацією та пагінацією, а також перегляду детальної інформації про конкретну вакансію.
-3. **`SavedVacanciesController` (`/api/v1/saved-vacancies`):**
-   - Забезпечує HTTP-ендпоінти для перегляду списку збережених вакансій користувача, додавання вакансії до обраних та її видалення.
-4. **`AuthController` та `AIConsultantController`:**
-   - Ендпоінти автентифікації користувачів (реєстрація, вхід) та взаємодії з ШІ-консультантом.
+   - CRUD-ендпоінти каталогу з фільтрацією й пагінацією, персоналізовані рекомендації (`GET /recommendations`) і двостороння синхронізація бази вакансій (`POST /sync`).
+3. **`SiteSearchesController` (`/api/v1/site-searches`):**
+   - Запуск і відстеження прогресу пошуку на запит користувача для одного сайту (`POST`, `GET /{id}`) та паралельно для 1–4 сайтів із власними налаштуваннями (`POST /batch`, `GET /batch/{id}`).
+4. **`SavedVacanciesController` (`/api/v1/saved-vacancies`):**
+   - HTTP-ендпоінти для перегляду, додавання та видалення збережених вакансій поточного користувача.
+5. **`AuthController` (`/api/v1/auth`), `ProfileController` (`/api/v1/profile`), `GeoController` (`/api/v1/geo`):**
+   - Реєстрація/вхід із JWT, адреса профілю, особиста статистика й історія переглядів/пошуків, геокодування та синхронізація геокешу.
+6. **`AnalyticsController` (`/api/v1/analytics`) та `AIConsultantController` (`/api/v1/ai-consultant`):**
+   - Агрегована ринкова аналітика для ролі `Analyst` та потоковий ШІ-консультант (`/messages`, `/analyze`, `DELETE /sessions/{id}`) для ролі `JobSeeker`.
+7. **Health Checks (`/health`, `/health/live`):**
+   - Перевірки готовності (`DatabaseHealthCheck`, `PhotonGeocodingHealthCheck`) та життєздатності процесу API.
 
 ### 3.4. Внутрішні сервіси Core Services Layer
 Усі внутрішні сервіси взаємодіють між собою через механізм **Dependency Injection (C# Interfaces)** у межах єдиного процесу бекенду:
-1. **Authentication Service (`IAuthenticationService`):** автентифікація, реєстрація та валідація токенів користувачів.
-2. **Cache Service (`ICacheService`):** керування In-Memory кешем за патерном Cache-Aside для прискорення видачі каталогу (PERF-001) та підтримки режиму Stale-Cache (REL-001).
-3. **Storage Service (`IStorageService`):** центральний сервіс оркестрації бізнес-операцій із вакансіями, збереженими списками та координації оновлень. *Заплановано: окремого `IStorageService` у коді ще немає, цю роль зараз виконують `IVacancyService` (каталог) і `ISavedVacancyService` («Обране»).*
-4. **Analytics & Statistics Service (`IAnalyticsService`):** формування аналітичних звітів ринку праці та статистики активності користувачів.
-5. **AI Consultant Service (`IAIConsultantService`):** підготовка контексту та взаємодія із зовнішніми LLM API з контролем таймауту (REL-003).
+1. **Authentication Service (`IAuthenticationService`):** автентифікація, реєстрація та випуск/валідація JWT (`JwtTokenService`).
+2. **Cache Service (`IVacancyCacheService`):** керування In-Memory кешем за патерном Cache-Aside для прискорення видачі каталогу (PERF-001) та підтримки режиму Stale-Cache (REL-001).
+3. **Vacancy & Saved Services (`IVacancyService`, `ISavedVacancyService`):** оркестрація операцій із каталогом вакансій, двосторонньої синхронізації (`SyncVacanciesAsync`), збережених списків та інвалідації кешу.
+4. **Recommendation, Analytics & Stats Services (`IRecommendationService`, `IAnalyticsService`, `IUserStatsService`, `IUserProfileService`, `IGeoLocationService`):** персоналізовані рекомендації, ринкова аналітика для ролі `Analyst`, статистика активності шукача, профіль адреси та геокодування.
+5. **AI Consultant & Analysis Services (`IAIConsultantService`, `IVacancyAnalysisService`):** підготовка контексту, витяг фільтрів, оцінка релевантності (`RelevanceScorer`, `PreferenceProfileBuilder`) і взаємодія із зовнішніми LLM API через `FallbackChatClient` з контролем таймауту (REL-003).
 6. **Security Service (`ISecurityService`):** криптографічні операції, стійке хешування паролів (PBKDF2) та захист чутливих конфігурацій (SEC-001).
 
-**Стан реалізації компонентів (01.11.2026).** `AI Consultant Service` реалізовано: `AIConsultantController` надає `POST /api/v1/ai-consultant/messages` (SSE: `meta`, `vacancies`, `delta`, `done`, `error`) і `DELETE /api/v1/ai-consultant/sessions/{id}`; сервіс витягує структурований фільтр через LLM (`LlmRole.Extract`), зберігає контекст діалогу (`ChatSession.context_filter_json`, FR-009), шукає вакансії в каталозі, за 0 збігів послаблює критерії (до 3 найближчих вакансій) і стрімить відповідь (`LlmRole.Chat`) лише з полів знайдених вакансій (FUNC-001). Ліміт повідомлень на користувача (`AiConsultant:MessagesPerHour`) і маскування email/телефонів перед відправкою до LLM закривають THR-06 і THR-10. `POST /api/v1/ai-consultant/analyze` (FR-010, аналіз до 3 вакансій) та `Analytics & Statistics Service` (FR-003, US-006/US-007) **заплановані**: ендпоінтів і сервісів у коді ще немає.
+**Стан реалізації компонентів (20.11.2026).** Усі заплановані компоненти реалізовано та покрито тестами (7 наборів xUnit):
+- **ШІ-консультант та аналіз вакансій:** реалізовано `POST /api/v1/ai-consultant/messages` (SSE: `meta`, `vacancies`, `delta`, `done`, `error`), `POST /api/v1/ai-consultant/analyze` (FR-010, SSE з `relevance` для 1–3 вакансій) та `DELETE /api/v1/ai-consultant/sessions/{id}`, із маскуванням ПД (`SensitiveTextMasker`, THR-06) та лімітом `20/год` (THR-10).
+- **Ринкова аналітика, рекомендації та особиста статистика:** реалізовано `AnalyticsService` (`GET /api/v1/analytics`, роль `Analyst`), `RecommendationService` (`GET /api/v1/vacancies/recommendations`) та `UserStatsService` (`GET /api/v1/profile/stats`, `/searches`, `/views`) включно з клієнтськими ViewModels і сторінками MAUI.
+- **Парсинг 4 сайтів та мультисайтовий пошук:** реалізовано парсери DOU, Djinni, Work.ua та Robota.ua (включно з `BrowserFetcher` на `PuppeteerSharp`), фоновий `JobParserService` із перемиканням без перезапуску, і `SiteSearchService` з одиночним (`/site-searches`) та одночасним мультисайтовим (`/site-searches/batch`) пошуком.
+- **Повна база вакансій та двостороння синхронізація:** реалізовано вкладку «База вакансій» (`DatabasePage`/`DatabaseViewModel`), клієнтське SQLite-сховище (`EfLocalVacancyStore`), прямий офлайн-збір (`OfflineSiteCollector`) і двосторонню синхронізацію (`POST /api/v1/vacancies/sync`, `VacancySyncService`).
 
 ### 3.5. Зовнішній збір та рівень доступу до даних (External Ingestion + Repository Layer)
-1. **Job Parser Service (`IJobParserService`, окремий пакет External Ingestion):** фоновий збір відкритих вакансій (Work.ua, Robota.ua, Djinni) через `HttpClient` з контролем ліміту запитів (≤ 2 req/s) та ізоляцією збоїв джерел (REL-001).
-2. **Job Ingestion & Normalization Service (`IJobIngestionService`):** стандартизація зарплат і стеків, дедуплікація та збереження сутностей.
-3. **Data Repositories (`IVacancyRepository`, `ISavedVacancyRepository`):** інкапсуляція доступу до реляційної бази даних (MSSQL / SQLite) через Entity Framework Core.
+1. **Job Parser Service (`JobParserService`) та SiteSearchService (`ISiteSearchService`):** фоновий збір та інтерактивний пошук (1–4 сайти паралельно) із Work.ua, Robota.ua, Djinni та DOU через `HttpClient` / `BrowserFetcher` (`PuppeteerSharp`), із контролем `robots.txt`, паузами (`RequestDelay` ≥ 0,5 с), `SiteSearchCache` та ізоляцією збоїв джерел (REL-001).
+2. **Job Ingestion & Normalization Service (`IVacancyIngestionService`, `VacancyNormalizer`):** стандартизація зарплат, валют, досвіду (`ExperienceMonths`), формату роботи (`WorkFormat`), канонічної категорії (`CategoryGroup`), очищення HTML, валідація доменів (THR-03) та дедуплікація.
+3. **Data Repositories (`IVacancyRepository`, `ISavedVacancyRepository`, `IUserRepository`, `IUserPersonalDataRepository`, `IGeoLocationCacheRepository`, `ISearchQueryRepository`, `IVacancyViewRepository`, `IChatSessionRepository`):** інкапсуляція доступу до реляційної БД (MSSQL / SQLite) через Entity Framework Core, включно з `BulkUpsertAsync` та `SyncMergeAsync`.
 
 ---
 
