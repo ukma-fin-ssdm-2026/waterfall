@@ -163,7 +163,7 @@ API слухає `http://localhost:3000` (і `https://localhost:3001`); жива
 
 Перший запуск створює `src/api/waterfall.db` із сід-даними. Тестові облікові записи:
 * `seeker1@waterfall.com` / `DevSeeker1234`
-* `seeker2@waterfall.com` / `DevSeeker1234`
+* `123@123` / `123@123123@123`
 * `analyst@waterfall.com` / `DevAnalyst1234`
 
 #### Запуск Windows UI

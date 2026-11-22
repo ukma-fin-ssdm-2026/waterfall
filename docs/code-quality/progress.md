@@ -69,8 +69,8 @@ graph LR
 ```bash
 # 1. API: http://localhost:3000, Swagger UI — http://localhost:3000/api-docs
 # Потрібен Jwt:Key (мінімум 32 символи): dotnet user-secrets set "Jwt:Key" "<ключ>" --project src/api
-# Перший запуск створює src/api/waterfall.db із сід-даними (seeker1@waterfall.com,
-# seeker2@waterfall.com / DevSeeker1234, analyst@waterfall.com / DevAnalyst1234).
+# Перший запуск створює src/api/waterfall.db із сід-даними (seeker1@waterfall.com /
+# DevSeeker1234, 123@123 / 123@123123@123, analyst@waterfall.com / DevAnalyst1234).
 dotnet run --project src/api
 
 # 2. Застосунок (Windows) — в іншому терміналі
