@@ -192,4 +192,49 @@ public class AnalyticsViewModelTests
         Assert.False(vm.IsAnalyst);
         Assert.True(vm.IsAccessDenied);
     }
+
+    [Fact]
+    public async Task EnsureLoaded_AlreadyLoadedAnalyst_SkipsDuplicateApiCall()
+    {
+        InMemoryTokenStore tokens = new();
+        await tokens.SetTokenAsync(Jwt(UserRole.Analyst));
+        FakeGateway gateway = new();
+        AnalyticsViewModel vm = new(tokens, gateway);
+
+        Task firstLoad = vm.EnsureLoadedCommand.ExecuteAsync(null);
+        FakeGateway.AnalyticsCall call1 = await gateway.WaitForAnalyticsCallAsync(1);
+        call1.Response.SetResult(new MarketAnalyticsDto { TotalVacancies = 15, HasEnoughData = true });
+        await firstLoad;
+
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+
+        Assert.Single(gateway.AnalyticsCalls);
+        Assert.True(vm.HasLoaded);
+        Assert.Equal(15, vm.TotalVacancies);
+    }
+
+    [Fact]
+    public async Task Refresh_Analyst_RefetchesAndClearsIsRefreshing()
+    {
+        InMemoryTokenStore tokens = new();
+        await tokens.SetTokenAsync(Jwt(UserRole.Analyst));
+        FakeGateway gateway = new();
+        AnalyticsViewModel vm = new(tokens, gateway);
+
+        Task firstLoad = vm.EnsureLoadedCommand.ExecuteAsync(null);
+        FakeGateway.AnalyticsCall call1 = await gateway.WaitForAnalyticsCallAsync(1);
+        call1.Response.SetResult(new MarketAnalyticsDto { TotalVacancies = 10, HasEnoughData = true });
+        await firstLoad;
+
+        vm.IsRefreshing = true;
+        Task refreshTask = vm.RefreshCommand.ExecuteAsync(null);
+        FakeGateway.AnalyticsCall call2 = await gateway.WaitForAnalyticsCallAsync(2);
+        call2.Response.SetResult(new MarketAnalyticsDto { TotalVacancies = 42, HasEnoughData = true });
+        await refreshTask;
+
+        Assert.False(vm.IsRefreshing);
+        Assert.False(vm.IsLoading);
+        Assert.Equal(2, gateway.AnalyticsCalls.Count);
+        Assert.Equal(42, vm.TotalVacancies);
+    }
 }

@@ -179,12 +179,12 @@ public partial class SystemSettingsViewModel : ObservableObject
             await RefreshSyncStatsAsync();
             if (result.Succeeded)
             {
-                StatusMessage = $"✓ Синхронізовано: надіслано {result.UploadedToServer} офлайн-вакансій, отримано {result.DownloadedFromServer} із сервера (нових локально: {result.AddedLocally}), геокеш: {geoSynced}.";
+                StatusMessage = $"Синхронізовано: надіслано {result.UploadedToServer}, отримано {result.DownloadedFromServer} (нових: {result.AddedLocally})";
                 IsSuccessStatus = true;
             }
             else
             {
-                StatusMessage = $"⚠️ Не вдалося синхронізувати базу: {result.ErrorMessage}";
+                StatusMessage = $"Помилка синхронізації: {result.ErrorMessage}";
                 IsSuccessStatus = false;
             }
         }
@@ -199,8 +199,8 @@ public partial class SystemSettingsViewModel : ObservableObject
     public string StatusLabelText => IsBackgroundParsingEnabled ? "Увімкнено" : "Вимкнено";
 
     public string ParsingStatusBadgeText => IsBackgroundParsingEnabled
-        ? $"🟢 Активно (інтервал: {ExtractShortInterval(SelectedInterval)})"
-        : "⚪ Вимкнено (за замовчуванням)";
+        ? $"Активно ({ExtractShortInterval(SelectedInterval)})"
+        : "Вимкнено";
 
     partial void OnSelectedIntervalDisplayChanged(string value)
     {
@@ -304,14 +304,13 @@ public partial class SystemSettingsViewModel : ObservableObject
                     ingestionObj["Interval"] = SelectedInterval;
 
                     File.WriteAllText(_loadedFilePath, rootObj.ToJsonString(new JsonSerializerOptions { WriteIndented = true }));
-                    // Сервер перечитує Enabled одразу після збереження файлу, а інтервал — лише після перезапуску API
-                    StatusMessage = $"✓ Налаштування збережено у {_loadedFilePath}. Фоновий збір перемкнеться за кілька секунд, новий інтервал діятиме після перезапуску API.";
+                    StatusMessage = "Налаштування збережено";
                     IsSuccessStatus = true;
                     return;
                 }
             }
 
-            StatusMessage = "✓ Системні налаштування успішно застосовано";
+            StatusMessage = "Налаштування застосовано";
             IsSuccessStatus = true;
         }
         catch (Exception ex)

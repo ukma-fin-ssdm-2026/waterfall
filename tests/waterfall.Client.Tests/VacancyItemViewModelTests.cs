@@ -367,13 +367,13 @@ public class VacancyItemViewModelTests
         }, _gateway, _messenger, _errors.Add, distanceService: service);
 
         Assert.False(item.IsMapExpanded);
-        Assert.Equal("Показати на мапі 🗺️", item.MapToggleText);
+        Assert.Equal("Показати на мапі", item.MapToggleText);
         Assert.Null(item.MapHtml);
 
         await item.ToggleMapCommand.ExecuteAsync(null);
 
         Assert.True(item.IsMapExpanded);
-        Assert.Equal("Приховати мапу ▲", item.MapToggleText);
+        Assert.Equal("Приховати мапу", item.MapToggleText);
         Assert.True(item.HasMapCoordinates);
         Assert.Equal(50.4378, item.MapLatitude);
         Assert.Equal(30.5220, item.MapLongitude);
@@ -386,7 +386,7 @@ public class VacancyItemViewModelTests
         // Повторний клік згортає карту без повторних запитів
         await item.ToggleMapCommand.ExecuteAsync(null);
         Assert.False(item.IsMapExpanded);
-        Assert.Equal("Показати на мапі 🗺️", item.MapToggleText);
+        Assert.Equal("Показати на мапі", item.MapToggleText);
         Assert.NotNull(item.MapHtml); // Кеш збережено
     }
 
@@ -413,6 +413,35 @@ public class VacancyItemViewModelTests
         Assert.Equal(expectedError, item.MapErrorMessage);
         Assert.Null(item.MapHtml);
         Assert.False(item.HasMapCoordinates);
+    }
+
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData("", null, false)]
+    [InlineData("   ", null, false)]
+    [InlineData("не вказано точну адресу", null, false)]
+    [InlineData("Київ, не вказано точну адресу", null, false)]
+    [InlineData("Remote", null, false)]
+    [InlineData("remote", null, false)]
+    [InlineData("Віддалено", null, false)]
+    [InlineData("Київ", "не вказано точну адресу", false)]
+    [InlineData("Київ", "Віддалено", false)]
+    [InlineData("Київ, вул. Хрещатик 1", null, true)]
+    [InlineData("Remote", "Київ, вул. Хрещатик 1", true)]
+    [InlineData("Київ", "вул. Хрещатик, 1", true)]
+    public void CanShowOnMap_ReflectsExactOfficeAvailability(string? location, string? fullAddress, bool expected)
+    {
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Senior .NET",
+            Company = "Tech Inc",
+            Location = location ?? string.Empty,
+            FullAddress = fullAddress,
+            Skills = ["C#"]
+        }, _gateway, _messenger, _errors.Add);
+
+        Assert.Equal(expected, item.CanShowOnMap);
     }
 
     private sealed class FakeDistanceService : IDistanceCalculatorService

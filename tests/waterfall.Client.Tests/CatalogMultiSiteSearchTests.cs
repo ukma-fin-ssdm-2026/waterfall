@@ -68,7 +68,7 @@ public sealed class CatalogMultiSiteSearchTests : IDisposable
 
         // Перемикання платформ не скидає галочки вибору сайтів
         Assert.Equal(3, vm.SelectedParseSitesCount);
-        Assert.Equal("Спарсити (3 сайти) 🌐", vm.FetchButtonText);
+        Assert.Equal("Спарсити (3)", vm.FetchButtonText);
         Assert.Contains("DOU", vm.SelectedParseSitesSummary);
         Assert.Contains("Work.ua", vm.SelectedParseSitesSummary);
         Assert.Contains("Djinni", vm.SelectedParseSitesSummary);

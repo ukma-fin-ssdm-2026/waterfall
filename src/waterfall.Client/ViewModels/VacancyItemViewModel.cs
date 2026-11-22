@@ -90,6 +90,7 @@ public partial class VacancyItemViewModel : ObservableObject
 
     public Guid Id => Vacancy.Id;
     public string Title => Vacancy.Title;
+    public string Company => Vacancy.Company;
     public string Description => Vacancy.Description;
     public IReadOnlyList<string> Skills => Vacancy.Skills;
     public bool IsActive => Vacancy.IsActive;
@@ -272,9 +273,24 @@ public partial class VacancyItemViewModel : ObservableObject
         ? $"{MapLatitude!.Value.ToString("F4", CultureInfo.InvariantCulture)}, {MapLongitude!.Value.ToString("F4", CultureInfo.InvariantCulture)}"
         : string.Empty;
 
-    public string MapToggleText => IsMapExpanded ? "Приховати мапу ▲" : "Показати на мапі 🗺️";
+    public string MapToggleText => IsMapExpanded ? "Приховати мапу" : "Показати на мапі";
 
     public bool HasMapError => !string.IsNullOrWhiteSpace(MapErrorMessage);
+
+    public bool CanShowOnMap
+    {
+        get
+        {
+            string target = GetMapTarget();
+            return !string.IsNullOrWhiteSpace(target) &&
+                   !target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase) &&
+                   !target.Contains("Remote", StringComparison.OrdinalIgnoreCase) &&
+                   !target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private string GetMapTarget() =>
+        !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : (Vacancy.Location ?? string.Empty);
 
     [RelayCommand]
     public async Task ToggleMapAsync()
@@ -292,7 +308,7 @@ public partial class VacancyItemViewModel : ObservableObject
             return;
         }
 
-        string target = !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : (Vacancy.Location ?? string.Empty);
+        string target = GetMapTarget();
 
         if (string.IsNullOrWhiteSpace(target) ||
             target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))

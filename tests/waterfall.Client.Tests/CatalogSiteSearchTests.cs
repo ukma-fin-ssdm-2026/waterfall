@@ -150,7 +150,7 @@ public class CatalogSiteSearchTests
 
         await RunSearchAsync();
 
-        Assert.Equal("⚠️ Djinni: Не вдалося прочитати сайт.", _vm.StaleCacheText);
+        Assert.Equal("Djinni: Не вдалося прочитати сайт.", _vm.StaleCacheText);
         Assert.Empty(_vm.Vacancies);
     }
 
@@ -270,7 +270,7 @@ public class CatalogSiteSearchTests
     public void RobotaUaTopButton_ShowsPagesAndTogglesItsPanel()
     {
         _vm.RobotaUaPagesToParse = "2";
-        Assert.Equal("🔴 Robota.ua (2 стор.) ▼", _vm.RobotaUaButtonText);
+        Assert.Equal("Robota.ua (2 стор.) ▼", _vm.RobotaUaButtonText);
 
         _vm.SelectRobotaUaFilterCommand.Execute(null);
         Assert.True(_vm.IsRobotaUaPanelVisible);

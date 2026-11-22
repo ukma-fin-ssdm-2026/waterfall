@@ -137,4 +137,23 @@ public class FavoritesViewModelTests
         Assert.False(_vm.IsLoading);
         Assert.True(_vm.ShowTotal);
     }
+
+    [Fact]
+    public async Task EnsureLoaded_SkipsWhenClean_ReloadsAfterSaveOrAuthChange()
+    {
+        _gateway.Saved = () => [Saved("A", 0)];
+        await _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        await _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        Assert.Equal(1, _gateway.SavedCalls);
+
+        _messenger.Send(new VacancySaveChangedMessage(Guid.NewGuid(), IsSaved: true));
+        _gateway.Saved = () => [Saved("A", 0), Saved("B", 5)];
+        await _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        Assert.Equal(2, _gateway.SavedCalls);
+        Assert.Equal(["B", "A"], _vm.Vacancies.Select(v => v.Title));
+
+        _messenger.Send(new UserAuthStateChangedMessage(true, "other@test.com"));
+        await _vm.EnsureLoadedCommand.ExecuteAsync(null);
+        Assert.Equal(3, _gateway.SavedCalls);
+    }
 }

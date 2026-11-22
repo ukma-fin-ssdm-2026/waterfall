@@ -7,6 +7,7 @@ using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Waterfall.Client.Collections;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.Vacancies;
@@ -121,7 +122,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         });
     }
 
-    public ObservableCollection<VacancyItemViewModel> Vacancies { get; } = [];
+    private readonly BulkObservableCollection<VacancyItemViewModel> _vacancies = new();
+    public ObservableCollection<VacancyItemViewModel> Vacancies => _vacancies;
     public ObservableCollection<string> AvailableCategories { get; } = [];
     public ObservableCollection<string> AvailableLocations { get; } = [];
     public ObservableCollection<string> WhiteListWords { get; } = [];
@@ -239,25 +241,55 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SyncBadgeText))]
+    [NotifyPropertyChangedFor(nameof(SyncButtonText))]
     [NotifyPropertyChangedFor(nameof(HasUnsyncedChanges))]
     public partial int UnsyncedCount { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SyncBadgeText))]
+    [NotifyPropertyChangedFor(nameof(LastSyncedMenuText))]
     public partial DateTimeOffset? LastSyncedAt { get; set; }
 
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public bool HasStatusBanner => !string.IsNullOrWhiteSpace(StatusBannerText);
     public bool HasUnsyncedChanges => UnsyncedCount > 0;
     public bool IsEmpty => !IsLoading && FilteredCount == 0;
+    public string SyncButtonText => UnsyncedCount > 0 ? $"Синхронізувати ({UnsyncedCount})" : "Синхронізувати";
+    public string LastSyncedMenuText => LastSyncedAt.HasValue
+        ? $"Оновлено о {LastSyncedAt.Value.ToLocalTime():HH:mm}"
+        : "Ще не синхронізовано";
+    public bool IsCustomSortActive => !string.Equals(SelectedSortOption, SortOptions[0], StringComparison.Ordinal);
+    public bool IsFilterHighlightActive => IsFilterPanelVisible || HasActiveFilters;
 
-    public string ConnectionBadgeText => IsOfflineMode ? "📡 Офлайн (локальна БД)" : "🟢 Онлайн (БД сервера)";
+    public bool HasActiveFilters =>
+        !IncludeDou || !IncludeWorkUa || !IncludeDjinni || !IncludeRobotaUa
+        || !string.Equals(SelectedCategoryGroup, CategoryGroupOptions[0], StringComparison.Ordinal)
+        || !string.Equals(SelectedCategory, "Усі категорії", StringComparison.Ordinal)
+        || !string.Equals(SelectedLocation, "Усі міста", StringComparison.Ordinal)
+        || !string.Equals(SelectedWorkFormat, WorkFormatOptions[0], StringComparison.Ordinal)
+        || !string.Equals(SelectedExperience, ExperienceOptions[0], StringComparison.Ordinal)
+        || !string.Equals(SelectedFreshness, FreshnessOptions[0], StringComparison.Ordinal)
+        || !string.Equals(SelectedStatus, StatusOptions[0], StringComparison.Ordinal)
+        || !string.IsNullOrWhiteSpace(LocationFilter)
+        || !string.IsNullOrWhiteSpace(CompanyFilter)
+        || !string.IsNullOrWhiteSpace(SkillsFilter)
+        || !string.IsNullOrWhiteSpace(MinSalaryFilter)
+        || !string.IsNullOrWhiteSpace(MaxSalaryFilter)
+        || OnlyWithSalary
+        || IncludeNoSalary
+        || OnlySaved
+        || HideViewed
+        || TitleOnly
+        || WhiteListWords.Count > 0
+        || BanListWords.Count > 0;
+
+    public string ConnectionBadgeText => IsOfflineMode ? "Офлайн (локальна БД)" : "Онлайн (БД сервера)";
 
     public string SyncBadgeText
     {
         get
         {
-            string pending = UnsyncedCount > 0 ? $"⏳ Офлайн-змін: {UnsyncedCount}" : "✓ Синхронізовано";
+            string pending = UnsyncedCount > 0 ? $"Офлайн-змін: {UnsyncedCount}" : "Синхронізовано";
             if (LastSyncedAt.HasValue)
             {
                 return $"{pending} · {LastSyncedAt.Value.ToLocalTime():HH:mm}";
@@ -270,15 +302,16 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     public string TotalSummaryText =>
         $"Показано {FilteredCount} із {TotalInDatabase} вакансій у базі (DOU: {DouCount} · Work.ua: {WorkUaCount} · Djinni: {DjinniCount} · Robota.ua: {RobotaUaCount})";
 
-    public string DouFilterLabel => $"🔵 DOU ({DouCount})";
-    public string WorkUaFilterLabel => $"🟠 Work.ua ({WorkUaCount})";
-    public string DjinniFilterLabel => $"🟣 Djinni ({DjinniCount})";
-    public string RobotaUaFilterLabel => $"🔴 Robota.ua ({RobotaUaCount})";
+    public string DouFilterLabel => $"DOU ({DouCount})";
+    public string WorkUaFilterLabel => $"Work.ua ({WorkUaCount})";
+    public string DjinniFilterLabel => $"Djinni ({DjinniCount})";
+    public string RobotaUaFilterLabel => $"Robota.ua ({RobotaUaCount})";
 
     // ==================== ПАНЕЛЬ ФІЛЬТРІВ (МАКСИМУМ ПО 4 САЙТАХ) ====================
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(FilterToggleText))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool IsFilterPanelVisible { get; set; }
 
     public string FilterToggleText => IsFilterPanelVisible ? "Сховати фільтри ▲" : "Усі фільтри ⚙";
@@ -287,72 +320,115 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     public partial string SearchText { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool IncludeDou { get; set; } = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool IncludeWorkUa { get; set; } = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool IncludeDjinni { get; set; } = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool IncludeRobotaUa { get; set; } = true;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SelectedCategoryGroup { get; set; } = "Усі групи";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SelectedCategory { get; set; } = "Усі категорії";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SelectedWorkFormat { get; set; } = "Усі формати";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SelectedExperience { get; set; } = "Будь-який досвід";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SelectedLocation { get; set; } = "Усі міста";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string LocationFilter { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string CompanyFilter { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SkillsFilter { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string MinSalaryFilter { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string MaxSalaryFilter { get; set; } = string.Empty;
 
     [ObservableProperty]
     public partial string SelectedSalaryCurrency { get; set; } = "$ USD";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SelectedFreshness { get; set; } = "За весь час";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SelectedStatus { get; set; } = "Усі статуси";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCustomSortActive))]
     public partial string SelectedSortOption { get; set; } = "За датою публікації (спочатку нові)";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool OnlyWithSalary { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool IncludeNoSalary { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool OnlySaved { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool HideViewed { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool TitleOnly { get; set; }
 
     [ObservableProperty]
@@ -451,10 +527,15 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
     // ==================== КОМАНДИ ЗАВАНТАЖЕННЯ ТА СИНХРОНІЗАЦІЇ ====================
 
-    /// <summary>Викликається при перемиканні на вкладку: завантажує всю базу вакансій.</summary>
+    /// <summary>Викликається при перемиканні на вкладку: завантажує базу при першому відкритті (повторні переходи миттєві з RAM).</summary>
     [RelayCommand]
     public async Task EnsureLoadedAsync()
     {
+        if (_hasLoadedOnce && _allVacancies.Count > 0)
+        {
+            return;
+        }
+
         await LoadDatabaseAsync();
     }
 
@@ -485,7 +566,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                     VacancySyncResult autoSync = await _syncService.SyncWithServerAsync(fullSync: false, cts.Token);
                     if (autoSync.Succeeded)
                     {
-                        StatusBannerText = $"🔄 Автоматична синхронізація: надіслано {autoSync.UploadedToServer} офлайн-записів, отримано {autoSync.DownloadedFromServer} із сервера.";
+                        StatusBannerText = $"Синхронізовано: надіслано {autoSync.UploadedToServer}, отримано {autoSync.DownloadedFromServer}";
                     }
                 }
             }
@@ -512,7 +593,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             IsOfflineMode = true;
             SetDatabaseVacancies(local.ToList());
             await RefreshLocalStatsAsync(CancellationToken.None);
-            StatusBannerText = $"📡 Сервер недоступний — відкрито локальну офлайн-базу ({local.Count} вакансій). Усі офлайн-вакансії та імпорт синхронізуються при підключенні.";
+            StatusBannerText = $"Офлайн-режим: відкрито локальну базу ({local.Count} вакансій)";
         }
         catch (ApiException ex)
         {
@@ -584,7 +665,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     {
         if (_syncService is null)
         {
-            StatusBannerText = "⚠️ Сервіс синхронізації не підключено.";
+            StatusBannerText = "Сервіс синхронізації не підключено.";
             return;
         }
 
@@ -596,13 +677,13 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             if (result.Succeeded)
             {
                 IsOfflineMode = false;
-                StatusBannerText = $"🔄 Синхронізація завершена: надіслано {result.UploadedToServer} (нових на сервері: {result.CreatedOnServer}, оновлено: {result.UpdatedOnServer}), отримано з сервера {result.DownloadedFromServer} (нових локально: {result.AddedLocally}).";
+                StatusBannerText = $"Синхронізація завершена: надіслано {result.UploadedToServer}, отримано {result.DownloadedFromServer} (нових: {result.AddedLocally})";
                 await LoadDatabaseAsync();
             }
             else
             {
                 IsOfflineMode = true;
-                StatusBannerText = $"📡 Синхронізація не вдалася: {result.ErrorMessage}";
+                StatusBannerText = $"Помилка синхронізації: {result.ErrorMessage}";
             }
         }
         finally
@@ -687,19 +768,33 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void ToggleWhiteListMatchAll() => WhiteListMatchAll = !WhiteListMatchAll;
 
+    private void NotifyWordListChanged()
+    {
+        OnPropertyChanged(nameof(HasWhiteListWords));
+        OnPropertyChanged(nameof(HasBanListWords));
+        OnPropertyChanged(nameof(HasActiveFilters));
+        OnPropertyChanged(nameof(IsFilterHighlightActive));
+    }
+
     [RelayCommand]
     private void ApplyFilters()
     {
+        bool wordsChanged = false;
         if (VacancyFilterEngine.TryAddWords(NewWhiteListWord, WhiteListWords))
         {
             NewWhiteListWord = string.Empty;
-            OnPropertyChanged(nameof(HasWhiteListWords));
+            wordsChanged = true;
         }
 
         if (VacancyFilterEngine.TryAddWords(NewBanListWord, BanListWords))
         {
             NewBanListWord = string.Empty;
-            OnPropertyChanged(nameof(HasBanListWords));
+            wordsChanged = true;
+        }
+
+        if (wordsChanged)
+        {
+            NotifyWordListChanged();
         }
 
         if (VacancyFilterEngine.IsDistanceSort(SelectedSortOption))
@@ -718,7 +813,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         if (VacancyFilterEngine.TryAddWords(NewWhiteListWord, WhiteListWords))
         {
             NewWhiteListWord = string.Empty;
-            OnPropertyChanged(nameof(HasWhiteListWords));
+            NotifyWordListChanged();
             ReapplyIfReady();
         }
     }
@@ -728,7 +823,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(word) && WhiteListWords.Remove(word))
         {
-            OnPropertyChanged(nameof(HasWhiteListWords));
+            NotifyWordListChanged();
             ReapplyIfReady();
         }
     }
@@ -739,7 +834,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         if (WhiteListWords.Count > 0)
         {
             WhiteListWords.Clear();
-            OnPropertyChanged(nameof(HasWhiteListWords));
+            NotifyWordListChanged();
             ReapplyIfReady();
         }
     }
@@ -750,7 +845,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         if (VacancyFilterEngine.TryAddWords(NewBanListWord, BanListWords))
         {
             NewBanListWord = string.Empty;
-            OnPropertyChanged(nameof(HasBanListWords));
+            NotifyWordListChanged();
             ReapplyIfReady();
         }
     }
@@ -760,7 +855,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     {
         if (!string.IsNullOrWhiteSpace(word) && BanListWords.Remove(word))
         {
-            OnPropertyChanged(nameof(HasBanListWords));
+            NotifyWordListChanged();
             ReapplyIfReady();
         }
     }
@@ -771,7 +866,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         if (BanListWords.Count > 0)
         {
             BanListWords.Clear();
-            OnPropertyChanged(nameof(HasBanListWords));
+            NotifyWordListChanged();
             ReapplyIfReady();
         }
     }
@@ -811,8 +906,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             BanListWords.Clear();
             NewWhiteListWord = string.Empty;
             NewBanListWord = string.Empty;
-            OnPropertyChanged(nameof(HasWhiteListWords));
-            OnPropertyChanged(nameof(HasBanListWords));
+            NotifyWordListChanged();
         }
         finally
         {
@@ -862,7 +956,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             List<VacancyDto> toExport = Vacancies.Select(v => v.Vacancy).ToList();
             string json = JsonSerializer.Serialize(toExport, ClientJsonContext.Default.ListVacancyDto);
             await File.WriteAllTextAsync(path, json, CancellationToken.None);
-            StatusBannerText = $"📥 Експортовано {toExport.Count} вакансій у {path}";
+            StatusBannerText = $"Експортовано {toExport.Count} вакансій у {path}";
         }
         catch (Exception ex)
         {
@@ -891,7 +985,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         {
             if (!File.Exists(path))
             {
-                StatusBannerText = $"📤 Файл імпорту не знайдено ({path}). Спочатку виконайте експорт або розмістіть там JSON-файл.";
+                StatusBannerText = $"Файл не знайдено ({path}).";
                 return;
             }
 
@@ -899,7 +993,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             List<VacancyDto>? imported = JsonSerializer.Deserialize(json, ClientJsonContext.Default.ListVacancyDto);
             if (imported is null || imported.Count == 0)
             {
-                StatusBannerText = "📤 Файл імпорту порожній.";
+                StatusBannerText = "Файл імпорту порожній.";
                 return;
             }
 
@@ -919,7 +1013,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 SetDatabaseVacancies(combined);
             }
 
-            StatusBannerText = $"📤 Імпортовано {imported.Count} вакансій локально (позначено до синхронізації із сервером).";
+            StatusBannerText = $"Імпортовано {imported.Count} вакансій";
         }
         catch (Exception ex)
         {
@@ -996,13 +1090,11 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         List<VacancyDto> matched = _allVacancies.Where(MatchesAllFilters).ToList();
         List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(matched, SelectedSortOption, GetDistanceKm).ToList();
 
-        Vacancies.Clear();
-        foreach (VacancyDto dto in sorted)
-        {
-            Vacancies.Add(CreateCard(dto));
-        }
+        _vacancies.ReplaceAll(sorted.Select(CreateCard));
 
         FilteredCount = Vacancies.Count;
+        OnPropertyChanged(nameof(HasActiveFilters));
+        OnPropertyChanged(nameof(IsFilterHighlightActive));
     }
 
     private VacancyItemViewModel CreateCard(VacancyDto dto)

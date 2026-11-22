@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Waterfall.Client.Collections;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
 
@@ -21,6 +22,7 @@ public partial class RecommendationsViewModel : ObservableObject
     private readonly IUrlLauncher? _urlLauncher;
     private readonly IDistanceCalculatorService? _distanceService;
     private CancellationTokenSource? _loadCts;
+    private bool _isDirty = true;
 
     public RecommendationsViewModel(
         IHttpGatewayService gateway,
@@ -48,9 +50,15 @@ public partial class RecommendationsViewModel : ObservableObject
                 _ = vm.LoadRecommendationsInternalAsync(showSpinner: false);
             }
         });
+
+        _messenger.Register<RecommendationsViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
+        {
+            vm._isDirty = true;
+        });
     }
 
-    public ObservableCollection<VacancyItemViewModel> Recommendations { get; } = [];
+    private readonly BulkObservableCollection<VacancyItemViewModel> _recommendations = new();
+    public ObservableCollection<VacancyItemViewModel> Recommendations => _recommendations;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
@@ -92,7 +100,12 @@ public partial class RecommendationsViewModel : ObservableObject
         : "Ви вже зберегли всі підходящі пропозиції або каталог ще оновлюється. Перегляньте каталог чи збережіть інші вакансії";
 
     [RelayCommand(AllowConcurrentExecutions = true)]
-    public Task LoadRecommendationsAsync() => LoadRecommendationsInternalAsync(showSpinner: true);
+    public Task EnsureLoadedAsync() => HasLoaded && !_isDirty
+        ? Task.CompletedTask
+        : LoadRecommendationsInternalAsync(showSpinner: !HasLoaded);
+
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public Task LoadRecommendationsAsync() => LoadRecommendationsInternalAsync(showSpinner: !HasLoaded);
 
     private async Task LoadRecommendationsInternalAsync(bool showSpinner)
     {
@@ -114,14 +127,15 @@ public partial class RecommendationsViewModel : ObservableObject
             SavedCount = result.SavedCount;
             RecommendedBasisText = FormatBasisText(result);
 
-            Recommendations.Clear();
-            foreach (VacancyDto vacancy in result.Items.Where(v => !v.IsSaved))
-            {
-                Recommendations.Add(new VacancyItemViewModel(
-                    vacancy, _gateway, _messenger, msg => ErrorMessage = msg, _urlLauncher, _distanceService));
-            }
+            List<VacancyItemViewModel> cards = result.Items
+                .Where(v => !v.IsSaved)
+                .Select(vacancy => new VacancyItemViewModel(
+                    vacancy, _gateway, _messenger, msg => ErrorMessage = msg, _urlLauncher, _distanceService))
+                .ToList();
+            _recommendations.ReplaceAll(cards);
 
             HasLoaded = true;
+            _isDirty = false;
         }
         catch (ApiException ex) when (!ct.IsCancellationRequested)
         {
