@@ -1,71 +1,87 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<ResourceDictionary 
+<ResourceDictionary
     xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
     xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
 
-    <!-- PointOfSale Theme Colors (https://github.com/dotnet/maui-samples/tree/main/10.0/Apps/PointOfSale) -->
-    <Color x:Key="Primary">#EA7C69</Color>
-    <Color x:Key="PrimaryDark">#EA7C69</Color>
+    <!-- Warm Editorial Default Palette (Warm Charcoal Dark — updated live by ThemeService) -->
+    <Color x:Key="Primary">#D4745E</Color>
+    <Color x:Key="PrimaryDark">#D4745E</Color>
+    <Color x:Key="PrimaryHover">#DF836E</Color>
     <Color x:Key="PrimaryDarkText">#FFFFFF</Color>
-    <Color x:Key="Secondary">#393C49</Color>
-    <Color x:Key="SecondaryDarkText">#EA7C69</Color>
-    <Color x:Key="Tertiary">#42EA7C69</Color>
+    <Color x:Key="OnPrimary">#FFFFFF</Color>
+    <Color x:Key="Secondary">#34302C</Color>
+    <Color x:Key="SecondaryDarkText">#D4745E</Color>
+    <Color x:Key="Tertiary">#33D4745E</Color>
     <Color x:Key="Neutral">#969696</Color>
     <Color x:Key="NeutralLighter">#E5E5E1</Color>
     <Color x:Key="NeutralDarker">#505050</Color>
-    <Color x:Key="Accent">#F7B548</Color>
 
-    <!-- PointOfSale Deep Dark Canvas & Cards -->
-    <Color x:Key="DarkBg1">#252836</Color>
-    <Color x:Key="DarkBg2">#1F1D2B</Color>
-    <Color x:Key="DarkBg1Transparent">#E6252836</Color>
-    <Color x:Key="TextSecondary">#ABBBC2</Color>
-    <Color x:Key="Text_Light">#FFFFFF</Color>
-    <Color x:Key="Text_Dark">#FFFFFF</Color>
+    <!-- Unified Brand Identity (Accent aliases Primary — zero competing amber) -->
+    <Color x:Key="Accent">#D4745E</Color>
+    <Color x:Key="AccentSurface">#32221E</Color>
 
-    <Color x:Key="White">#FFFFFF</Color>
-    <Color x:Key="Black">#14121B</Color>
-    <Color x:Key="Magenta">#EA7C69</Color>
-    <Color x:Key="MidnightBlue">#190649</Color>
-    <Color x:Key="OffBlack">#1F1D2B</Color>
+    <!-- Warm Surfaces -->
+    <Color x:Key="DarkRail">#141312</Color>
+    <Color x:Key="DarkBg1">#22201E</Color>
+    <Color x:Key="DarkBg2">#191817</Color>
+    <Color x:Key="DarkBg1Transparent">#E622201E</Color>
+    <Color x:Key="SurfaceElevated">#2C2926</Color>
+    <Color x:Key="TonalSurface">#2C2926</Color>
+    <Color x:Key="CardBorder">#2D2A26</Color>
+    <Color x:Key="DividerColor">#2E2B27</Color>
+    <Color x:Key="Scrim">#7A0A0908</Color>
 
-    <!-- Помилки (стилізовані під темний інтерфейс) -->
-    <Color x:Key="Danger">#FF5252</Color>
-    <Color x:Key="DangerDark">#FF867F</Color>
-    <Color x:Key="DangerSurface">#341B20</Color>
-    <Color x:Key="DangerSurfaceDark">#341B20</Color>
+    <!-- Warm Text Hierarchy -->
+    <Color x:Key="White">#F2EFEA</Color>
+    <Color x:Key="Text_Light">#F2EFEA</Color>
+    <Color x:Key="Text_Dark">#F2EFEA</Color>
+    <Color x:Key="TextSecondary">#ABA49A</Color>
+    <Color x:Key="TextMuted">#767068</Color>
+    <Color x:Key="Black">#FFFFFF</Color>
+    <Color x:Key="Magenta">#D4745E</Color>
+    <Color x:Key="MidnightBlue">#191817</Color>
+    <Color x:Key="OffBlack">#191817</Color>
 
-    <!-- Відтінки сірого за стилем PointOfSale -->
-    <Color x:Key="Gray50">#2A2D3C</Color>
-    <Color x:Key="Gray100">#2B2E3D</Color>
-    <Color x:Key="Gray200">#393C49</Color>
-    <Color x:Key="Gray300">#505565</Color>
-    <Color x:Key="Gray400">#72778A</Color>
-    <Color x:Key="Gray500">#ABBBC2</Color>
-    <Color x:Key="Gray600">#252836</Color>
-    <Color x:Key="Gray700">#212330</Color>
-    <Color x:Key="Gray800">#1F1D2B</Color>
-    <Color x:Key="Gray900">#191722</Color>
-    <Color x:Key="Gray950">#14121B</Color>
+    <!-- 90 / 8 / 2 High-Contrast Ink Active Pills -->
+    <Color x:Key="InkPillBg">#ECE7DF</Color>
+    <Color x:Key="InkPillText">#191817</Color>
 
-    <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary}"/>
-    <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Secondary}"/>
-    <SolidColorBrush x:Key="TertiaryBrush" Color="{StaticResource Tertiary}"/>
-    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource Accent}"/>
-    <SolidColorBrush x:Key="WhiteBrush" Color="{StaticResource White}"/>
-    <SolidColorBrush x:Key="BlackBrush" Color="{StaticResource Black}"/>
-    <SolidColorBrush x:Key="DarkBg1Brush" Color="{StaticResource DarkBg1}"/>
-    <SolidColorBrush x:Key="DarkBg2Brush" Color="{StaticResource DarkBg2}"/>
+    <!-- Semantic Surfaces -->
+    <Color x:Key="PrimarySurface">#32221E</Color>
+    <Color x:Key="Success">#6FB59B</Color>
+    <Color x:Key="SuccessSurface">#1B2E27</Color>
+    <Color x:Key="Danger">#E06C6C</Color>
+    <Color x:Key="DangerDark">#E88B8B</Color>
+    <Color x:Key="DangerSurface">#331D1D</Color>
+    <Color x:Key="DangerSurfaceDark">#331D1D</Color>
 
-    <SolidColorBrush x:Key="Gray50Brush" Color="{StaticResource Gray50}"/>
-    <SolidColorBrush x:Key="Gray100Brush" Color="{StaticResource Gray100}"/>
-    <SolidColorBrush x:Key="Gray200Brush" Color="{StaticResource Gray200}"/>
-    <SolidColorBrush x:Key="Gray300Brush" Color="{StaticResource Gray300}"/>
-    <SolidColorBrush x:Key="Gray400Brush" Color="{StaticResource Gray400}"/>
-    <SolidColorBrush x:Key="Gray500Brush" Color="{StaticResource Gray500}"/>
-    <SolidColorBrush x:Key="Gray600Brush" Color="{StaticResource Gray600}"/>
-    <SolidColorBrush x:Key="Gray700Brush" Color="{StaticResource Gray700}"/>
-    <SolidColorBrush x:Key="Gray800Brush" Color="{StaticResource Gray800}"/>
-    <SolidColorBrush x:Key="Gray900Brush" Color="{StaticResource Gray900}"/>
-    <SolidColorBrush x:Key="Gray950Brush" Color="{StaticResource Gray950}"/>
+    <!-- Subtle Platform Dots -->
+    <Color x:Key="PlatformDou">#6E96BE</Color>
+    <Color x:Key="PlatformWorkUa">#D4875E</Color>
+    <Color x:Key="PlatformDjinni">#9D84C7</Color>
+    <Color x:Key="PlatformRobotaUa">#C96E7E</Color>
+
+    <!-- Warm Neutrals Scale -->
+    <Color x:Key="Gray50">#2C2926</Color>
+    <Color x:Key="Gray100">#2A2724</Color>
+    <Color x:Key="Gray200">#34302C</Color>
+    <Color x:Key="Gray300">#4A4540</Color>
+    <Color x:Key="Gray400">#767068</Color>
+    <Color x:Key="Gray500">#ABA49A</Color>
+    <Color x:Key="Gray600">#22201E</Color>
+    <Color x:Key="Gray700">#1E1C1A</Color>
+    <Color x:Key="Gray800">#191817</Color>
+    <Color x:Key="Gray900">#141312</Color>
+    <Color x:Key="Gray950">#0E0D0C</Color>
+
+    <SolidColorBrush x:Key="PrimaryBrush" Color="{DynamicResource Primary}"/>
+    <SolidColorBrush x:Key="SecondaryBrush" Color="{DynamicResource Secondary}"/>
+    <SolidColorBrush x:Key="TertiaryBrush" Color="{DynamicResource Tertiary}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{DynamicResource Accent}"/>
+    <SolidColorBrush x:Key="WhiteBrush" Color="{DynamicResource White}"/>
+    <SolidColorBrush x:Key="TextMutedBrush" Color="{DynamicResource TextMuted}"/>
+    <SolidColorBrush x:Key="CardBorderBrush" Color="{DynamicResource CardBorder}"/>
+    <SolidColorBrush x:Key="BlackBrush" Color="{DynamicResource Black}"/>
+    <SolidColorBrush x:Key="DarkBg1Brush" Color="{DynamicResource DarkBg1}"/>
+    <SolidColorBrush x:Key="DarkBg2Brush" Color="{DynamicResource DarkBg2}"/>
 </ResourceDictionary>
