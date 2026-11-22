@@ -2,270 +2,265 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
+             xmlns:controls="clr-namespace:waterfall.UI.Controls"
+             xmlns:res="clr-namespace:waterfall.UI.Resources"
              x:Class="waterfall.UI.Views.SystemSettingsPage"
              x:DataType="vm:SystemSettingsViewModel"
-             Title="Системні налаштування"
-             BackgroundColor="{StaticResource DarkBg2}">
+             Title="Налаштування"
+             BackgroundColor="{DynamicResource DarkBg2}">
 
     <ContentPage.Resources>
         <ResourceDictionary>
-            <!-- Специфічні стилі карток та контролів для сторінки налаштувань -->
             <Style x:Key="SettingsCard" TargetType="Border">
-                <Setter Property="StrokeShape" Value="RoundRectangle 12" />
-                <Setter Property="Stroke" Value="{StaticResource Secondary}" />
+                <Setter Property="StrokeShape" Value="RoundRectangle 13" />
+                <Setter Property="Stroke" Value="{DynamicResource CardBorder}" />
                 <Setter Property="StrokeThickness" Value="1" />
-                <Setter Property="BackgroundColor" Value="{StaticResource DarkBg1}" />
-                <Setter Property="Padding" Value="18,16" />
-                <Setter Property="Margin" Value="0,0,0,12" />
+                <Setter Property="BackgroundColor" Value="{DynamicResource DarkBg1}" />
+                <Setter Property="Padding" Value="18,15" />
+                <Setter Property="Margin" Value="0" />
             </Style>
 
             <Style x:Key="SettingsSectionTitle" TargetType="Label">
                 <Setter Property="FontFamily" Value="OpenSansSemibold" />
-                <Setter Property="FontSize" Value="15" />
-                <Setter Property="TextColor" Value="{StaticResource White}" />
-            </Style>
-
-            <Style x:Key="SettingsDescription" TargetType="Label">
-                <Setter Property="FontFamily" Value="OpenSansRegular" />
-                <Setter Property="FontSize" Value="12" />
-                <Setter Property="TextColor" Value="{StaticResource TextSecondary}" />
-                <Setter Property="Margin" Value="0,4,0,0" />
-            </Style>
-
-            <Style x:Key="SettingsPickerBorder" TargetType="Border">
-                <Setter Property="StrokeShape" Value="RoundRectangle 8" />
-                <Setter Property="Stroke" Value="{StaticResource Secondary}" />
-                <Setter Property="StrokeThickness" Value="1" />
-                <Setter Property="BackgroundColor" Value="{StaticResource DarkBg2}" />
-                <Setter Property="HeightRequest" Value="38" />
-                <Setter Property="Padding" Value="10,0" />
-            </Style>
-
-            <Style x:Key="SettingsPicker" TargetType="Picker">
-                <Setter Property="TextColor" Value="{StaticResource White}" />
-                <Setter Property="BackgroundColor" Value="Transparent" />
-                <Setter Property="FontFamily" Value="OpenSansRegular" />
-                <Setter Property="FontSize" Value="13" />
-                <Setter Property="HeightRequest" Value="36" />
-                <Setter Property="VerticalOptions" Value="Center" />
+                <Setter Property="FontSize" Value="14.5" />
+                <Setter Property="TextColor" Value="{DynamicResource White}" />
             </Style>
 
             <Style x:Key="InfoPill" TargetType="Border">
-                <Setter Property="StrokeShape" Value="RoundRectangle 8" />
-                <Setter Property="Stroke" Value="{StaticResource Secondary}" />
-                <Setter Property="StrokeThickness" Value="1" />
-                <Setter Property="BackgroundColor" Value="{StaticResource DarkBg2}" />
-                <Setter Property="Padding" Value="10,6" />
+                <Setter Property="StrokeShape" Value="RoundRectangle 9" />
+                <Setter Property="StrokeThickness" Value="0" />
+                <Setter Property="BackgroundColor" Value="{DynamicResource TonalSurface}" />
+                <Setter Property="Padding" Value="11,7" />
             </Style>
         </ResourceDictionary>
     </ContentPage.Resources>
 
     <ScrollView>
-        <VerticalStackLayout Padding="20,16" Spacing="16" MaximumWidthRequest="920" HorizontalOptions="Center">
+        <VerticalStackLayout Padding="16,12" Spacing="12" MaximumWidthRequest="920" HorizontalOptions="Center">
 
-            <!-- Заголовок сторінки -->
-            <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
-                <VerticalStackLayout Spacing="3">
-                    <Label Text="⚙️ Системні налаштування"
-                           FontFamily="OpenSansSemibold"
-                           FontSize="22"
-                           TextColor="{StaticResource White}" />
-                    <Label Text="Керування параметрами фонового парсингу та Ingestion Service"
-                           Style="{StaticResource SettingsDescription}" />
-                </VerticalStackLayout>
+                <!-- Автозникаючий банер повідомлення про збереження / синхронізацію -->
+                <controls:ToastBanner Text="{Binding StatusMessage}"
+                                      Dismissed="OnDismissStatusClicked" />
 
-                <!-- Статус-бейдж -->
-                <Border Grid.Column="1"
-                        StrokeShape="RoundRectangle 8"
-                        Stroke="{StaticResource Secondary}"
-                        BackgroundColor="{StaticResource DarkBg1}"
-                        Padding="12,6"
-                        VerticalOptions="Center">
-                    <Label Text="{Binding ParsingStatusBadgeText}"
-                           FontSize="12"
-                           FontFamily="OpenSansSemibold"
-                           TextColor="{StaticResource White}" />
+                <!-- Зовнішній вигляд: Системна | Світла | Темна + AMOLED чорний -->
+                <Border Style="{StaticResource SettingsCard}">
+                    <VerticalStackLayout Spacing="12">
+                        <HorizontalStackLayout Spacing="7" VerticalOptions="Center">
+                            <Label Text="{x:Static res:Icons.Palette}"
+                                   FontFamily="Lucide"
+                                   FontSize="15"
+                                   TextColor="{DynamicResource Primary}"
+                                   VerticalOptions="Center" />
+                            <Label Text="Зовнішній вигляд"
+                                   Style="{StaticResource SettingsSectionTitle}"
+                                   VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+
+                        <!-- 3-позиційний сегментований перемикач теми (Border+Label: без обрізання та VSM-глюків WinUI) -->
+                        <Border StrokeShape="RoundRectangle 11"
+                                StrokeThickness="0"
+                                BackgroundColor="{DynamicResource TonalSurface}"
+                                Padding="3"
+                                WidthRequest="{OnIdiom Phone=-1, Default=336}"
+                                HorizontalOptions="{OnIdiom Phone=Fill, Default=Start}">
+                            <Grid ColumnDefinitions="*,*,*" ColumnSpacing="3">
+                                <Border x:Name="ThemeSystemPill"
+                                        Grid.Column="0"
+                                        StrokeShape="RoundRectangle 8"
+                                        StrokeThickness="0"
+                                        Background="Transparent"
+                                        Padding="10,7">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="OnThemeSystemTapped" />
+                                    </Border.GestureRecognizers>
+                                    <Label x:Name="ThemeSystemLabel"
+                                           Text="Системна"
+                                           FontSize="12.5"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center" />
+                                </Border>
+
+                                <Border x:Name="ThemeLightPill"
+                                        Grid.Column="1"
+                                        StrokeShape="RoundRectangle 8"
+                                        StrokeThickness="0"
+                                        Background="Transparent"
+                                        Padding="10,7">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="OnThemeLightTapped" />
+                                    </Border.GestureRecognizers>
+                                    <Label x:Name="ThemeLightLabel"
+                                           Text="Світла"
+                                           FontSize="12.5"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center" />
+                                </Border>
+
+                                <Border x:Name="ThemeDarkPill"
+                                        Grid.Column="2"
+                                        StrokeShape="RoundRectangle 8"
+                                        StrokeThickness="0"
+                                        Background="Transparent"
+                                        Padding="10,7">
+                                    <Border.GestureRecognizers>
+                                        <TapGestureRecognizer Tapped="OnThemeDarkTapped" />
+                                    </Border.GestureRecognizers>
+                                    <Label x:Name="ThemeDarkLabel"
+                                           Text="Темна"
+                                           FontSize="12.5"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center" />
+                                </Border>
+                            </Grid>
+                        </Border>
+
+                        <BoxView HeightRequest="1" BackgroundColor="{DynamicResource DividerColor}" />
+
+                        <!-- Незалежний перемикач AMOLED чорний -->
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+                            <HorizontalStackLayout Grid.Column="0" Spacing="7" VerticalOptions="Center">
+                                <Label Text="{x:Static res:Icons.Moon}"
+                                       FontFamily="Lucide"
+                                       FontSize="14"
+                                       TextColor="{DynamicResource TextSecondary}"
+                                       VerticalOptions="Center" />
+                                <Label Text="AMOLED чорний"
+                                       FontFamily="OpenSansSemibold"
+                                       FontSize="13.5"
+                                       TextColor="{DynamicResource White}"
+                                       VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+
+                            <Switch x:Name="AmoledSwitch"
+                                    Grid.Column="1"
+                                    Toggled="OnAmoledToggled"
+                                    OnColor="{DynamicResource Primary}"
+                                    ThumbColor="{DynamicResource OnPrimary}"
+                                    VerticalOptions="Center" />
+                        </Grid>
+                    </VerticalStackLayout>
                 </Border>
-            </Grid>
 
-            <!-- Банер повідомлення про збереження / стан -->
-            <Border IsVisible="{Binding HasStatusMessage}"
-                    StrokeShape="RoundRectangle 10"
-                    Stroke="{StaticResource Primary}"
-                    BackgroundColor="{StaticResource DarkBg1}"
-                    Padding="14,10">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                    <Label Text="{Binding StatusMessage}"
-                           TextColor="{StaticResource White}"
-                           FontFamily="OpenSansSemibold"
-                           FontSize="13"
-                           VerticalOptions="Center" />
-                    <Button Grid.Column="1"
-                            Text="✕"
-                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:SystemSettingsViewModel}}, Path=ResetToDefaultsCommand}"
-                            Style="{StaticResource LinkButton}"
-                            FontSize="13" />
-                </Grid>
-            </Border>
+                <!-- Збір вакансій у фоні -->
+                <Border Style="{StaticResource SettingsCard}">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                        <FlexLayout Grid.Column="0" Wrap="Wrap" AlignItems="Center" VerticalOptions="Center">
+                            <HorizontalStackLayout Spacing="7" VerticalOptions="Center" Margin="0,0,10,0">
+                                <Label Text="{x:Static res:Icons.RefreshCw}" FontFamily="Lucide" FontSize="15" TextColor="{DynamicResource Primary}" VerticalOptions="Center" />
+                                <Label Text="Збір вакансій у фоні" Style="{StaticResource SettingsSectionTitle}" VerticalOptions="Center" />
+                            </HorizontalStackLayout>
 
-            <!-- ========================================================================= -->
-            <!-- НАЛАШТУВАННЯ 1: ФОНОВИЙ ПАРСИНГ (перемикач, по дефолту фолз)              -->
-            <!-- ========================================================================= -->
-            <Border Style="{StaticResource SettingsCard}">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
-                    <VerticalStackLayout Grid.Column="0" VerticalOptions="Center" Spacing="4">
-                        <Label Text="🔄 Фоновий парсинг" Style="{StaticResource SettingsSectionTitle}" />
-                        <Label Text="Періодичний автоматичний збір нових вакансій із сайтів DOU, Work.ua та Djinni у фоновому режимі (за замовчуванням вимкнено)."
-                               Style="{StaticResource SettingsDescription}" />
-                    </VerticalStackLayout>
+                            <Border StrokeShape="RoundRectangle 7"
+                                    StrokeThickness="0"
+                                    BackgroundColor="{DynamicResource TonalSurface}"
+                                    Padding="8,3"
+                                    VerticalOptions="Center">
+                                <Label Text="{Binding ParsingStatusBadgeText}"
+                                       FontSize="11"
+                                       FontFamily="OpenSansSemibold"
+                                       TextColor="{DynamicResource TextSecondary}" />
+                            </Border>
+                        </FlexLayout>
 
-                    <!-- Перемикач -->
-                    <Switch Grid.Column="1"
-                            IsToggled="{Binding IsBackgroundParsingEnabled}"
-                            OnColor="{StaticResource Primary}"
-                            ThumbColor="{StaticResource White}"
-                            VerticalOptions="Center" />
-                </Grid>
-            </Border>
-
-            <!-- ========================================================================= -->
-            <!-- НАЛАШТУВАННЯ 2: ІНТЕРВАЛ ПАРСИНГУ (з готового файлу налаштувань)           -->
-            <!-- ========================================================================= -->
-            <Border Style="{StaticResource SettingsCard}">
-                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" RowSpacing="12">
-                    <VerticalStackLayout Grid.Column="0" VerticalOptions="Center" Spacing="4">
-                        <Label Text="⏱️ Інтервал парсингу" Style="{StaticResource SettingsSectionTitle}" />
-                        <Label Text="Періодичність виконання збору Ingestion Service. Початкове значення завантажено з файлу appsettings.json секції Ingestion."
-                               Style="{StaticResource SettingsDescription}" />
-                    </VerticalStackLayout>
-
-                    <!-- Селектор інтервалу -->
-                    <Border Grid.Column="1" Style="{StaticResource SettingsPickerBorder}" WidthRequest="220" VerticalOptions="Center">
-                        <Picker Style="{StaticResource SettingsPicker}"
-                                ItemsSource="{Binding IntervalOptions}"
-                                SelectedItem="{Binding SelectedIntervalDisplay}" />
-                    </Border>
-                </Grid>
-            </Border>
-
-            <!-- ========================================================================= -->
-            <!-- СЕКЦІЯ 3: ПАРАМЕТРИ ЗБОРУ З КОНФІГУРАЦІЙНОГО ФАЙЛУ                         -->
-            <!-- ========================================================================= -->
-            <Border Style="{StaticResource SettingsCard}">
-                <VerticalStackLayout Spacing="10">
-                    <Label Text="📁 Джерело та параметри сервісу Ingestion" Style="{StaticResource SettingsSectionTitle}" />
-                    <Label Text="Значення прочитано безпосередньо з конфігурації сервісу Ingestion:"
-                           Style="{StaticResource SettingsDescription}" />
-
-                    <Grid ColumnDefinitions="*,*,*,*,*" ColumnSpacing="8" Margin="0,6,0,0">
-                        <Border Grid.Column="0" Style="{StaticResource InfoPill}">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="DOU сторінок" FontSize="11" TextColor="{StaticResource TextSecondary}" />
-                                <Label Text="{Binding DouPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <Border Grid.Column="1" Style="{StaticResource InfoPill}">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="Work.ua сторінок" FontSize="11" TextColor="{StaticResource TextSecondary}" />
-                                <Label Text="{Binding WorkUaPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <Border Grid.Column="2" Style="{StaticResource InfoPill}">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="Robota.ua сторінок" FontSize="11" TextColor="{StaticResource TextSecondary}" />
-                                <Label Text="{Binding RobotaUaPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <Border Grid.Column="3" Style="{StaticResource InfoPill}">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="Djinni сторінок" FontSize="11" TextColor="{StaticResource TextSecondary}" />
-                                <Label Text="{Binding DjinniPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <Border Grid.Column="4" Style="{StaticResource InfoPill}">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="Затримка запитів" FontSize="11" TextColor="{StaticResource TextSecondary}" />
-                                <Label Text="{Binding RequestDelay}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource Accent}" />
-                            </VerticalStackLayout>
-                        </Border>
-                    </Grid>
-
-                    <Label Text="{Binding ConfigFilePath, StringFormat='Конфігураційний файл: {0}'}"
-                           FontSize="11"
-                           TextColor="{StaticResource TextSecondary}"
-                           LineBreakMode="TailTruncation"
-                           Margin="0,4,0,0" />
-                </VerticalStackLayout>
-            </Border>
-
-            <!-- ========================================================================= -->
-            <!-- СЕКЦІЯ 4: ДВОСТОРОННЯ СИНХРОНІЗАЦІЯ БАЗИ ВАКАНСІЙ (КЛІЄНТ ↔ СЕРВЕР)       -->
-            <!-- ========================================================================= -->
-            <Border Style="{StaticResource SettingsCard}">
-                <VerticalStackLayout Spacing="10">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                        <VerticalStackLayout Spacing="3">
-                            <Label Text="🔄 Синхронізація локальної бази даних (офлайн ↔ онлайн)" Style="{StaticResource SettingsSectionTitle}" />
-                            <Label Text="Двосторонній обмін вакансіями (та геокешем) між локальною SQLite БД клієнта й сервером після роботи офлайн."
-                                   Style="{StaticResource SettingsDescription}" />
-                        </VerticalStackLayout>
-                        <Button Grid.Column="1"
-                                Text="Синхронізувати зараз 🔄"
-                                Command="{Binding SyncDatabasesNowCommand}"
-                                Style="{StaticResource CardActionPrimary}"
-                                FontSize="12"
-                                Padding="14,6"
-                                MinimumHeightRequest="36"
+                        <Switch Grid.Column="1"
+                                IsToggled="{Binding IsBackgroundParsingEnabled}"
+                                Toggled="OnBackgroundParsingToggled"
+                                OnColor="{DynamicResource Primary}"
+                                ThumbColor="{DynamicResource OnPrimary}"
                                 VerticalOptions="Center" />
                     </Grid>
+                </Border>
 
-                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
-                        <Border Grid.Column="0" Style="{StaticResource InfoPill}">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="Вакансій локально (SQLite)" FontSize="11" TextColor="{StaticResource TextSecondary}" />
-                                <Label Text="{Binding LocalVacanciesCount}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
-                            </VerticalStackLayout>
-                        </Border>
-                        <Border Grid.Column="1" Style="{StaticResource InfoPill}">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="Очікують синхронізації" FontSize="11" TextColor="{StaticResource TextSecondary}" />
-                                <Label Text="{Binding UnsyncedVacanciesCount}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource Accent}" />
-                            </VerticalStackLayout>
-                        </Border>
-                        <Border Grid.Column="2" Style="{StaticResource InfoPill}">
-                            <VerticalStackLayout Spacing="2">
-                                <Label Text="Остання синхронізація" FontSize="11" TextColor="{StaticResource TextSecondary}" />
-                                <Label Text="{Binding LastVacancySyncText}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{StaticResource White}" />
-                            </VerticalStackLayout>
+                <!-- Інтервал парсингу -->
+                <Border Style="{StaticResource SettingsCard}">
+                    <Grid RowDefinitions="{OnIdiom Phone='Auto,Auto', Default='Auto'}"
+                          ColumnDefinitions="{OnIdiom Phone='*', Default='*,Auto'}"
+                          RowSpacing="10"
+                          ColumnSpacing="14">
+                        <Grid Grid.Row="0" Grid.Column="0" ColumnDefinitions="Auto,*" ColumnSpacing="7" VerticalOptions="Center">
+                            <Label Grid.Column="0" Text="{x:Static res:Icons.Clock}" FontFamily="Lucide" FontSize="15" TextColor="{DynamicResource Primary}" VerticalOptions="Center" />
+                            <Label Grid.Column="1" Text="Інтервал парсингу" Style="{StaticResource SettingsSectionTitle}" LineBreakMode="WordWrap" VerticalOptions="Center" />
+                        </Grid>
+
+                        <Border Grid.Row="{OnIdiom Phone=1, Default=0}"
+                                Grid.Column="{OnIdiom Phone=0, Default=1}"
+                                Style="{StaticResource CompactFieldBorder}"
+                                Padding="10,0"
+                                WidthRequest="{OnIdiom Phone=-1, Default=230}"
+                                HorizontalOptions="{OnIdiom Phone=Fill, Default=End}"
+                                VerticalOptions="Center">
+                            <Picker Style="{StaticResource CompactPicker}"
+                                    FontSize="13"
+                                    ItemsSource="{Binding IntervalOptions}"
+                                    SelectedItem="{Binding SelectedIntervalDisplay}"
+                                    SelectedIndexChanged="OnIntervalSelectedIndexChanged" />
                         </Border>
                     </Grid>
-                </VerticalStackLayout>
-            </Border>
+                </Border>
 
-            <!-- Кнопки дій -->
-            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="10" Margin="0,8,0,0">
-                <Button Grid.Column="1"
-                        Text="Скинути за замовчуванням ↺"
-                        Command="{Binding ResetToDefaultsCommand}"
-                        Style="{StaticResource CardAction}"
-                        FontSize="13"
-                        Padding="16,8"
-                        MinimumHeightRequest="38" />
+                <!-- Параметри парсингу (з конфігу) -->
+                <Border Style="{StaticResource SettingsCard}">
+                    <VerticalStackLayout Spacing="10">
+                        <HorizontalStackLayout Spacing="7" VerticalOptions="Center">
+                            <Label Text="{x:Static res:Icons.Database}" FontFamily="Lucide" FontSize="15" TextColor="{DynamicResource Primary}" VerticalOptions="Center" />
+                            <Label Text="Параметри парсингу" Style="{StaticResource SettingsSectionTitle}" VerticalOptions="Center" />
+                        </HorizontalStackLayout>
 
-                <Button Grid.Column="2"
-                        Text="Зберегти налаштування 💾"
-                        Command="{Binding SaveSettingsCommand}"
-                        Style="{StaticResource CardActionPrimary}"
-                        FontSize="13"
-                        Padding="18,8"
-                        MinimumHeightRequest="38" />
-            </Grid>
+                        <FlexLayout Wrap="Wrap" JustifyContent="Start" AlignItems="Stretch">
+                            <Border Style="{StaticResource InfoPill}" MinimumWidthRequest="125" Margin="0,0,8,8">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="DOU сторінок" FontSize="11" TextColor="{DynamicResource TextSecondary}" />
+                                    <Label Text="{Binding DouPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{DynamicResource White}" />
+                                </VerticalStackLayout>
+                            </Border>
 
-        </VerticalStackLayout>
+                            <Border Style="{StaticResource InfoPill}" MinimumWidthRequest="125" Margin="0,0,8,8">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Work.ua сторінок" FontSize="11" TextColor="{DynamicResource TextSecondary}" />
+                                    <Label Text="{Binding WorkUaPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{DynamicResource White}" />
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <Border Style="{StaticResource InfoPill}" MinimumWidthRequest="125" Margin="0,0,8,8">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Robota.ua сторінок" FontSize="11" TextColor="{DynamicResource TextSecondary}" />
+                                    <Label Text="{Binding RobotaUaPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{DynamicResource White}" />
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <Border Style="{StaticResource InfoPill}" MinimumWidthRequest="125" Margin="0,0,8,8">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Djinni сторінок" FontSize="11" TextColor="{DynamicResource TextSecondary}" />
+                                    <Label Text="{Binding DjinniPages}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{DynamicResource White}" />
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <Border Style="{StaticResource InfoPill}" MinimumWidthRequest="125" Margin="0,0,8,8">
+                                <VerticalStackLayout Spacing="2">
+                                    <Label Text="Затримка запитів" FontSize="11" TextColor="{DynamicResource TextSecondary}" />
+                                    <Label Text="{Binding RequestDelay}" FontSize="14" FontFamily="OpenSansSemibold" TextColor="{DynamicResource Primary}" />
+                                </VerticalStackLayout>
+                            </Border>
+                        </FlexLayout>
+
+                        <Label Text="{Binding ConfigFilePath}"
+                               FontSize="11"
+                               TextColor="{DynamicResource TextMuted}"
+                               LineBreakMode="TailTruncation" />
+                    </VerticalStackLayout>
+                </Border>
+
+                <!-- Скидання параметрів парсингу (усі перемикачі зберігаються автоматично) -->
+                <FlexLayout Wrap="Wrap" JustifyContent="End" Margin="0,4,0,12">
+                    <Button Text="Скинути за замовчуванням"
+                            Clicked="OnResetClicked"
+                            Style="{StaticResource CardAction}"
+                            FontSize="12.5"
+                            Padding="14,8"
+                            MinimumHeightRequest="38"
+                            Margin="0,0,0,8" />
+                </FlexLayout>
+
+            </VerticalStackLayout>
     </ScrollView>
 </ContentPage>
-

@@ -2,7 +2,7 @@ using Waterfall.Client.ViewModels;
 
 namespace waterfall.UI.Views;
 
-public partial class FavoritesPage : ContentPage
+public partial class FavoritesPage : ContentPage, IHostedPage
 {
     private readonly FavoritesViewModel _viewModel;
 
@@ -12,12 +12,11 @@ public partial class FavoritesPage : ContentPage
         BindingContext = _viewModel = viewModel;
     }
 
-    /// <summary>
-    /// Кожне відкриття вкладки підтягує актуальний список (нові збереження з каталогу).
-    /// </summary>
+    public void OnHostActivated() => OnAppearing();
+
     protected override void OnAppearing()
     {
         base.OnAppearing();
-        _viewModel.LoadCommand.Execute(null);
+        _viewModel.EnsureLoadedCommand.Execute(null);
     }
 }

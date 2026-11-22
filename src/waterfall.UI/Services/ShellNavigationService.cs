@@ -1,21 +1,21 @@
-// Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
-
+using waterfall.UI.Views;
 using Waterfall.Client.Interfaces;
 
 namespace waterfall.UI.Services;
 
 /// <summary>
-/// Перемикання вкладок Shell за абсолютними маршрутами з AppShell.xaml.
+/// Navigates across platform root navigation hosts (<see cref="DesktopHostPage"/> on Windows, <see cref="PhoneHostPage"/> on mobile).
 /// </summary>
 public sealed class ShellNavigationService : INavigationService
 {
-    public Task GoToCatalogAsync() => GoToAsync("//catalog");
+    public Task GoToCatalogAsync() => NavigateToAsync("catalog");
 
-    public Task GoToAiConsultantAsync() => GoToAsync("//aiconsultant");
+    public Task GoToAiConsultantAsync() => NavigateToAsync("aiconsultant");
 
-    /// <summary>
-    /// Shell вимагає виклику з UI-потоку; якщо вікно ще не створене, навігація просто не потрібна.
-    /// </summary>
-    private static Task GoToAsync(string route) =>
-        MainThread.InvokeOnMainThreadAsync(() => Shell.Current is Shell shell ? shell.GoToAsync(route) : Task.CompletedTask);
+    private static Task NavigateToAsync(string route) =>
+        MainThread.InvokeOnMainThreadAsync(() =>
+        {
+            IAppNavigationHost? host = (IAppNavigationHost?)DesktopHostPage.Current ?? PhoneHostPage.Current;
+            return host?.NavigateToAsync(route) ?? Task.CompletedTask;
+        });
 }

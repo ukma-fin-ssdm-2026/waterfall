@@ -3,31 +3,49 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
              xmlns:controls="clr-namespace:waterfall.UI.Controls"
+             xmlns:res="clr-namespace:waterfall.UI.Resources"
              x:Class="waterfall.UI.Views.RecommendationsPage"
              x:DataType="vm:RecommendationsViewModel"
              Title="Рекомендації"
-             BackgroundColor="{StaticResource DarkBg2}">
+             BackgroundColor="{DynamicResource DarkBg2}">
 
-    <Grid RowDefinitions="Auto,Auto,*">
+    <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+        <!-- Phone Header (видимий лише коли Підбірка — окрема вкладка шукача) -->
+        <Grid x:Name="PhoneHeaderBar"
+              Grid.Row="0"
+              IsVisible="{OnIdiom Phone=True, Default=False}"
+              Padding="14,10,12,6">
+            <Label Text="Підбірка"
+                   FontFamily="OpenSansSemibold"
+                   FontSize="20"
+                   TextColor="{DynamicResource White}"
+                   VerticalOptions="Center" />
+        </Grid>
 
         <!-- Пояснення основи рекомендацій (FR-006, US-004) -->
-        <Border Margin="12,10,12,6"
+        <Border Grid.Row="1"
+                Margin="12,6,12,6"
                 StrokeShape="RoundRectangle 12"
                 StrokeThickness="1"
-                Stroke="{StaticResource Secondary}"
-                BackgroundColor="{StaticResource DarkBg1}"
+                Stroke="{DynamicResource CardBorder}"
+                BackgroundColor="{DynamicResource DarkBg1}"
                 Padding="14,10">
             <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
-                <Label Text="✨" FontSize="16" VerticalOptions="Center" />
+                <Label Text="{x:Static res:Icons.Sparkles}"
+                       FontFamily="Lucide"
+                       FontSize="15"
+                       TextColor="{DynamicResource Primary}"
+                       VerticalOptions="Center" />
                 <Label Text="{Binding RecommendedBasisText}"
                        Style="{StaticResource MutedLabel}"
-                       FontSize="13"
+                       FontSize="12.5"
                        VerticalOptions="Center" />
             </HorizontalStackLayout>
         </Border>
 
         <!-- Банер помилки -->
-        <Border Grid.Row="1"
+        <Border Grid.Row="2"
                 IsVisible="{Binding HasError}"
                 Style="{StaticResource ErrorBanner}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
@@ -42,37 +60,29 @@
         </Border>
 
         <!-- Список рекомендованих вакансій -->
-        <RefreshView Grid.Row="2"
-                     IsRefreshing="{Binding IsRefreshing}"
-                     Command="{Binding RefreshCommand}">
-            <CollectionView ItemsSource="{Binding Recommendations}"
-                            SelectionMode="None">
-
-                <CollectionView.ItemTemplate>
-                    <DataTemplate x:DataType="vm:VacancyItemViewModel">
-                        <controls:VacancyCard />
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
-
-                <!-- Заглушка за US-004 AC-2 -->
-                <CollectionView.EmptyView>
-                    <VerticalStackLayout Padding="32"
-                                         Spacing="10"
-                                         IsVisible="{Binding IsEmpty}">
-                        <Label Text="💡"
-                               FontSize="36"
-                               HorizontalOptions="Center" />
-                        <Label Text="{Binding EmptyTitle}"
-                               HorizontalOptions="Center"
-                               HorizontalTextAlignment="Center"
-                               Style="{StaticResource CardTitle}" />
-                        <Label Text="{Binding EmptyDescription}"
-                               HorizontalOptions="Center"
-                               HorizontalTextAlignment="Center"
-                               Style="{StaticResource MutedLabel}" />
-                    </VerticalStackLayout>
-                </CollectionView.EmptyView>
-            </CollectionView>
-        </RefreshView>
+        <controls:VacancyListView Grid.Row="3"
+                                  ItemsSource="{Binding Recommendations}"
+                                  EnablePullToRefresh="True"
+                                  IsRefreshing="{Binding IsRefreshing}"
+                                  RefreshCommand="{Binding RefreshCommand}">
+            <!-- Заглушка за US-004 AC-2 -->
+            <VerticalStackLayout Padding="32"
+                                 Spacing="10"
+                                 IsVisible="{Binding IsEmpty}">
+                <Label Text="{x:Static res:Icons.Lightbulb}"
+                       FontFamily="Lucide"
+                       FontSize="34"
+                       TextColor="{DynamicResource TextMuted}"
+                       HorizontalOptions="Center" />
+                <Label Text="{Binding EmptyTitle}"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       Style="{StaticResource CardTitle}" />
+                <Label Text="{Binding EmptyDescription}"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       Style="{StaticResource MutedLabel}" />
+            </VerticalStackLayout>
+        </controls:VacancyListView>
     </Grid>
 </ContentPage>

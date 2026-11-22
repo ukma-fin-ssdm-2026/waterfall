@@ -5,7 +5,7 @@ using Waterfall.Client.ViewModels;
 
 namespace waterfall.UI.Views;
 
-public partial class AIConsultantPage : ContentPage
+public partial class AIConsultantPage : ContentPage, IHostedPage
 {
     private readonly AIConsultantViewModel _viewModel;
 
@@ -30,6 +30,8 @@ public partial class AIConsultantPage : ContentPage
         object last = _viewModel.Messages[^1];
         Dispatcher.Dispatch(() => MessagesView.ScrollTo(last, position: ScrollToPosition.Start, animate: true));
     }
+
+    public void OnHostDeactivated() => _viewModel.CancelActiveStream();
 
     /// <summary>
     /// Вихід зі вкладки зупиняє незавершений SSE-потік: відповідь, яку ніхто не бачить, не варто тримати.

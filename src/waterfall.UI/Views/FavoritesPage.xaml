@@ -3,15 +3,28 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
              xmlns:controls="clr-namespace:waterfall.UI.Controls"
+             xmlns:res="clr-namespace:waterfall.UI.Resources"
              x:Class="waterfall.UI.Views.FavoritesPage"
              x:DataType="vm:FavoritesViewModel"
              Title="Обране"
-             BackgroundColor="{StaticResource DarkBg2}">
+             BackgroundColor="{DynamicResource DarkBg2}">
 
-    <Grid RowDefinitions="Auto,Auto,*">
+    <Grid RowDefinitions="Auto,Auto,Auto,*">
+
+        <!-- Phone Header -->
+        <Grid Grid.Row="0"
+              IsVisible="{OnIdiom Phone=True, Default=False}"
+              Padding="14,10,12,6">
+            <Label Text="Обране"
+                   FontFamily="OpenSansSemibold"
+                   FontSize="20"
+                   TextColor="{DynamicResource White}"
+                   VerticalOptions="Center" />
+        </Grid>
 
         <!-- Банер помилки -->
-        <Border IsVisible="{Binding HasError}"
+        <Border Grid.Row="1"
+                IsVisible="{Binding HasError}"
                 Style="{StaticResource ErrorBanner}">
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
                 <Label Text="{Binding ErrorMessage}"
@@ -25,7 +38,7 @@
         </Border>
 
         <!-- Підсумок збережених вакансій та спіннер -->
-        <Grid Grid.Row="1" Padding="16,8" ColumnDefinitions="*,Auto">
+        <Grid Grid.Row="2" Padding="14,6" ColumnDefinitions="*,Auto">
             <Label Text="{Binding TotalText}"
                    IsVisible="{Binding ShowTotal}"
                    Style="{StaticResource MutedLabel}"
@@ -38,35 +51,27 @@
         </Grid>
 
         <!-- Список збережених вакансій -->
-        <RefreshView Grid.Row="2"
-                     IsRefreshing="{Binding IsRefreshing}"
-                     Command="{Binding RefreshCommand}">
-            <CollectionView ItemsSource="{Binding Vacancies}"
-                            SelectionMode="None">
-
-                <CollectionView.ItemTemplate>
-                    <DataTemplate x:DataType="vm:VacancyItemViewModel">
-                        <controls:VacancyCard />
-                    </DataTemplate>
-                </CollectionView.ItemTemplate>
-
-                <CollectionView.EmptyView>
-                    <VerticalStackLayout Padding="32"
-                                         Spacing="10"
-                                         IsVisible="{Binding IsEmpty}">
-                        <Label Text="⭐"
-                               FontSize="36"
-                               HorizontalOptions="Center" />
-                        <Label Text="Тут поки порожньо"
-                               HorizontalOptions="Center"
-                               Style="{StaticResource CardTitle}" />
-                        <Label Text="Зберігайте вакансії кнопкою «☆ Зберегти» у каталозі, щоб вони з'явилися тут"
-                               HorizontalOptions="Center"
-                               HorizontalTextAlignment="Center"
-                               Style="{StaticResource MutedLabel}" />
-                    </VerticalStackLayout>
-                </CollectionView.EmptyView>
-            </CollectionView>
-        </RefreshView>
+        <controls:VacancyListView Grid.Row="3"
+                                  ItemsSource="{Binding Vacancies}"
+                                  EnablePullToRefresh="True"
+                                  IsRefreshing="{Binding IsRefreshing}"
+                                  RefreshCommand="{Binding RefreshCommand}">
+            <VerticalStackLayout Padding="32"
+                                 Spacing="10"
+                                 IsVisible="{Binding IsEmpty}">
+                <Label Text="{x:Static res:Icons.Heart}"
+                       FontFamily="Lucide"
+                       FontSize="34"
+                       TextColor="{DynamicResource TextMuted}"
+                       HorizontalOptions="Center" />
+                <Label Text="Тут поки порожньо"
+                       HorizontalOptions="Center"
+                       Style="{StaticResource CardTitle}" />
+                <Label Text="Зберігайте цікаві вакансії кнопкою серця у каталозі, щоб вони з'явилися тут"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center"
+                       Style="{StaticResource MutedLabel}" />
+            </VerticalStackLayout>
+        </controls:VacancyListView>
     </Grid>
 </ContentPage>
