@@ -145,7 +145,9 @@ public class VacancyService : IVacancyService
         bool isSaved = userId is null
             ? false
             : await _savedVacancyRepository.ExistsForVacancyAsync(id, userId.Value, ct);
-        VacancyDto dto = MapToDto(entity, isSaved);
+        bool isViewed = userId is not null && _vacancyViewRepository is not null
+            && (await _vacancyViewRepository.GetViewedVacancyIdsAsync([id], userId.Value, ct)).Contains(id);
+        VacancyDto dto = MapToDto(entity, isSaved) with { IsViewed = isViewed };
 
         if (userId is null)
         {

@@ -16,6 +16,7 @@ using System.Text.RegularExpressions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Waterfall.Client.Collections;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SiteSearch;
@@ -48,6 +49,7 @@ public partial class CatalogViewModel : ObservableObject
 
     private CancellationTokenSource? _debounceCts;
     private CancellationTokenSource? _siteSearchCts;
+    private CancellationTokenSource? _distancePrefetchCts;
 
     // Останній застосований текст рядка пошуку: той самий запит (наприклад, з доданим пробілом) не записуємо в історію двічі
     private string? _appliedQuery;
@@ -58,6 +60,7 @@ public partial class CatalogViewModel : ObservableObject
     // Вакансії, переглянуті в цьому сеансі (сервер позначає IsViewed лише на момент пошуку)
     private readonly HashSet<Guid> _viewedIds = [];
     private bool _isLocalFilterActive;
+    private int _fetchGeneration;
     private bool _isSyncingSort;
     private bool _hasExplicitSiteSelection;
     private bool _isSyncingPlatformFlags;
@@ -90,6 +93,7 @@ public partial class CatalogViewModel : ObservableObject
         _localVacancyStore = localVacancyStore;
         _offlineCollector = offlineCollector;
         _fileDialog = fileDialog;
+        CanTrackViews = tokenStore is null;
 
         // Зміна «Обраного» з іншої вкладки: оновлюємо картку на місці, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
@@ -100,8 +104,36 @@ public partial class CatalogViewModel : ObservableObject
             }
         });
 
-        // Перегляд вакансії в картці: запам'ятовуємо для фільтра «Приховати переглянуті» (сам список одразу не змінюємо)
-        messenger.Register<CatalogViewModel, VacancyViewedMessage>(this, static (vm, message) => vm._viewedIds.Add(message.VacancyId));
+        // Перегляд вакансії в картці (ручний перемикач або відкриття): синхронізуємо стан і фільтр «Без переглянутих».
+        messenger.Register<CatalogViewModel, VacancyViewedMessage>(this, static (vm, message) =>
+        {
+            if (message.IsViewed)
+            {
+                vm._viewedIds.Add(message.VacancyId);
+            }
+            else
+            {
+                vm._viewedIds.Remove(message.VacancyId);
+            }
+
+            for (int i = 0; i < vm._loadedDtos.Count; i++)
+            {
+                if (vm._loadedDtos[i].Id == message.VacancyId)
+                {
+                    vm._loadedDtos[i] = vm._loadedDtos[i] with { IsViewed = message.IsViewed };
+                }
+            }
+
+            foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
+            {
+                item.IsViewed = message.IsViewed;
+            }
+
+            if (vm.UnifiedHideViewed && message.IsViewed && message.Explicit)
+            {
+                _ = vm.DismissViewedItemAsync(message.VacancyId);
+            }
+        });
 
         // Зміна стану авторизації користувача
         messenger.Register<CatalogViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
@@ -110,6 +142,11 @@ public partial class CatalogViewModel : ObservableObject
             if (!message.IsLoggedIn)
             {
                 vm.IsGuestBannerDismissed = false;
+                vm.ApplyCanTrackViews(false);
+            }
+            else if (vm._tokenStore is not null)
+            {
+                _ = vm.RefreshAuthStatusAsync(CancellationToken.None);
             }
         });
 
@@ -124,7 +161,8 @@ public partial class CatalogViewModel : ObservableObject
         });
     }
 
-    public ObservableCollection<VacancyItemViewModel> Vacancies { get; } = [];
+    private readonly BulkObservableCollection<VacancyItemViewModel> _vacancies = new();
+    public ObservableCollection<VacancyItemViewModel> Vacancies => _vacancies;
 
     /// <summary>
     /// Текст пошукового рядка; після паузи <see cref="SearchDebounce"/> звужує знайдені вакансії.
@@ -197,6 +235,12 @@ public partial class CatalogViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Чи дозволено відстежувати та фільтрувати переглянуті вакансії (лише JobSeeker за data-model.md §6).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanTrackViews { get; set; } = true;
+
+    /// <summary>
     /// Оновлює статус авторизації на основі збереженого токена.
     /// </summary>
     public async Task RefreshAuthStatusAsync(CancellationToken ct = default)
@@ -207,11 +251,36 @@ public partial class CatalogViewModel : ObservableObject
             {
                 string? token = await _tokenStore.GetTokenAsync(ct);
                 Waterfall.Client.Models.Auth.AuthSession? session = token is null ? null : Waterfall.Client.Models.Auth.AuthSession.FromToken(token);
-                IsUserLoggedIn = session is not null && !session.IsExpired(_time.GetUtcNow());
+                bool loggedIn = session is not null && !session.IsExpired(_time.GetUtcNow());
+                IsUserLoggedIn = loggedIn;
+                ApplyCanTrackViews(loggedIn && session!.Role == Waterfall.Client.Models.Auth.UserRole.JobSeeker);
             }
             catch
             {
                 IsUserLoggedIn = false;
+                ApplyCanTrackViews(false);
+            }
+        }
+    }
+
+    private void ApplyCanTrackViews(bool canTrack)
+    {
+        CanTrackViews = canTrack;
+        if (!canTrack)
+        {
+            _viewedIds.Clear();
+            if (UnifiedHideViewed)
+            {
+                UnifiedHideViewed = false;
+            }
+        }
+
+        foreach (VacancyItemViewModel item in Vacancies)
+        {
+            item.CanMarkViewed = canTrack;
+            if (!canTrack)
+            {
+                item.IsViewed = false;
             }
         }
     }
@@ -239,10 +308,11 @@ public partial class CatalogViewModel : ObservableObject
     /// <summary>Показувати блок локальних фільтрів знайдених вакансій.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(LocalFilterPanelToggleText))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool IsLocalFilterPanelVisible { get; set; }
 
-    public string ParsePanelToggleText => IsParsePanelVisible ? "🌐 Парсинг сайтів ▲" : "🌐 Парсинг сайтів ▼";
-    public string LocalFilterPanelToggleText => IsLocalFilterPanelVisible ? "⚡ Фільтри списку ▲" : "⚡ Фільтри списку ▼";
+    public string ParsePanelToggleText => IsParsePanelVisible ? "Парсинг сайтів ▲" : "Парсинг сайтів ▼";
+    public string LocalFilterPanelToggleText => IsLocalFilterPanelVisible ? "Фільтри списку ▲" : "Фільтри списку ▼";
 
     /// <summary>
     /// Обрана платформа у панелі фільтрів: "DOU", "WorkUa", "Djinni" або "RobotaUa".
@@ -280,6 +350,7 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesCount))]
     [NotifyPropertyChangedFor(nameof(FetchButtonText))]
+    [NotifyPropertyChangedFor(nameof(ParseSitesChipText))]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesSummary))]
     public partial bool IsDouParseEnabled { get; set; } = true;
 
@@ -287,6 +358,7 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesCount))]
     [NotifyPropertyChangedFor(nameof(FetchButtonText))]
+    [NotifyPropertyChangedFor(nameof(ParseSitesChipText))]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesSummary))]
     public partial bool IsWorkUaParseEnabled { get; set; }
 
@@ -294,6 +366,7 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesCount))]
     [NotifyPropertyChangedFor(nameof(FetchButtonText))]
+    [NotifyPropertyChangedFor(nameof(ParseSitesChipText))]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesSummary))]
     public partial bool IsDjinniParseEnabled { get; set; }
 
@@ -301,6 +374,7 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesCount))]
     [NotifyPropertyChangedFor(nameof(FetchButtonText))]
+    [NotifyPropertyChangedFor(nameof(ParseSitesChipText))]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesSummary))]
     public partial bool IsRobotaUaParseEnabled { get; set; }
 
@@ -311,12 +385,15 @@ public partial class CatalogViewModel : ObservableObject
         + (IsDjinniParseEnabled ? 1 : 0)
         + (IsRobotaUaParseEnabled ? 1 : 0);
 
+    /// <summary>Короткий текст чипа для відкриття панелі вибору сайтів.</summary>
+    public string ParseSitesChipText => $"Сайти ({SelectedParseSitesCount})";
+
     /// <summary>Текст головної кнопки запуску парсингу залежно від кількості обраних сайтів.</summary>
     public string FetchButtonText => SelectedParseSitesCount switch
     {
-        0 => "Спарсити (не обрано) 🌐",
-        1 => "Спарсити з сайту 🌐",
-        _ => $"Спарсити ({SelectedParseSitesCount} сайти) 🌐"
+        0 => "Спарсити (0)",
+        1 => "Спарсити",
+        _ => $"Спарсити ({SelectedParseSitesCount})"
     };
 
     /// <summary>Короткий перелік сайтів та їхньої глибини, що будуть спарсені при запуску.</summary>
@@ -325,13 +402,13 @@ public partial class CatalogViewModel : ObservableObject
         get
         {
             List<string> enabled = [];
-            if (IsDouParseEnabled) enabled.Add("🔵 DOU (25 найсвіжіших)");
-            if (IsWorkUaParseEnabled) enabled.Add($"🟠 Work.ua ({PagesOf(WorkUaPagesToParse)} стор., з {FromPageOf(WorkUaFromPage)})");
-            if (IsDjinniParseEnabled) enabled.Add($"🟣 Djinni ({PagesOf(DjinniPagesToParse)} стор., з {FromPageOf(DjinniFromPage)})");
-            if (IsRobotaUaParseEnabled) enabled.Add($"🔴 Robota.ua ({PagesOf(RobotaUaPagesToParse)} стор., з {FromPageOf(RobotaUaFromPage)})");
+            if (IsDouParseEnabled) enabled.Add("DOU (25 найсвіжіших)");
+            if (IsWorkUaParseEnabled) enabled.Add($"Work.ua ({PagesOf(WorkUaPagesToParse)} стор., з {FromPageOf(WorkUaFromPage)})");
+            if (IsDjinniParseEnabled) enabled.Add($"Djinni ({PagesOf(DjinniPagesToParse)} стор., з {FromPageOf(DjinniFromPage)})");
+            if (IsRobotaUaParseEnabled) enabled.Add($"Robota.ua ({PagesOf(RobotaUaPagesToParse)} стор., з {FromPageOf(RobotaUaFromPage)})");
 
             return enabled.Count == 0
-                ? "Жоден сайт не обрано — увімкніть галочкою хоча б один сайт для парсингу."
+                ? "Жоден сайт не обрано — увімкніть хоча б один сайт для парсингу."
                 : $"Буде спарсено ({enabled.Count}): {string.Join(" · ", enabled)}";
         }
     }
@@ -473,17 +550,17 @@ public partial class CatalogViewModel : ObservableObject
     public string FilterToggleText => IsFilterPanelVisible ? "Сховати фільтри ▲" : "Фільтри платформ ⚙";
 
     // Стрічка DOU одна (25 найсвіжіших), тож кількості сторінок у неї немає
-    public string DouButtonText => $"🔵 DOU (25 найсвіжіших) {(IsDouPanelVisible ? "▲" : "▼")}";
-    public string WorkUaButtonText => $"🟠 Work.ua ({WorkUaPagesToParse} стор.) {(IsWorkUaPanelVisible ? "▲" : "▼")}";
-    public string DjinniButtonText => $"🟣 Djinni ({DjinniPagesToParse} стор.) {(IsDjinniPanelVisible ? "▲" : "▼")}";
-    public string RobotaUaButtonText => $"🔴 Robota.ua ({RobotaUaPagesToParse} стор.) {(IsRobotaUaPanelVisible ? "▲" : "▼")}";
+    public string DouButtonText => $"DOU (25 найсвіжіших) {(IsDouPanelVisible ? "▲" : "▼")}";
+    public string WorkUaButtonText => $"Work.ua ({WorkUaPagesToParse} стор.) {(IsWorkUaPanelVisible ? "▲" : "▼")}";
+    public string DjinniButtonText => $"Djinni ({DjinniPagesToParse} стор.) {(IsDjinniPanelVisible ? "▲" : "▼")}";
+    public string RobotaUaButtonText => $"Robota.ua ({RobotaUaPagesToParse} стор.) {(IsRobotaUaPanelVisible ? "▲" : "▼")}";
 
     public string ActivePlatformTitle => SelectedPlatform switch
     {
-        "DOU" => "🔵 Фільтри платформи DOU (jobs.dou.ua)",
-        "WorkUa" => "🟠 Фільтри платформи Work.ua (work.ua)",
-        "Djinni" => "🟣 Фільтри платформи Djinni (djinni.co)",
-        "RobotaUa" => "🔴 Фільтри платформи Robota.ua (robota.ua)",
+        "DOU" => "Фільтри DOU (jobs.dou.ua)",
+        "WorkUa" => "Фільтри Work.ua (work.ua)",
+        "Djinni" => "Фільтри Djinni (djinni.co)",
+        "RobotaUa" => "Фільтри Robota.ua (robota.ua)",
         _ => "Фільтри платформи"
     };
 
@@ -720,8 +797,8 @@ public partial class CatalogViewModel : ObservableObject
 
     /// <summary>Попередження під перемикачем: скільки чекати і що втрачаємо без сторінок вакансій.</summary>
     public string WorkUaJobPagesHint => WorkUaOpenJobPages
-        ? $"⏱ Повний опис і навички, але пошук довгий: близько {PagesOf(WorkUaPagesToParse)} хв (≈1 хв на сторінку з 14 вакансій)."
-        : "⚡ Швидко, за секунди, але опис — 1–2 рядки з картки, без навичок, досвіду й графіка: вайт- і бан-лист бачать менше.";
+        ? $"Повний опис і навички, але пошук довгий: близько {PagesOf(WorkUaPagesToParse)} хв (≈1 хв на сторінку з 14 вакансій)."
+        : "Швидко, опис — 1–2 рядки без навичок, досвіду й графіка.";
 
     [ObservableProperty]
     public partial string WorkUaSearchQuery { get; set; } = string.Empty;
@@ -1219,11 +1296,32 @@ public partial class CatalogViewModel : ObservableObject
     ];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCustomSortActive))]
     public partial string SelectedSortOption { get; set; } = "За датою (спочатку нові)";
+
+    public bool IsCustomSortActive => !string.Equals(SelectedSortOption, SortOptions[0], StringComparison.Ordinal);
+
+    public bool HasActiveLocalFilters =>
+        SelectedSourceFilter != SourceFilterOptions[0]
+        || SelectedFormat != FormatOptions[0]
+        || WhiteListWords.Count > 0
+        || BanListWords.Count > 0
+        || !string.IsNullOrWhiteSpace(UnifiedCompanyFilter)
+        || !string.IsNullOrWhiteSpace(MinSalaryFilter)
+        || !string.IsNullOrWhiteSpace(MaxSalaryFilter)
+        || UnifiedOnlyWithSalary
+        || UnifiedOnlyActive
+        || UnifiedHideViewed
+        || UnifiedIncludeNoSalary
+        || UnifiedTitleOnly;
+
+    public bool IsFilterHighlightActive => IsLocalFilterPanelVisible || HasActiveLocalFilters;
 
     public IReadOnlyList<string> SourceFilterOptions { get; } = ["Усі платформи", "DOU", "Work.ua", "Djinni", "Robota.ua"];
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SelectedSourceFilter { get; set; } = "Усі платформи";
 
     public IReadOnlyList<string> SalaryCurrencyOptions { get; } = ["$ USD", "₴ ГРН"];
@@ -1232,23 +1330,35 @@ public partial class CatalogViewModel : ObservableObject
     public partial string SelectedSalaryCurrency { get; set; } = "$ USD";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string UnifiedCompanyFilter { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool UnifiedTitleOnly { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool UnifiedOnlyWithSalary { get; set; }
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool UnifiedOnlyActive { get; set; }
 
     /// <summary>Сховати вакансії, які користувач уже переглядав (розгортав чи відкривав на сайті).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool UnifiedHideViewed { get; set; }
 
     /// <summary>Із межами «Зарплата від/до» лишати й вакансії без вказаної зарплати.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial bool UnifiedIncludeNoSalary { get; set; }
 
     /// <summary>Вайт-лист: true — вакансія має містити всі слова, false — хоча б одне.</summary>
@@ -1266,15 +1376,21 @@ public partial class CatalogViewModel : ObservableObject
     public partial string SkillFilter { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string SelectedFormat { get; set; } = "Усі формати";
 
     [ObservableProperty]
     public partial string SelectedCategory { get; set; } = "Усі категорії";
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string MinSalaryFilter { get; set; } = string.Empty;
 
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasActiveLocalFilters))]
+    [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
     public partial string MaxSalaryFilter { get; set; } = string.Empty;
 
     public IReadOnlyList<string> FormatOptions { get; } = ["Усі формати", "Віддалено", "Офіс", "Гібрид"];
@@ -1509,6 +1625,8 @@ public partial class CatalogViewModel : ObservableObject
         OnPropertyChanged(nameof(IsWhiteListEmpty));
         OnPropertyChanged(nameof(HasBanListWords));
         OnPropertyChanged(nameof(IsBanListEmpty));
+        OnPropertyChanged(nameof(HasActiveLocalFilters));
+        OnPropertyChanged(nameof(IsFilterHighlightActive));
     }
 
     partial void OnSelectedSortOptionChanged(string value)
@@ -1665,13 +1783,13 @@ public partial class CatalogViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StaleCacheText = $"⚠️ Помилка формування запиту: {ex.Message}";
+            StaleCacheText = $"Помилка запиту: {ex.Message}";
             return;
         }
 
         if (requests.Count == 0)
         {
-            StaleCacheText = "🌐 Оберіть сайт: DOU, Work.ua, Djinni або Robota.ua.";
+            StaleCacheText = "Оберіть сайт: DOU, Work.ua, Djinni або Robota.ua.";
             return;
         }
 
@@ -1705,8 +1823,8 @@ public partial class CatalogViewModel : ObservableObject
             }
 
             StaleCacheText = ex.StatusCode == System.Net.HttpStatusCode.Unauthorized
-                ? "🔒 Увійдіть в обліковий запис, щоб шукати вакансії на сайтах."
-                : $"⚠️ {ex.Message}";
+                ? "Увійдіть в обліковий запис для парсингу."
+                : ex.Message;
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
@@ -1714,7 +1832,7 @@ public partial class CatalogViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StaleCacheText = $"⚠️ Помилка парсингу: {ex.Message}";
+            StaleCacheText = $"Помилка парсингу: {ex.Message}";
         }
         finally
         {
@@ -1731,7 +1849,7 @@ public partial class CatalogViewModel : ObservableObject
         string site = SiteDisplayName(request.Source);
         // Сервер відкриває кожну вакансію: Robota.ua завжди, Work.ua — якщо користувач не обрав швидкий пошук
         bool slow = request.Source == JobSource.RobotaUa || request.Source == JobSource.WorkUa && !request.ListOnly;
-        SiteSearchStatusText = $"🌐 {site}: надсилаємо запит…";
+        SiteSearchStatusText = $"{site}: надсилаємо запит…";
 
         SiteSearchStatusDto status = await _gateway.StartSiteSearchAsync(request, ct);
         while (status.IsInProgress)
@@ -1747,7 +1865,7 @@ public partial class CatalogViewModel : ObservableObject
             status = await _gateway.GetSiteSearchAsync(status.Id, ct);
         }
 
-        ShowSiteSearchResult(site, status);
+        await ShowSiteSearchResultAsync(site, status);
 
         if (status.State == SiteSearchStatusDto.Completed)
         {
@@ -1762,7 +1880,7 @@ public partial class CatalogViewModel : ObservableObject
     private async Task RunMultiSiteSearchAsync(List<SiteSearchRequest> requests, CancellationToken ct)
     {
         string names = string.Join(", ", requests.Select(r => SiteDisplayName(r.Source)));
-        SiteSearchStatusText = $"🌐 {names}: запускаємо одночасний парсинг {requests.Count} сайтів…";
+        SiteSearchStatusText = $"{names}: парсинг {requests.Count} сайтів…";
 
         MultiSiteSearchStatusDto status = await _gateway.StartMultiSiteSearchAsync(
             new MultiSiteSearchRequest { Requests = requests }, ct);
@@ -1779,7 +1897,7 @@ public partial class CatalogViewModel : ObservableObject
             status = await _gateway.GetMultiSiteSearchAsync(status.Id, ct);
         }
 
-        ShowMultiSiteSearchResult(status);
+        await ShowMultiSiteSearchResultAsync(status);
 
         if (status.State == SiteSearchStatusDto.Completed)
         {
@@ -1800,19 +1918,19 @@ public partial class CatalogViewModel : ObservableObject
 
         try
         {
-            SiteSearchStatusText = "📡 Сервер недоступний: збираємо вакансії локально (офлайн)…";
+            SiteSearchStatusText = "Офлайн-збір вакансій…";
             IReadOnlyList<VacancyDto> offlineFound = await _offlineCollector.CollectAsync(requests, ct);
             List<VacancyDto> foundList = offlineFound.ToList();
 
-            ApplyFetchedVacancies(foundList);
+            await ApplyFetchedVacanciesAsync(foundList);
             await PersistFetchedLocallyAsync(foundList, isSynced: false);
 
             string unsupportedNote = requests.Any(r => !_offlineCollector.Supports(r.Source))
                 ? " (Work.ua / Robota.ua потребують браузер сервера)"
                 : string.Empty;
             StaleCacheText = foundList.Count == 0
-                ? $"📡 Сервер недоступний: локально нічого не знайдено{unsupportedNote}."
-                : $"📡 Сервер недоступний: зібрано {foundList.Count} вакансій офлайн у локальну БД{unsupportedNote}. Вони синхронізуються при підключенні до сервера.";
+                ? $"Офлайн: нічого не знайдено{unsupportedNote}."
+                : $"Офлайн-збір: зібрано {foundList.Count} вакансій{unsupportedNote}.";
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -1855,11 +1973,10 @@ public partial class CatalogViewModel : ObservableObject
     private void ShowSiteSearchProgress(string site, bool slow, SiteSearchStatusDto status)
     {
         SiteSearchProgress = status.Progress;
-        // Сервер читає браузером по одній вакансії — попереджаємо, що це довше
-        string note = slow ? " (кожну вакансію відкриваємо окремо, це до кількох хвилин)" : string.Empty;
+        string note = slow ? " (повний збір, може тривати кілька хвилин)" : string.Empty;
         SiteSearchStatusText = status.State == SiteSearchStatusDto.Queued
-            ? $"🌐 {site}: у черзі — сайт зараз обробляє інший пошук…"
-            : $"🌐 {site}: сторінка {status.PagesDone} з {status.PagesTotal}, знайдено {status.Found}{note}";
+            ? $"{site}: у черзі…"
+            : $"{site}: сторінка {status.PagesDone} з {status.PagesTotal}, знайдено {status.Found}{note}";
     }
 
     private void ShowMultiSiteSearchProgress(MultiSiteSearchStatusDto status)
@@ -1876,72 +1993,105 @@ public partial class CatalogViewModel : ObservableObject
                 _ => $"{name}: {s.PagesDone}/{s.PagesTotal} ({s.Found})"
             };
         }));
-        SiteSearchStatusText = $"🌐 Парсинг ({status.Sites.Count} сайти): стор. {status.PagesDone}/{status.PagesTotal}, знайдено {status.Found} — {perSite}";
+        SiteSearchStatusText = $"Парсинг ({status.Sites.Count}): {status.PagesDone}/{status.PagesTotal}, знайдено {status.Found} — {perSite}";
     }
 
-    private void ShowSiteSearchResult(string site, SiteSearchStatusDto status)
+    private async Task ShowSiteSearchResultAsync(string site, SiteSearchStatusDto status)
     {
         SiteSearchProgress = 1;
         if (status.State != SiteSearchStatusDto.Completed)
         {
-            StaleCacheText = $"⚠️ {site}: {status.Message ?? "пошук не вдався. Спробуйте пізніше."}";
+            StaleCacheText = $"{site}: {status.Message ?? "пошук не вдався. Спробуйте пізніше."}";
             return;
         }
 
         List<VacancyDto> found = status.Vacancies ?? [];
-        ApplyFetchedVacancies(found);
+        await ApplyFetchedVacanciesAsync(found);
 
-        string cache = status.FromCache ? " (такий пошук уже виконувався протягом 3 годин, тож показано збережене)" : string.Empty;
+        string cache = status.FromCache ? " (кеш, протягом 3 годин)" : string.Empty;
         string shown = Vacancies.Count < found.Count ? $", за фільтрами списку показано {Vacancies.Count}" : string.Empty;
         StaleCacheText = found.Count == 0
-            ? $"🌐 {site}: {status.Message ?? "за цими фільтрами нічого не знайдено."}"
-            : $"🌐 {site}: знайдено {found.Count} вакансій{cache}{shown}. Фільтри нижче уточнюють список без нового пошуку.";
+            ? $"{site}: {status.Message ?? "нічого не знайдено."}"
+            : $"{site}: знайдено {found.Count} вакансій{cache}{shown}";
     }
 
-    private void ShowMultiSiteSearchResult(MultiSiteSearchStatusDto status)
+    private async Task ShowMultiSiteSearchResultAsync(MultiSiteSearchStatusDto status)
     {
         SiteSearchProgress = 1;
         if (status.State != SiteSearchStatusDto.Completed)
         {
-            StaleCacheText = $"⚠️ Багатосайтовий пошук: {status.Message ?? "пошук не вдався. Спробуйте пізніше."}";
+            StaleCacheText = $"Парсинг: {status.Message ?? "пошук не вдався. Спробуйте пізніше."}";
             return;
         }
 
         List<VacancyDto> found = status.Vacancies ?? [];
-        ApplyFetchedVacancies(found);
+        await ApplyFetchedVacanciesAsync(found);
 
         string breakdown = string.Join(", ", status.Sites.Select(s =>
             s.State == SiteSearchStatusDto.Failed
                 ? $"{SiteDisplayName(s.Source)}: помилка"
                 : $"{SiteDisplayName(s.Source)}: {s.Found}"));
-        string cache = status.AllFromCache ? " (усе з 3-годинного кешу)" : string.Empty;
+        string cache = status.AllFromCache ? " (з кешу)" : string.Empty;
         string shown = Vacancies.Count < found.Count ? $", за фільтрами списку показано {Vacancies.Count}" : string.Empty;
-        string warning = !string.IsNullOrWhiteSpace(status.Message) && found.Count > 0 ? $" ⚠️ {status.Message}" : string.Empty;
+        string warning = !string.IsNullOrWhiteSpace(status.Message) && found.Count > 0 ? $" · {status.Message}" : string.Empty;
 
         StaleCacheText = found.Count == 0
-            ? $"🌐 Обрані сайти ({breakdown}): {status.Message ?? "нічого не знайдено."}"
-            : $"🌐 Спарсено {status.Sites.Count} сайти ({breakdown}): усього {found.Count} вакансій{cache}{shown}.{warning}";
+            ? $"Обрані сайти ({breakdown}): {status.Message ?? "нічого не знайдено."}"
+            : $"Спарсено {status.Sites.Count} сайти ({breakdown}): {found.Count} вакансій{cache}{shown}{warning}";
     }
 
-    private void ApplyFetchedVacancies(List<VacancyDto> found)
+    private async Task ApplyFetchedVacanciesAsync(List<VacancyDto> found)
     {
-        Vacancies.Clear();
         _loadedDtos.Clear();
-        foreach (VacancyDto vacancy in found)
+        _loadedDtos.AddRange(found);
+
+        int generation = ++_fetchGeneration;
+
+        // Локальна фільтрація/сортування лишаються на UI-потоці (дешеві), а створення карток
+        // (по одному VM на вакансію) виконується поза UI-потоком.
+        List<VacancyDto> toCreate = _isLocalFilterActive || HasActiveLocalFilterOrSort()
+            ? BuildLocalFilteredDtos()
+            : found;
+
+        // Явна відмова від токена: Task.Run з токеном лише не дає стартувати, зупинити вже
+        // почате створення карток він не може; застарілий результат відсікає generation-guard нижче.
+        List<VacancyItemViewModel> cards = await Task.Run(() => CreateCards(toCreate), CancellationToken.None);
+
+        if (generation != _fetchGeneration)
         {
-            _loadedDtos.Add(vacancy);
-            Vacancies.Add(CreateVacancyItemViewModel(vacancy));
+            // Новіший результат пошуку вже замінив список — застарілий тихо відкидаємо.
+            return;
         }
 
         ErrorMessage = null;
         HasLoaded = true;
-        TotalCount = found.Count;
-        if (_isLocalFilterActive || HasActiveLocalFilterOrSort())
+        ApplyCardsToUi(cards);
+    }
+
+    private List<VacancyItemViewModel> CreateCards(List<VacancyDto> dtos)
+    {
+        List<VacancyItemViewModel> cards = new(dtos.Count);
+        foreach (VacancyDto dto in dtos)
         {
-            ApplyLocalFilterAndSort();
+            cards.Add(CreateVacancyItemViewModel(dto));
         }
 
+        return cards;
+    }
+
+    private void ApplyCardsToUi(List<VacancyItemViewModel> cards)
+    {
+        _vacancies.ReplaceAll(cards);
+
+        _distancePrefetchCts?.Cancel();
+        CancellationTokenSource prefetchCts = new();
+        _distancePrefetchCts = prefetchCts;
+        _ = VacancyFilterEngine.PrefetchDistancesAsync(cards, _distanceService, prefetchCts.Token);
+
+        TotalCount = cards.Count;
         OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(HasActiveLocalFilters));
+        OnPropertyChanged(nameof(IsFilterHighlightActive));
     }
 
     /// <summary>З якої сторінки списку почати пошук на активному сайті (синхронізується з індивідуальною сторінкою платформи).</summary>
@@ -2541,7 +2691,7 @@ public partial class CatalogViewModel : ObservableObject
             List<VacancyDto> toExport = Vacancies.Select(v => v.Vacancy).ToList();
             string json = JsonSerializer.Serialize(toExport, ClientJsonContext.Default.ListVacancyDto);
             await File.WriteAllTextAsync(path, json, CancellationToken.None);
-            StaleCacheText = $"📥 Експорт списку ({toExport.Count} вакансій) виконано успішно у файл {path}";
+            StaleCacheText = $"Експортовано {toExport.Count} вакансій у {path}";
         }
         catch (Exception ex)
         {
@@ -2572,7 +2722,7 @@ public partial class CatalogViewModel : ObservableObject
         {
             if (!File.Exists(path))
             {
-                StaleCacheText = $"📤 Файл імпорту не знайдено ({path}).";
+                StaleCacheText = $"Файл не знайдено ({path}).";
                 return;
             }
 
@@ -2580,13 +2730,13 @@ public partial class CatalogViewModel : ObservableObject
             List<VacancyDto>? imported = JsonSerializer.Deserialize(json, ClientJsonContext.Default.ListVacancyDto);
             if (imported is null || imported.Count == 0)
             {
-                StaleCacheText = "📤 У файлі імпорту немає вакансій.";
+                StaleCacheText = "У файлі немає вакансій.";
                 return;
             }
 
-            ApplyFetchedVacancies(imported);
+            await ApplyFetchedVacanciesAsync(imported);
             await PersistFetchedLocallyAsync(imported, isSynced: false);
-            StaleCacheText = $"📤 Імпорт вакансій: завантажено {imported.Count} вакансій із {path} (позначено до синхронізації з сервером).";
+            StaleCacheText = $"Імпортовано {imported.Count} вакансій із {path}";
         }
         catch (Exception ex)
         {
@@ -2690,7 +2840,8 @@ public partial class CatalogViewModel : ObservableObject
             _urlLauncher,
             _distanceService,
             onDistanceCalculated: (id, dist) => _distanceCache[id] = dist,
-            initialDistanceKm: cachedKm);
+            initialDistanceKm: cachedKm,
+            canMarkViewed: CanTrackViews);
     }
 
     private async Task ExecuteLocalFilterAndSortAsync(bool updateBanner)
@@ -2701,7 +2852,7 @@ public partial class CatalogViewModel : ObservableObject
         {
             if (updateBanner)
             {
-                StaleCacheText = "🌐 Спочатку спарсіть вакансії: оберіть сайт і фільтри в блоці 1 та натисніть «Спарсити з сайту».";
+                StaleCacheText = "Спочатку спарсіть вакансії.";
             }
 
             return;
@@ -2723,12 +2874,12 @@ public partial class CatalogViewModel : ObservableObject
 
         if (updateBanner)
         {
-            string whiteInfo = WhiteListWords.Count > 0 ? $", вайт-лист=[{string.Join(", ", WhiteListWords)}]" : string.Empty;
-            string banInfo = BanListWords.Count > 0 ? $", бан-слова=[{string.Join(", ", BanListWords)}]" : string.Empty;
+            string whiteInfo = WhiteListWords.Count > 0 ? $", вайт-лист: {string.Join(", ", WhiteListWords)}" : string.Empty;
+            string banInfo = BanListWords.Count > 0 ? $", бан-слова: {string.Join(", ", BanListWords)}" : string.Empty;
             string geoWarning = IsDistanceSort(SelectedSortOption) && string.IsNullOrWhiteSpace(_distanceService?.UserAddress)
-                ? " ⚠️ Вкажіть адресу в профілі для розрахунку відстані"
+                ? " · Вкажіть адресу в профілі для розрахунку відстані"
                 : string.Empty;
-            StaleCacheText = $"⚡ Відфільтровано знайдені вакансії: {TotalCount} із {_loadedDtos.Count} (сортування: {SelectedSortOption}{whiteInfo}{banInfo}){geoWarning}";
+            StaleCacheText = $"Показано {TotalCount} із {_loadedDtos.Count} ({SelectedSortOption}{whiteInfo}{banInfo}){geoWarning}";
         }
     }
 
@@ -2750,25 +2901,29 @@ public partial class CatalogViewModel : ObservableObject
 
     private void ApplyLocalFilterAndSort()
     {
+        ApplyCardsToUi(CreateCards(BuildLocalFilteredDtos()));
+    }
+
+    private List<VacancyDto> BuildLocalFilteredDtos()
+    {
         bool titleOnly = UnifiedTitleOnly
             || (SelectedPlatform == "WorkUa" && WorkUaTitleOnly)
             || (SelectedPlatform == "Djinni" && DjinniSelectedSearchType.Contains("title-only", StringComparison.OrdinalIgnoreCase));
 
         IEnumerable<VacancyDto> query = _loadedDtos.Where(v => MatchesLocalFilters(v, titleOnly));
-        var sorted = VacancyFilterEngine.SortVacancies(query, SelectedSortOption, GetDistanceKm).ToList();
+        List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(query, SelectedSortOption, GetDistanceKm).ToList();
 
-        var savedStates = Vacancies.ToDictionary(v => v.Id, v => v.IsSaved);
-        Vacancies.Clear();
-        foreach (VacancyDto dto in sorted)
+        Dictionary<Guid, bool> savedStates = Vacancies.ToDictionary(v => v.Id, v => v.IsSaved);
+        for (int i = 0; i < sorted.Count; i++)
         {
-            VacancyDto adjusted = savedStates.TryGetValue(dto.Id, out bool isSaved) && isSaved != dto.IsSaved
-                ? dto with { IsSaved = isSaved }
-                : dto;
-            Vacancies.Add(CreateVacancyItemViewModel(adjusted));
+            VacancyDto dto = sorted[i];
+            if (savedStates.TryGetValue(dto.Id, out bool isSaved) && isSaved != dto.IsSaved)
+            {
+                sorted[i] = dto with { IsSaved = isSaved };
+            }
         }
 
-        TotalCount = Vacancies.Count;
-        OnPropertyChanged(nameof(IsEmpty));
+        return sorted;
     }
 
     private bool MatchesLocalFilters(VacancyDto v, bool titleOnly)
@@ -2890,6 +3045,27 @@ public partial class CatalogViewModel : ObservableObject
         }
 
         return null;
+    }
+
+    private async Task DismissViewedItemAsync(Guid vacancyId)
+    {
+        VacancyItemViewModel? item = Vacancies.FirstOrDefault(v => v.Id == vacancyId);
+        if (item is null)
+        {
+            return;
+        }
+
+        item.IsDismissing = true;
+        await Task.Delay(300);
+
+        if (UnifiedHideViewed && item.IsViewed && Vacancies.Remove(item))
+        {
+            TotalCount = Math.Max(0, TotalCount - 1);
+        }
+        else
+        {
+            item.IsDismissing = false;
+        }
     }
 
     private static string? Normalize(string? search) => string.IsNullOrWhiteSpace(search) ? null : search.Trim();

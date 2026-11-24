@@ -21,4 +21,7 @@ public interface IVacancyViewRepository
 
     /// <summary>Які з <paramref name="vacancyIds"/> користувач уже переглядав (будь-коли) — для фільтра «Приховати переглянуті».</summary>
     Task<HashSet<Guid>> GetViewedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, Guid userId, CancellationToken ct = default);
+
+    /// <summary>Зняти позначку «переглянуто» для вакансії користувача (видаляє його записи переглядів цієї вакансії).</summary>
+    Task<bool> DeleteForUserAsync(Guid userId, Guid vacancyId, CancellationToken ct = default);
 }

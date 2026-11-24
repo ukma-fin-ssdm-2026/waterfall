@@ -500,6 +500,40 @@ public sealed class DatabaseViewModelTests : IDisposable
         Assert.False(VacancyFilterEngine.TryAddWords("   ", []));
     }
 
+    [Fact]
+    public void SyncButtonText_LastSyncedMenuText_SortAndFilterFlags_ReflectState()
+    {
+        DatabaseViewModel vm = new(_gateway, _messenger, _time);
+
+        Assert.Equal("Синхронізувати", vm.SyncButtonText);
+        Assert.Equal("Ще не синхронізовано", vm.LastSyncedMenuText);
+        Assert.False(vm.IsCustomSortActive);
+        Assert.False(vm.HasActiveFilters);
+        Assert.False(vm.IsFilterHighlightActive);
+
+        vm.UnsyncedCount = 3;
+        Assert.Equal("Синхронізувати (3)", vm.SyncButtonText);
+
+        DateTimeOffset syncedAt = new(2026, 11, 21, 14, 5, 0, TimeSpan.Zero);
+        vm.LastSyncedAt = syncedAt;
+        Assert.Equal($"Оновлено о {syncedAt.ToLocalTime():HH:mm}", vm.LastSyncedMenuText);
+
+        vm.SelectedSortOption = vm.SortOptions[1];
+        Assert.True(vm.IsCustomSortActive);
+
+        vm.OnlyWithSalary = true;
+        Assert.True(vm.HasActiveFilters);
+        Assert.True(vm.IsFilterHighlightActive);
+
+        vm.OnlyWithSalary = false;
+        vm.ToggleDouFilterCommand.Execute(null);
+        Assert.True(vm.HasActiveFilters);
+
+        vm.ResetFilters();
+        Assert.False(vm.HasActiveFilters);
+        Assert.False(vm.IsCustomSortActive);
+    }
+
     private sealed class StubDistanceService : IDistanceCalculatorService
     {
         public string? UserAddress { get; set; }

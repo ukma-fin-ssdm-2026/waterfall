@@ -21,6 +21,48 @@ namespace Waterfall.Client.Services;
 public class GeoDistanceService : IDistanceCalculatorService
 {
     private static readonly ConcurrentDictionary<string, (double Lat, double Lon)> GeoCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Ознаки вуличної адреси (вулиця, проспект, площа, будинок тощо).
+    /// Якщо вони присутні — адреса вважається вуличною, а не міською.
+    /// </summary>
+    private static readonly string[] StreetMarkers =
+    {
+        "вул", "просп", "пр-т", "пр.", "пл.", "площ", "б-р", "бульв", "пров", "набережн",
+        "шосе", "узвіз", "алея", "тупик", "мікрорайон", "мкр", "бц", "трц", "тц", "офіс",
+        "метро", "буд", "st.", "str.", "street", "ave", "blvd", "sq."
+    };
+
+    /// <summary>
+    /// Обласні центри України: канонічний ключ міста, координати центроїда та підрядки,
+    /// за якими місто розпізнається в адресі (українська та англійська назви).
+    /// </summary>
+    private static readonly (string Key, double Lat, double Lon, string[] Aliases)[] CityCentroids =
+    [
+        ("київ", 50.4501, 30.5234, ["київ", "kyiv", "kiev"]),
+        ("львів", 49.8397, 24.0297, ["львів", "lviv"]),
+        ("харків", 49.9935, 36.2304, ["харків", "kharkiv"]),
+        ("дніпро", 48.4647, 35.0462, ["дніпро", "dnipro"]),
+        ("одеса", 46.4825, 30.7233, ["одеса", "odesa"]),
+        ("запоріжжя", 47.8388, 35.1396, ["запоріж", "zaporizhzhia"]),
+        ("вінниця", 49.2331, 28.4682, ["вінниц", "vinnytsia"]),
+        ("полтава", 49.5883, 34.5514, ["полтав", "poltava"]),
+        ("чернівці", 48.2921, 25.9358, ["чернівц", "chernivtsi"]),
+        ("івано-франківськ", 48.9226, 24.7111, ["івано-франківськ", "frankivsk"]),
+        ("тернопіль", 49.5535, 25.5948, ["тернопіль", "ternopil"]),
+        ("ужгород", 48.6208, 22.2879, ["ужгород", "uzhhorod"]),
+        ("луцьк", 50.7472, 25.3254, ["луцьк", "lutsk"]),
+        ("рівне", 50.6199, 26.2516, ["рівне", "rivne"]),
+        ("житомир", 50.2547, 28.6587, ["житомир", "zhytomyr"]),
+        ("черкаси", 49.4444, 32.0598, ["черкас", "cherkasy"]),
+        ("суми", 50.9077, 34.7981, ["суми", "sumy"]),
+        ("чернігів", 51.4982, 31.2893, ["чернігів", "chernihiv"]),
+        ("миколаїв", 46.9750, 31.9946, ["миколаїв", "mykolaiv"]),
+        ("херсон", 46.6354, 32.6169, ["херсон", "kherson"]),
+        ("кропивницький", 48.5079, 32.2623, ["кропивницьк", "kropyvnytskyi"]),
+        ("хмельницький", 49.4230, 26.9871, ["хмельницьк", "khmelnytskyi"])
+    ];
+
     private static readonly SemaphoreSlim PhotonSemaphore = new(1, 1);
     private static readonly SemaphoreSlim OsrmSemaphore = new(2, 2);
 
@@ -75,16 +117,19 @@ public class GeoDistanceService : IDistanceCalculatorService
             return null;
         }
 
+        string normalizedOrigin = NormalizeAddressKey(UserAddress);
+        string normalizedDestination = NormalizeAddressKey(destinationAddress);
+
         // Однакові адреси (наприклад, користувач знаходиться в тому ж офісі чи за тією ж адресою)
-        if (string.Equals(NormalizeAddressKey(UserAddress), NormalizeAddressKey(destinationAddress), StringComparison.OrdinalIgnoreCase) ||
+        if (string.Equals(normalizedOrigin, normalizedDestination, StringComparison.OrdinalIgnoreCase) ||
             string.Equals(UserAddress.Trim(), destinationAddress.Trim(), StringComparison.OrdinalIgnoreCase))
         {
             return 0.1;
         }
 
         // 1. Отримуємо координати обох адрес (Photon як основний із кешуванням у БД, Wikipedia як запасний без кешування)
-        (double Lat, double Lon)? originCoord = await ResolveCoordinatesAsync(UserAddress, ct);
-        (double Lat, double Lon)? destCoord = await ResolveCoordinatesAsync(destinationAddress, ct);
+        (double Lat, double Lon)? originCoord = await ResolveCoordinatesAsync(UserAddress, ct).ConfigureAwait(false);
+        (double Lat, double Lon)? destCoord = await ResolveCoordinatesAsync(destinationAddress, ct).ConfigureAwait(false);
 
         if (originCoord.HasValue && destCoord.HasValue)
         {
@@ -93,11 +138,19 @@ public class GeoDistanceService : IDistanceCalculatorService
                 return 0.1;
             }
 
-            // 2. З'єднуємо точки та шукаємо маршрут і реальну дорожню відстань через роутер OSRM
-            double? routeKm = await TryOsrmRouteAsync(originCoord.Value, destCoord.Value, ct);
-            if (routeKm.HasValue)
+            // 2. З'єднуємо точки та шукаємо маршрут і реальну дорожню відстань через роутер OSRM.
+            // Якщо хоча б одна точка — центроїд міста (не точна адреса), маршрутизація OSRM не дасть
+            // коректного результату для «центр міста -> центр міста», тому одразу беремо геовідстань.
+            bool originApproximate = IsCityCentroidResolution(UserAddress);
+            bool destinationApproximate = IsCityCentroidResolution(destinationAddress);
+
+            if (!originApproximate && !destinationApproximate)
             {
-                return routeKm.Value;
+                double? routeKm = await TryOsrmRouteAsync(originCoord.Value, destCoord.Value, ct).ConfigureAwait(false);
+                if (routeKm.HasValue)
+                {
+                    return routeKm.Value;
+                }
             }
 
             // 3. Якщо офлайн або роутер недоступний — розрахунок геовідстані з дорожнім коефіцієнтом
@@ -122,7 +175,7 @@ public class GeoDistanceService : IDistanceCalculatorService
         // 0. Перевірка локальної бази даних SQLite клієнта
         if (_localCache != null)
         {
-            (double Lat, double Lon)? localDbCoords = await _localCache.GetCoordinatesAsync(address, ct);
+            (double Lat, double Lon)? localDbCoords = await _localCache.GetCoordinatesAsync(address, ct).ConfigureAwait(false);
             if (localDbCoords.HasValue)
             {
                 GeoCache[norm] = localDbCoords.Value;
@@ -130,22 +183,34 @@ public class GeoDistanceService : IDistanceCalculatorService
             }
         }
 
+        // 1. Офлайн-довідник: точні координати відомих адрес (авторитетні, завжди) та центроїди міст
+        //    (лише для адрес без вуличної деталізації — без цифр та ознак вулиці).
+        if (TryGetApproximateCoordinate(norm, LooseKey(address), out (double Lat, double Lon) approximate))
+        {
+            GeoCache[norm] = approximate;
+            if (_localCache != null)
+            {
+                await _localCache.SaveCoordinatesAsync(address, approximate.Lat, approximate.Lon, isSynced: false, ct).ConfigureAwait(false);
+            }
+            return approximate;
+        }
+
         bool hadNetworkError = false;
         Exception? networkException = null;
 
-        // 1. Звернення до сервера: перевірка БД (GeoLocationCache) або геокодування через Photon (з кешуванням у БД) / Wikipedia (fallback без кешування)
+        // 2. Звернення до сервера: перевірка БД (GeoLocationCache) або геокодування через Photon (з кешуванням у БД) / Wikipedia (fallback без кешування)
         if (_gateway != null)
         {
             try
             {
-                CoordinatesDto? serverCoords = await _gateway.GetCoordinatesAsync(address, ct);
+                CoordinatesDto? serverCoords = await _gateway.GetCoordinatesAsync(address, ct).ConfigureAwait(false);
                 if (serverCoords != null)
                 {
                     (double Lat, double Lon) res = (serverCoords.Latitude, serverCoords.Longitude);
                     GeoCache[norm] = res;
                     if (_localCache != null)
                     {
-                        await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: true, ct);
+                        await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: true, ct).ConfigureAwait(false);
                     }
                     return res;
                 }
@@ -161,18 +226,6 @@ public class GeoDistanceService : IDistanceCalculatorService
             }
         }
 
-        // 2. Локальний швидкий довідник відомих бізнес-центрів та вулиць (для офлайн-режиму та швидкої роботи)
-        (double Lat, double Lon)? localMatch = LookupKnownLocation(norm);
-        if (localMatch.HasValue)
-        {
-            GeoCache[norm] = localMatch.Value;
-            if (_localCache != null)
-            {
-                await _localCache.SaveCoordinatesAsync(address, localMatch.Value.Lat, localMatch.Value.Lon, isSynced: false, ct);
-            }
-            return localMatch.Value;
-        }
-
         List<string> candidates = GeoAddressHelper.GenerateQueryCandidates(address).ToList();
 
         // 3. Основний пошук координат через Photon API із затримкою ~1 секунда (результати кешуються)
@@ -181,16 +234,16 @@ public class GeoDistanceService : IDistanceCalculatorService
             try
             {
                 string json;
-                await PhotonSemaphore.WaitAsync(ct);
+                await PhotonSemaphore.WaitAsync(ct).ConfigureAwait(false);
                 try
                 {
                     if (_photonDelay > TimeSpan.Zero)
                     {
-                        await Task.Delay(_photonDelay, ct);
+                        await Task.Delay(_photonDelay, ct).ConfigureAwait(false);
                     }
 
                     string url = $"https://photon.komoot.io/api/?q={Uri.EscapeDataString(candidate)}&limit=5";
-                    json = await _httpClient.GetStringAsync(url, ct);
+                    json = await _httpClient.GetStringAsync(url, ct).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -249,7 +302,7 @@ public class GeoDistanceService : IDistanceCalculatorService
                         GeoCache[norm] = res;
                         if (_localCache != null)
                         {
-                            await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: false, ct);
+                            await _localCache.SaveCoordinatesAsync(address, res.Lat, res.Lon, isSynced: false, ct).ConfigureAwait(false);
                         }
                         return res;
                     }
@@ -276,7 +329,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             try
             {
                 string url = $"https://uk.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch={Uri.EscapeDataString(candidate)}&gsrlimit=5&prop=coordinates&format=json";
-                string json = await _httpClient.GetStringAsync(url, ct);
+                string json = await _httpClient.GetStringAsync(url, ct).ConfigureAwait(false);
                 using var doc = JsonDocument.Parse(json);
 
                 if (doc.RootElement.TryGetProperty("query", out JsonElement queryElem) &&
@@ -340,7 +393,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             GeoCache[norm] = cityCentroid.Value;
             if (_localCache != null)
             {
-                await _localCache.SaveCoordinatesAsync(address, cityCentroid.Value.Lat, cityCentroid.Value.Lon, isSynced: false, ct);
+                await _localCache.SaveCoordinatesAsync(address, cityCentroid.Value.Lat, cityCentroid.Value.Lon, isSynced: false, ct).ConfigureAwait(false);
             }
             return cityCentroid.Value;
         }
@@ -368,7 +421,7 @@ public class GeoDistanceService : IDistanceCalculatorService
 
         try
         {
-            var unsynced = await _localCache.GetUnsyncedAsync(ct);
+            var unsynced = await _localCache.GetUnsyncedAsync(ct).ConfigureAwait(false);
             GeoSyncRequestDto request = new()
             {
                 ClientItems = unsynced.Select(u => new GeoSyncItemDto
@@ -381,7 +434,7 @@ public class GeoDistanceService : IDistanceCalculatorService
                 }).ToList()
             };
 
-            GeoSyncResponseDto? response = await _gateway.SyncGeoCacheAsync(request, ct);
+            GeoSyncResponseDto? response = await _gateway.SyncGeoCacheAsync(request, ct).ConfigureAwait(false);
             if (response == null)
             {
                 return 0;
@@ -389,12 +442,12 @@ public class GeoDistanceService : IDistanceCalculatorService
 
             if (unsynced.Count > 0)
             {
-                await _localCache.MarkAsSyncedAsync(unsynced.Select(u => u.Id), ct);
+                await _localCache.MarkAsSyncedAsync(unsynced.Select(u => u.Id), ct).ConfigureAwait(false);
             }
 
             if (response.ServerItems != null && response.ServerItems.Count > 0)
             {
-                await _localCache.UpsertFromServerAsync(response.ServerItems, ct);
+                await _localCache.UpsertFromServerAsync(response.ServerItems, ct).ConfigureAwait(false);
 
                 foreach (GeoSyncItemDto item in response.ServerItems)
                 {
@@ -427,7 +480,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             return cachedKm;
         }
 
-        await OsrmSemaphore.WaitAsync(ct);
+        await OsrmSemaphore.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (_routeCache.TryGetValue(routeKey, out cachedKm))
@@ -436,7 +489,7 @@ public class GeoDistanceService : IDistanceCalculatorService
             }
 
             string url = $"https://router.project-osrm.org/route/v1/driving/{oLon},{oLat};{dLon},{dLat}?overview=false";
-            string json = await _httpClient.GetStringAsync(url, ct);
+            string json = await _httpClient.GetStringAsync(url, ct).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(json);
             if (doc.RootElement.TryGetProperty("routes", out JsonElement routes) &&
                 routes.ValueKind == JsonValueKind.Array &&
@@ -480,6 +533,109 @@ public class GeoDistanceService : IDistanceCalculatorService
 
     internal static string NormalizeAddressKey(string address) =>
         address.Trim().ToLowerInvariant().Replace("вул.", "").Replace("проспект", "").Replace("пл.", "");
+
+    /// <summary>
+    /// «Сирий» ключ без видалення слів «вул.», «проспект», «пл.»: перевірка вуличної деталізації
+    /// має бачити ці ознаки, бо NormalizeAddressKey їх вирізає.
+    /// </summary>
+    private static string LooseKey(string address) =>
+        address.Trim().ToLowerInvariant();
+
+    /// <summary>
+    /// Канонічний ключ міста з адреси (наприклад, «київ» для «Київ, вул. Хрещатик 22»),
+    /// або <c>null</c>, якщо жодного обласного центру з таблиці центроїдів в адресі немає
+    /// (передмістя, іноземна чи порожня адреса). Вулична деталізація не заважає.
+    /// </summary>
+    public static string? ExtractCityKey(string? address)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return null;
+        }
+
+        (string Key, double Lat, double Lon)? match = MatchCityCentroid(NormalizeAddressKey(address));
+        return match is null ? null : match.Value.Key;
+    }
+
+    /// <summary>
+    /// Пошук канонічного ключа та центроїда міста за підрядками тієї самої таблиці,
+    /// яку використовує офлайн-розв'язання координат.
+    /// </summary>
+    private static (string Key, double Lat, double Lon)? MatchCityCentroid(string norm)
+    {
+        foreach ((string key, double lat, double lon, string[] aliases) in CityCentroids)
+        {
+            foreach (string alias in aliases)
+            {
+                if (norm.Contains(alias, StringComparison.Ordinal))
+                {
+                    return (key, lat, lon);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Чи містить нормалізована адреса вуличну деталізацію (номер будинку або ознаку вулиці).
+    /// Такі адреси потребують точного геокодування, центроїд міста для них не застосовується.
+    /// </summary>
+    private static bool HasStreetDetail(string norm)
+    {
+        foreach (char c in norm)
+        {
+            if (char.IsDigit(c))
+            {
+                return true;
+            }
+        }
+
+        foreach (string marker in StreetMarkers)
+        {
+            if (norm.Contains(marker, StringComparison.Ordinal))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Чи буде адреса розв'язана саме як центроїд міста (міська адреса без вуличної деталізації).
+    /// Точні координати з довідника відомих адрес сюди НЕ входять — вони вважаються точними.
+    /// </summary>
+    private static bool IsCityCentroidResolution(string address) =>
+        !HasStreetDetail(LooseKey(address)) && LookupCityCentroid(NormalizeAddressKey(address)).HasValue;
+
+    /// <summary>
+    /// Офлайн-пошук координат без жодного мережевого запиту:
+    /// спочатку точний довідник відомих адрес (авторитетний), потім — центроїд міста,
+    /// але лише для адрес без вуличної деталізації.
+    /// </summary>
+    private static bool TryGetApproximateCoordinate(string norm, string looseNorm, out (double Lat, double Lon) coords)
+    {
+        (double Lat, double Lon)? known = LookupKnownLocation(norm);
+        if (known.HasValue)
+        {
+            coords = known.Value;
+            return true;
+        }
+
+        if (!HasStreetDetail(looseNorm))
+        {
+            (double Lat, double Lon)? city = LookupCityCentroid(norm);
+            if (city.HasValue)
+            {
+                coords = city.Value;
+                return true;
+            }
+        }
+
+        coords = default;
+        return false;
+    }
 
 
 
@@ -748,30 +904,13 @@ public class GeoDistanceService : IDistanceCalculatorService
     /// </summary>
     private static (double Lat, double Lon)? LookupCityCentroid(string norm)
     {
-        if (norm.Contains("київ") || norm.Contains("kyiv") || norm.Contains("kiev")) return (50.4501, 30.5234);
-        if (norm.Contains("львів") || norm.Contains("lviv")) return (49.8397, 24.0297);
-        if (norm.Contains("харків") || norm.Contains("kharkiv")) return (49.9935, 36.2304);
-        if (norm.Contains("дніпро") || norm.Contains("dnipro")) return (48.4647, 35.0462);
-        if (norm.Contains("одеса") || norm.Contains("odesa")) return (46.4825, 30.7233);
-        if (norm.Contains("запоріж") || norm.Contains("zaporizhzhia")) return (47.8388, 35.1396);
-        if (norm.Contains("вінниц") || norm.Contains("vinnytsia")) return (49.2331, 28.4682);
-        if (norm.Contains("полтав") || norm.Contains("poltava")) return (49.5883, 34.5514);
-        if (norm.Contains("чернівц") || norm.Contains("chernivtsi")) return (48.2921, 25.9358);
-        if (norm.Contains("івано-франківськ") || norm.Contains("frankivsk")) return (48.9226, 24.7111);
-        if (norm.Contains("тернопіль") || norm.Contains("ternopil")) return (49.5535, 25.5948);
-        if (norm.Contains("ужгород") || norm.Contains("uzhhorod")) return (48.6208, 22.2879);
-        if (norm.Contains("луцьк") || norm.Contains("lutsk")) return (50.7472, 25.3254);
-        if (norm.Contains("рівне") || norm.Contains("rivne")) return (50.6199, 26.2516);
-        if (norm.Contains("житомир") || norm.Contains("zhytomyr")) return (50.2547, 28.6587);
-        if (norm.Contains("черкас") || norm.Contains("cherkasy")) return (49.4444, 32.0598);
-        if (norm.Contains("суми") || norm.Contains("sumy")) return (50.9077, 34.7981);
-        if (norm.Contains("чернігів") || norm.Contains("chernihiv")) return (51.4982, 31.2893);
-        if (norm.Contains("миколаїв") || norm.Contains("mykolaiv")) return (46.9750, 31.9946);
-        if (norm.Contains("херсон") || norm.Contains("kherson")) return (46.6354, 32.6169);
-        if (norm.Contains("кропивницьк") || norm.Contains("kropyvnytskyi")) return (48.5079, 32.2623);
-        if (norm.Contains("хмельницьк") || norm.Contains("khmelnytskyi")) return (49.4230, 26.9871);
+        (string Key, double Lat, double Lon)? match = MatchCityCentroid(norm);
+        if (match is null)
+        {
+            return null;
+        }
 
-        return null;
+        return (match.Value.Lat, match.Value.Lon);
     }
 
     private static bool IsNetworkException(Exception ex) =>

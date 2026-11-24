@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
+using Waterfall.Client.Collections;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.SavedVacancies;
 
@@ -21,6 +22,7 @@ public partial class FavoritesViewModel : ObservableObject
     private readonly IUrlLauncher? _urlLauncher;
     private readonly IDistanceCalculatorService? _distanceService;
     private CancellationTokenSource? _loadCts;
+    private bool _isDirty = true;
 
     public FavoritesViewModel(
         IHttpGatewayService gateway,
@@ -37,6 +39,7 @@ public partial class FavoritesViewModel : ObservableObject
         {
             if (message.IsSaved)
             {
+                vm._isDirty = true;
                 return; // Додані в каталозі з'являться при наступному відкритті вкладки.
             }
 
@@ -47,9 +50,23 @@ public partial class FavoritesViewModel : ObservableObject
 
             vm.OnCountChanged();
         });
+
+        messenger.Register<FavoritesViewModel, VacancyViewedMessage>(this, static (vm, message) =>
+        {
+            foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
+            {
+                item.IsViewed = message.IsViewed;
+            }
+        });
+
+        messenger.Register<FavoritesViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
+        {
+            vm._isDirty = true;
+        });
     }
 
-    public ObservableCollection<VacancyItemViewModel> Vacancies { get; } = [];
+    private readonly BulkObservableCollection<VacancyItemViewModel> _vacancies = new();
+    public ObservableCollection<VacancyItemViewModel> Vacancies => _vacancies;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
@@ -85,7 +102,12 @@ public partial class FavoritesViewModel : ObservableObject
     /// Поточні картки лишаються на екрані, доки не прийде відповідь.
     /// </summary>
     [RelayCommand(AllowConcurrentExecutions = true)]
-    private Task LoadAsync() => LoadCoreAsync(showSpinner: true);
+    private Task EnsureLoadedAsync() => HasLoaded && !_isDirty
+        ? Task.CompletedTask
+        : LoadCoreAsync(showSpinner: !HasLoaded);
+
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    private Task LoadAsync() => LoadCoreAsync(showSpinner: !HasLoaded);
 
     [RelayCommand(AllowConcurrentExecutions = true)]
     private async Task RefreshAsync()
@@ -112,15 +134,16 @@ public partial class FavoritesViewModel : ObservableObject
         try
         {
             IReadOnlyList<SavedVacancyDto> saved = await _gateway.GetSavedVacanciesAsync(ct);
-            Vacancies.Clear();
-            foreach (SavedVacancyDto entry in saved.Where(s => s.Vacancy is not null).OrderByDescending(s => s.SavedAt))
-            {
-                // Усе в цьому списку збережене за визначенням, незалежно від прапорця у вкладеній вакансії.
-                Vacancies.Add(new VacancyItemViewModel(
-                    entry.Vacancy! with { IsSaved = true }, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher, _distanceService));
-            }
+            List<VacancyItemViewModel> cards = saved
+                .Where(s => s.Vacancy is not null)
+                .OrderByDescending(s => s.SavedAt)
+                .Select(entry => new VacancyItemViewModel(
+                    entry.Vacancy! with { IsSaved = true }, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher, _distanceService))
+                .ToList();
+            _vacancies.ReplaceAll(cards);
 
             HasLoaded = true;
+            _isDirty = false;
         }
         catch (ApiException ex) when (!ct.IsCancellationRequested)
         {

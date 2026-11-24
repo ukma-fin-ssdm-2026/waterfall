@@ -226,4 +226,35 @@ public class ProfileController : ApiControllerBase
             _ => Accepted()
         };
     }
+
+    /// <summary>
+    /// Зняти позначку «переглянуто» для вакансії користувача.
+    /// </summary>
+    /// <param name="vacancyId">Ідентифікатор вакансії.</param>
+    /// <param name="ct">Токен скасування операції.</param>
+    /// <response code="204">Позначку перегляду знято (або її вже не було).</response>
+    /// <response code="401">Користувач не авторизований.</response>
+    /// <response code="403">Зміна активності доступна лише шукачу роботи (data-model.md §6, інваріант 2).</response>
+    [HttpDelete("views/{vacancyId:guid}")]
+    [SwaggerOperation(
+        Summary = "Зняти позначку перегляду вакансії",
+        Description = "Видаляє записи перегляду вказаної вакансії для поточного користувача.",
+        OperationId = "UnmarkVacancyView")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status403Forbidden)]
+    public async Task<IActionResult> UnmarkVacancyView([FromRoute] Guid vacancyId, CancellationToken ct)
+    {
+        if (CurrentUserId is not { } userId)
+        {
+            return ErrorUnauthorized("Користувач не авторизований.");
+        }
+
+        UserStatsRecordResult result = await _userStatsService.UnmarkVacancyViewAsync(userId, vacancyId, ct);
+        return result switch
+        {
+            UserStatsRecordResult.Forbidden => ErrorForbidden("Запис активності доступний лише шукачеві роботи."),
+            _ => NoContent()
+        };
+    }
 }

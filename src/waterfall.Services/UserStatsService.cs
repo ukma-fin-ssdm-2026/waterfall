@@ -117,6 +117,17 @@ public class UserStatsService : IUserStatsService
         return UserStatsRecordResult.Recorded;
     }
 
+    public async Task<UserStatsRecordResult> UnmarkVacancyViewAsync(Guid userId, Guid vacancyId, CancellationToken ct = default)
+    {
+        if (!await IsJobSeekerAsync(userId, ct))
+        {
+            return UserStatsRecordResult.Forbidden;
+        }
+
+        bool deleted = await _vacancyViewRepository.DeleteForUserAsync(userId, vacancyId, ct);
+        return deleted ? UserStatsRecordResult.Recorded : UserStatsRecordResult.Skipped;
+    }
+
     public async Task<bool> ClearSearchHistoryAsync(Guid userId, CancellationToken ct = default)
     {
         bool deleted = await _searchQueryRepository.DeleteAllForUserAsync(userId, ct);

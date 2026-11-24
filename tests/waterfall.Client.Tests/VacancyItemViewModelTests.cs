@@ -241,6 +241,85 @@ public class VacancyItemViewModelTests
     }
 
     [Fact]
+    public async Task ToggleViewedCommand_MarksAndUnmarksAndPersistsViaGateway()
+    {
+        Guid id = Guid.NewGuid();
+        List<VacancyViewedMessage> messages = [];
+        _messenger.Register<VacancyViewedMessage>(this, (_, m) => messages.Add(m));
+
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = id,
+            Title = "Backend Dev",
+            Description = "Desc",
+            IsViewed = false
+        }, _gateway, _messenger, _errors.Add);
+
+        Assert.False(item.IsViewed);
+
+        await item.ToggleViewedCommand.ExecuteAsync(null);
+        Assert.True(item.IsViewed);
+        Assert.Contains(id, _gateway.RecordedVacancyViews);
+
+        await item.ToggleViewedCommand.ExecuteAsync(null);
+        Assert.False(item.IsViewed);
+        Assert.Contains(id, _gateway.UnmarkedVacancyViews);
+
+        Assert.Equal([new VacancyViewedMessage(id, true, Explicit: true), new VacancyViewedMessage(id, false, Explicit: true)], messages);
+    }
+
+    [Fact]
+    public async Task NonJobSeeker_CanMarkViewedFalse_DoesNotRecordViewOrMarkViewed()
+    {
+        Guid id = Guid.NewGuid();
+        List<VacancyViewedMessage> messages = [];
+        _messenger.Register<VacancyViewedMessage>(this, (_, m) => messages.Add(m));
+        FakeUrlLauncher launcher = new();
+
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = id,
+            Title = "Backend Dev",
+            Description = "Desc",
+            SourceUrl = "https://djinni.co/jobs/123",
+            IsViewed = true
+        }, _gateway, _messenger, _errors.Add, launcher, canMarkViewed: false);
+
+        Assert.False(item.CanMarkViewed);
+        Assert.False(item.IsViewed);
+
+        await item.ToggleViewedCommand.ExecuteAsync(null);
+        item.ToggleDetailsCommand.Execute(null);
+        await item.OpenSourceCommand.ExecuteAsync(null);
+
+        Assert.False(item.IsViewed);
+        Assert.Empty(_gateway.RecordedVacancyViews);
+        Assert.Empty(_gateway.UnmarkedVacancyViews);
+        Assert.Empty(messages);
+    }
+
+    [Fact]
+    public void DatesDisplay_FormatsPublishedAndParsedDates()
+    {
+        DateTimeOffset published = new(2026, 11, 10, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset parsed = new(2026, 11, 24, 12, 0, 0, TimeSpan.Zero);
+
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            PublishedAt = published,
+            LastSeenAt = parsed
+        }, _gateway, _messenger, _errors.Add);
+
+        Assert.True(item.HasDatesDisplay);
+        Assert.Equal($"Опубл. {published.ToLocalTime():dd.MM.yyyy}", item.PublishedAtDisplay);
+        Assert.Equal($"Спаршено {parsed.ToLocalTime():dd.MM.yyyy}", item.ParsedAtDisplay);
+        Assert.Equal($"{item.PublishedAtDisplay} · {item.ParsedAtDisplay}", item.DatesDisplay);
+    }
+
+    [Fact]
     public async Task RefreshDistance_SetsNoInternetText_WhenNetworkThrows()
     {
         FakeDistanceService service = new() { ThrowNetworkError = true };
@@ -367,13 +446,13 @@ public class VacancyItemViewModelTests
         }, _gateway, _messenger, _errors.Add, distanceService: service);
 
         Assert.False(item.IsMapExpanded);
-        Assert.Equal("Показати на мапі 🗺️", item.MapToggleText);
+        Assert.Equal("Показати на мапі", item.MapToggleText);
         Assert.Null(item.MapHtml);
 
         await item.ToggleMapCommand.ExecuteAsync(null);
 
         Assert.True(item.IsMapExpanded);
-        Assert.Equal("Приховати мапу ▲", item.MapToggleText);
+        Assert.Equal("Приховати мапу", item.MapToggleText);
         Assert.True(item.HasMapCoordinates);
         Assert.Equal(50.4378, item.MapLatitude);
         Assert.Equal(30.5220, item.MapLongitude);
@@ -386,7 +465,7 @@ public class VacancyItemViewModelTests
         // Повторний клік згортає карту без повторних запитів
         await item.ToggleMapCommand.ExecuteAsync(null);
         Assert.False(item.IsMapExpanded);
-        Assert.Equal("Показати на мапі 🗺️", item.MapToggleText);
+        Assert.Equal("Показати на мапі", item.MapToggleText);
         Assert.NotNull(item.MapHtml); // Кеш збережено
     }
 
@@ -415,15 +494,194 @@ public class VacancyItemViewModelTests
         Assert.False(item.HasMapCoordinates);
     }
 
+    [Theory]
+    [InlineData(null, null, false)]
+    [InlineData("", null, false)]
+    [InlineData("   ", null, false)]
+    [InlineData("Київ", null, false)]
+    [InlineData("Львів", null, false)]
+    [InlineData("м. Київ", null, false)]
+    [InlineData("Київ, Львів", null, false)]
+    [InlineData("Україна", null, false)]
+    [InlineData("Київ", "Київ", false)]
+    [InlineData("не вказано точну адресу", null, false)]
+    [InlineData("Київ, не вказано точну адресу", null, false)]
+    [InlineData("Remote", null, false)]
+    [InlineData("remote", null, false)]
+    [InlineData("Віддалено", null, false)]
+    [InlineData("Дистанційно", null, false)]
+    [InlineData("Віддалена робота", null, false)]
+    [InlineData("За кордоном", null, false)]
+    [InlineData("Київ", "не вказано точну адресу", false)]
+    [InlineData("Київ", "Віддалено", false)]
+    [InlineData("Київ, вул. Хрещатик 1", null, true)]
+    [InlineData("Remote", "Київ, вул. Хрещатик 1", true)]
+    [InlineData("Київ", "вул. Хрещатик, 1", true)]
+    [InlineData("Київ", "вул. Мечникова", true)]
+    [InlineData("Київ", "БЦ Парус", true)]
+    [InlineData("Київ", "UNIT.City", true)]
+    public void CanShowOnMap_ReflectsExactOfficeAvailability(string? location, string? fullAddress, bool expected)
+    {
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Senior .NET",
+            Company = "Tech Inc",
+            Location = location ?? string.Empty,
+            FullAddress = fullAddress,
+            Skills = ["C#"]
+        }, _gateway, _messenger, _errors.Add);
+
+        Assert.Equal(expected, item.CanShowOnMap);
+    }
+
+    [Fact]
+    public async Task Constructor_IsLazyForDistance_And_EnsureDistanceLoadedDeduplicatesSameAddress()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 3.2 };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "вул. Мечникова, 2"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await Task.Delay(30);
+        Assert.Equal(0, service.DistanceCallCount);
+        Assert.Null(item.DistanceText);
+
+        await item.EnsureDistanceLoadedAsync();
+        await item.EnsureDistanceLoadedAsync();
+
+        Assert.Equal(1, service.DistanceCallCount);
+        Assert.Equal("3.2 км від вас", item.DistanceText);
+    }
+
+    [Fact]
+    public async Task Distance_IsComputed_ForExactAddressInSameCity()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 2.5, UserAddress = "Київ, вул. Хрещатик, 22" };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "Київ, вул. Мечникова, 2"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        Assert.True(item.CanShowOnMap);
+
+        await item.EnsureDistanceLoadedAsync();
+
+        Assert.Equal(1, service.DistanceCallCount);
+        Assert.Equal(2.5, item.DistanceKm);
+        Assert.Equal("2.5 км від вас", item.DistanceText);
+    }
+
+    [Fact]
+    public async Task Distance_IsSilent_ForExactAddressInAnotherCity()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 5.0, UserAddress = "Київ, вул. Хрещатик, 22" };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Львів",
+            FullAddress = "Львів, вул. Соборна, 12"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        Assert.True(item.CanShowOnMap);
+
+        await item.EnsureDistanceLoadedAsync();
+        await item.RefreshDistanceAsync();
+
+        _messenger.Send(new UserAddressChangedMessage(service.UserAddress));
+        await Task.Delay(50);
+
+        Assert.Equal(0, service.DistanceCallCount);
+        Assert.Null(item.DistanceKm);
+        Assert.Null(item.DistanceText);
+        Assert.False(item.HasDistanceText);
+    }
+
+    [Theory]
+    [InlineData("Київ", null)]
+    [InlineData("не вказано точну адресу", null)]
+    [InlineData("Remote", "Віддалено")]
+    public async Task Distance_IsSilent_WithoutExactOfficeAddress(string location, string? fullAddress)
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 3.0 };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = location,
+            FullAddress = fullAddress
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        Assert.False(item.CanShowOnMap);
+
+        await item.EnsureDistanceLoadedAsync();
+        await item.RefreshDistanceAsync();
+
+        Assert.Equal(0, service.DistanceCallCount);
+        Assert.Null(item.DistanceText);
+        Assert.False(item.HasDistanceText);
+    }
+
+    [Fact]
+    public void CachedInitialDistance_IsIgnored_ForAnotherCity()
+    {
+        FakeDistanceService service = new() { UserAddress = "Київ, вул. Хрещатик, 22" };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Львів",
+            FullAddress = "Львів, вул. Соборна, 12"
+        }, _gateway, _messenger, _errors.Add, distanceService: service, initialDistanceKm: 540.0);
+
+        Assert.Null(item.DistanceKm);
+        Assert.Null(item.DistanceText);
+    }
+
+    [Fact]
+    public async Task Distance_FallsBackToCompute_WhenUserCityIsUnclassifiable()
+    {
+        FakeDistanceService service = new() { DistanceToReturn = 4.1, UserAddress = "Бровари, вул. Гагаріна 5" };
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "Київ",
+            FullAddress = "Київ, вул. Мечникова, 2"
+        }, _gateway, _messenger, _errors.Add, distanceService: service);
+
+        await item.RefreshDistanceAsync();
+
+        Assert.Equal(1, service.DistanceCallCount);
+        Assert.Equal(4.1, item.DistanceKm);
+        Assert.Equal("4.1 км від вас", item.DistanceText);
+    }
+
     private sealed class FakeDistanceService : IDistanceCalculatorService
     {
         public string? UserAddress { get; set; } = "вул. Хрещатик, 22, Київ";
         public double? DistanceToReturn { get; set; } = 1.5;
         public (double Lat, double Lon)? CoordinatesToReturn { get; set; } = (50.4501, 30.5234);
         public bool ThrowNetworkError { get; set; }
+        public int DistanceCallCount { get; private set; }
 
         public Task<double?> CalculateDistanceKmAsync(string destinationAddress, CancellationToken ct = default)
         {
+            DistanceCallCount++;
             if (ThrowNetworkError)
             {
                 throw new HttpRequestException("Немає інтернету");

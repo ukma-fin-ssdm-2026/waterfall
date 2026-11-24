@@ -7,11 +7,19 @@ skinparam ranksep 60
 skinparam packagePadding 14
 
 package "Client Application (.NET MAUI)" {
-    [UI Components\n(Catalog, Database, Favorites,\nRecommendations, Analytics,\nAI Chat, Settings, Profile)] as UI
+    [DesktopHostPage / PhoneHostPage\n(IAppNavigationHost, ShellNavigationService,\nMountedPageHelper: mount tabs in RAM)] as HostPages
+    [PhoneSectionHostPage\n(Header + MobileSegmentedBar,\nsub-page sliding)] as SectionHost
+    [SectionPagerViewHandler\n(Android LayoutHandler,\nswipe interception)] as PagerHandler
+    [Controls Library\n(VacancyListView, VacancyCard,\nOverlaySheetFrame, MobileSegmentedBar,\nAnchoredPopupMenu, ToastBanner)] as Controls
+    [ThemeService\n(Warm Dark / AMOLED / Paper Light,\nLucide icon font)] as ThemeSvc
     [HTTP Gateway Service\n(HttpClient & Bearer Auth)] as HTTPGateway
     [Local Vacancy Store & Sync\n(ClientWaterfallDbContext SQLite,\nVacancySyncService, OfflineSiteCollector)] as LocalStore
-    UI -down-> HTTPGateway : SendRequestAsync()
-    UI -down-> LocalStore : Offline Read/Edit &\nDirect DOU/Djinni Collect
+    HostPages -down-> SectionHost : Mounts phone sub-sections
+    SectionHost -down-> PagerHandler : Android swipe pager
+    HostPages -right-> Controls : Renders views & sheets
+    Controls -right-> ThemeSvc : Warm Editorial palettes
+    HostPages -down-> HTTPGateway : SendRequestAsync()
+    HostPages -down-> LocalStore : Offline Read/Edit &\nDirect DOU/Djinni Collect
     LocalStore -right-> HTTPGateway : POST /api/v1/vacancies/sync\nPOST /api/v1/geo/sync
 }
 

@@ -162,4 +162,38 @@ public sealed class EfVacancyViewRepositoryTests : IDisposable
         Assert.False(neverViewed);
         Assert.False(otherUserView, "Перегляд іншого користувача не рахується.");
     }
+
+    [Fact]
+    public async Task DeleteForUserAsync_RemovesOnlyTargetUsersViewsForVacancy()
+    {
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        UserDB user = CreateUser("owner@example.com");
+        UserDB otherUser = CreateUser("other@example.com");
+        VacancyDB target = CreateVacancy("Target Vacancy");
+        VacancyDB otherVacancy = CreateVacancy("Other Vacancy");
+        db.Users.AddRange(user, otherUser);
+        db.Vacancies.AddRange(target, otherVacancy);
+
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+        db.VacancyViews.AddRange(
+            CreateView(user.Id, target.Id, now.AddMinutes(-10)),
+            CreateView(user.Id, target.Id, now.AddMinutes(-2)),
+            CreateView(user.Id, otherVacancy.Id, now.AddMinutes(-5)),
+            CreateView(otherUser.Id, target.Id, now.AddMinutes(-3)));
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        EfVacancyViewRepository repo = new(db);
+
+        bool deleted = await repo.DeleteForUserAsync(user.Id, target.Id);
+        bool deletedAgain = await repo.DeleteForUserAsync(user.Id, target.Id);
+
+        Assert.True(deleted);
+        Assert.False(deletedAgain);
+
+        await using WaterfallDbContext verifyDb = _fixture.CreateContext();
+        Assert.DoesNotContain(verifyDb.VacancyViews, v => v.UserId == user.Id && v.VacancyId == target.Id);
+        Assert.Contains(verifyDb.VacancyViews, v => v.UserId == user.Id && v.VacancyId == otherVacancy.Id);
+        Assert.Contains(verifyDb.VacancyViews, v => v.UserId == otherUser.Id && v.VacancyId == target.Id);
+    }
 }

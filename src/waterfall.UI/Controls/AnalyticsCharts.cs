@@ -11,10 +11,20 @@ public sealed class GradeSalaryBarChartDrawable : IDrawable
 {
     private static readonly Color[] GradeColors =
     [
-        Color.FromArgb("#2ED573"),
-        Color.FromArgb("#4F8EF7"),
-        Color.FromArgb("#A55EEA")
+        Color.FromArgb("#6FB59B"),
+        Color.FromArgb("#D4745E"),
+        Color.FromArgb("#8E8A9E")
     ];
+
+    internal static Color ThemeColor(string key, string fallbackHex)
+    {
+        if (Application.Current?.Resources.TryGetValue(key, out object? val) == true && val is Color c)
+        {
+            return c;
+        }
+
+        return Color.FromArgb(fallbackHex);
+    }
 
     public IReadOnlyList<GradeSalaryItem> Items { get; set; } = [];
 
@@ -33,19 +43,25 @@ public sealed class GradeSalaryBarChartDrawable : IDrawable
 
         const float leftPad = 14f;
         const float rightPad = 14f;
-        const float topPad = 26f;
-        const float bottomPad = 46f;
+        const float topPad = 28f;
+        const float bottomPad = 54f;
 
         float plotWidth = Math.Max(1f, dirtyRect.Width - leftPad - rightPad);
         float plotHeight = Math.Max(1f, dirtyRect.Height - topPad - bottomPad);
         decimal maxSalary = Math.Max(1m, Items.Max(i => i.AverageSalary));
 
-        canvas.StrokeColor = Color.FromArgb("#2F3542");
+        Color primaryText = ThemeColor("White", "#F2EFEA");
+        Color secondaryText = ThemeColor("TextSecondary", "#ABA49A");
+        Color mutedText = ThemeColor("TextMuted", "#767068");
+        Color axisColor = ThemeColor("DividerColor", "#2E2B27");
+
+        canvas.StrokeColor = axisColor;
         canvas.StrokeSize = 1;
         canvas.DrawLine(leftPad, topPad + plotHeight, leftPad + plotWidth, topPad + plotHeight);
 
         float slotWidth = plotWidth / Items.Count;
         float barWidth = Math.Min(64f, slotWidth * 0.45f);
+        float maxLabelWidth = Math.Max(24f, slotWidth - 6f);
 
         for (int i = 0; i < Items.Count; i++)
         {
@@ -59,25 +75,62 @@ public sealed class GradeSalaryBarChartDrawable : IDrawable
             canvas.FillColor = GradeColors[i % GradeColors.Length];
             canvas.FillRoundedRectangle(x, y, barWidth, barHeight, 6, 6, 0, 0);
 
-            canvas.FontColor = Colors.White;
+            canvas.FontColor = primaryText;
             canvas.FontSize = 12;
-            canvas.DrawString(item.FormattedAverage, centerX - slotWidth / 2f, y - 22, slotWidth, 20, HorizontalAlignment.Center, VerticalAlignment.Center);
+            string avgText = FitSingleLine(canvas, item.FormattedAverage, maxLabelWidth, 12f);
+            canvas.DrawString(avgText, centerX - slotWidth / 2f, y - 24, slotWidth, 22, HorizontalAlignment.Center, VerticalAlignment.Center);
 
-            canvas.FontColor = Color.FromArgb("#DFE4EA");
+            canvas.FontColor = secondaryText;
             canvas.FontSize = 11;
-            canvas.DrawString(item.Grade, centerX - slotWidth / 2f, topPad + plotHeight + 6, slotWidth, 16, HorizontalAlignment.Center, VerticalAlignment.Top);
+            string gradeText = FitSingleLine(canvas, item.Grade, maxLabelWidth, 11f);
+            canvas.DrawString(gradeText, centerX - slotWidth / 2f, topPad + plotHeight + 6, slotWidth, 20, HorizontalAlignment.Center, VerticalAlignment.Center);
 
-            canvas.FontColor = Color.FromArgb("#A4B0BE");
+            canvas.FontColor = mutedText;
             canvas.FontSize = 10;
-            canvas.DrawString(item.RangeText, centerX - slotWidth / 2f, topPad + plotHeight + 24, slotWidth, 16, HorizontalAlignment.Center, VerticalAlignment.Top);
+            string rangeText = FitSingleLine(canvas, item.RangeText, maxLabelWidth, 10f);
+            canvas.DrawString(rangeText, centerX - slotWidth / 2f, topPad + plotHeight + 28, slotWidth, 20, HorizontalAlignment.Center, VerticalAlignment.Center);
         }
     }
 
     internal static void DrawEmpty(ICanvas canvas, RectF rect, string message)
     {
-        canvas.FontColor = Color.FromArgb("#A4B0BE");
+        canvas.FontColor = ThemeColor("TextSecondary", "#ABA49A");
         canvas.FontSize = 12;
         canvas.DrawString(message, 0, 0, rect.Width, rect.Height, HorizontalAlignment.Center, VerticalAlignment.Center);
+    }
+
+    internal static string FitSingleLine(ICanvas canvas, string? text, float maxWidth, float fontSize)
+    {
+        if (string.IsNullOrEmpty(text) || maxWidth <= 12f)
+        {
+            return text ?? string.Empty;
+        }
+
+        // Fast path: fits cleanly on one line
+        SizeF measured = canvas.GetStringSize(text, Microsoft.Maui.Graphics.Font.Default, fontSize);
+        if (measured.Width <= maxWidth)
+        {
+            return text;
+        }
+
+        const string ellipsis = "…";
+        int low = 1;
+        int high = text.Length;
+        while (low < high)
+        {
+            int mid = (low + high + 1) / 2;
+            string candidate = string.Concat(text.AsSpan(0, mid).TrimEnd(), ellipsis);
+            if (canvas.GetStringSize(candidate, Microsoft.Maui.Graphics.Font.Default, fontSize).Width <= maxWidth)
+            {
+                low = mid;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        return string.Concat(text.AsSpan(0, low).TrimEnd(), ellipsis);
     }
 }
 
@@ -107,19 +160,20 @@ public sealed class HorizontalBarChartDrawable : IDrawable
             return;
         }
 
-        const float labelWidth = 118f;
-        const float valueWidth = 104f;
-        const float gap = 8f;
+        float labelWidth = Math.Clamp(dirtyRect.Width * 0.28f, 118f, 220f);
+        float valueWidth = Math.Clamp(dirtyRect.Width * 0.16f, 84f, 108f);
+        const float gap = 10f;
         const float rowPad = 6f;
 
         float barAreaWidth = Math.Max(20f, dirtyRect.Width - labelWidth - valueWidth - gap * 2);
         double maxVal = Math.Max(1.0, Entries.Max(e => e.Value));
         float rowHeight = dirtyRect.Height / Entries.Count;
         float barHeight = Math.Min(16f, Math.Max(8f, rowHeight - rowPad * 2));
+        float textBoxHeight = Math.Max(24f, rowHeight);
 
-        Color trackColor = Color.FromArgb("#2F3542");
-        Color textColor = Colors.White;
-        Color mutedColor = Color.FromArgb("#A4B0BE");
+        Color trackColor = GradeSalaryBarChartDrawable.ThemeColor("TonalSurface", "#2C2926");
+        Color textColor = GradeSalaryBarChartDrawable.ThemeColor("White", "#F2EFEA");
+        Color mutedColor = GradeSalaryBarChartDrawable.ThemeColor("TextSecondary", "#ABA49A");
 
         for (int i = 0; i < Entries.Count; i++)
         {
@@ -129,7 +183,8 @@ public sealed class HorizontalBarChartDrawable : IDrawable
 
             canvas.FontColor = textColor;
             canvas.FontSize = 12;
-            canvas.DrawString(entry.Label, 0, yCenter - 10, labelWidth, 20, HorizontalAlignment.Left, VerticalAlignment.Center);
+            string fittedLabel = GradeSalaryBarChartDrawable.FitSingleLine(canvas, entry.Label, labelWidth - 4f, 12f);
+            canvas.DrawString(fittedLabel, 0, yCenter - textBoxHeight / 2f, labelWidth, textBoxHeight, HorizontalAlignment.Left, VerticalAlignment.Center);
 
             float barX = labelWidth + gap;
             canvas.FillColor = trackColor;
@@ -141,12 +196,13 @@ public sealed class HorizontalBarChartDrawable : IDrawable
 
             canvas.FontColor = mutedColor;
             canvas.FontSize = 11;
+            string fittedValue = GradeSalaryBarChartDrawable.FitSingleLine(canvas, entry.DisplayValue, valueWidth, 11f);
             canvas.DrawString(
-                entry.DisplayValue,
+                fittedValue,
                 barX + barAreaWidth + gap,
-                yCenter - 10,
+                yCenter - textBoxHeight / 2f,
                 valueWidth,
-                20,
+                textBoxHeight,
                 HorizontalAlignment.Right,
                 VerticalAlignment.Center);
         }
@@ -160,11 +216,11 @@ public sealed class DonutChartDrawable : IDrawable
 {
     private static readonly Color[] Palette =
     [
-        Color.FromArgb("#2ED573"),
-        Color.FromArgb("#4F8EF7"),
-        Color.FromArgb("#FFA502"),
-        Color.FromArgb("#A55EEA"),
-        Color.FromArgb("#FF6B81")
+        Color.FromArgb("#6FB59B"),
+        Color.FromArgb("#D4745E"),
+        Color.FromArgb("#C9975B"),
+        Color.FromArgb("#8E8A9E"),
+        Color.FromArgb("#7A9EC2")
     ];
 
     public IReadOnlyList<AnalyticsShareItem> Items { get; set; } = [];
@@ -229,18 +285,22 @@ public sealed class DonutChartDrawable : IDrawable
             startAngle -= sweep;
         }
 
-        canvas.FontColor = Colors.White;
-        canvas.FontSize = 16;
-        canvas.DrawString(((int)total).ToString(), cx - radius, cy - 16, radius * 2f, 20, HorizontalAlignment.Center, VerticalAlignment.Center);
+        Color primaryText = GradeSalaryBarChartDrawable.ThemeColor("White", "#F2EFEA");
+        Color secondaryText = GradeSalaryBarChartDrawable.ThemeColor("TextSecondary", "#ABA49A");
 
-        canvas.FontColor = Color.FromArgb("#A4B0BE");
+        canvas.FontColor = primaryText;
+        canvas.FontSize = 16;
+        canvas.DrawString(((int)total).ToString(), cx - radius, cy - 18, radius * 2f, 24, HorizontalAlignment.Center, VerticalAlignment.Center);
+
+        canvas.FontColor = secondaryText;
         canvas.FontSize = 10;
-        canvas.DrawString(CenterSubtitle, cx - radius, cy + 4, radius * 2f, 14, HorizontalAlignment.Center, VerticalAlignment.Center);
+        canvas.DrawString(CenterSubtitle, cx - radius, cy + 4, radius * 2f, 18, HorizontalAlignment.Center, VerticalAlignment.Center);
 
         float legendX = cx + diameter / 2f + 20f;
         float legendWidth = Math.Max(60f, dirtyRect.Width - legendX - 4f);
-        float rowHeight = Math.Min(28f, (dirtyRect.Height - 16f) / Items.Count);
+        float rowHeight = Math.Min(30f, (dirtyRect.Height - 16f) / Items.Count);
         float startY = (dirtyRect.Height - rowHeight * Items.Count) / 2f;
+        float nameMaxWidth = Math.Max(40f, legendWidth * 0.56f - 18f);
 
         for (int i = 0; i < Items.Count; i++)
         {
@@ -250,13 +310,14 @@ public sealed class DonutChartDrawable : IDrawable
             canvas.FillColor = Palette[i % Palette.Length];
             canvas.FillRoundedRectangle(legendX, rowY - 5, 10, 10, 3);
 
-            canvas.FontColor = Colors.White;
+            canvas.FontColor = primaryText;
             canvas.FontSize = 12;
-            canvas.DrawString(item.Name, legendX + 16, rowY - 10, legendWidth * 0.55f, 20, HorizontalAlignment.Left, VerticalAlignment.Center);
+            string fittedName = GradeSalaryBarChartDrawable.FitSingleLine(canvas, item.Name, nameMaxWidth, 12f);
+            canvas.DrawString(fittedName, legendX + 16, rowY - 12, nameMaxWidth + 4f, 24, HorizontalAlignment.Left, VerticalAlignment.Center);
 
-            canvas.FontColor = Color.FromArgb("#A4B0BE");
+            canvas.FontColor = secondaryText;
             canvas.FontSize = 11;
-            canvas.DrawString(item.DisplayLabel, legendX + 16, rowY - 10, legendWidth - 16, 20, HorizontalAlignment.Right, VerticalAlignment.Center);
+            canvas.DrawString(item.DisplayLabel, legendX + 16, rowY - 12, legendWidth - 16, 24, HorizontalAlignment.Right, VerticalAlignment.Center);
         }
     }
 }

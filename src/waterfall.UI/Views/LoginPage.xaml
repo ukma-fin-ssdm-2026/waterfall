@@ -2,382 +2,382 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
+             xmlns:res="clr-namespace:waterfall.UI.Resources"
              x:Class="waterfall.UI.Views.LoginPage"
              x:DataType="vm:LoginViewModel"
              Title="Профіль"
-             BackgroundColor="{StaticResource DarkBg2}">
+             BackgroundColor="{DynamicResource DarkBg2}">
 
     <ScrollView>
-        <Grid Padding="16" MaximumWidthRequest="500" HorizontalOptions="Fill">
+            <Grid Padding="16" MaximumWidthRequest="540" HorizontalOptions="Fill">
 
-            <!-- Не увійшли: форма входу / реєстрації у стилі PointOfSale -->
-            <Border Style="{StaticResource VacancyCard}"
-                    VerticalOptions="Start"
-                    Padding="20"
-                    IsVisible="{Binding IsLoggedOut}">
-                <VerticalStackLayout Spacing="14">
-                    <Label Text="{Binding FormTitle}"
-                           Style="{StaticResource CardTitle}"
-                           FontSize="22" />
-
-                    <Border StrokeShape="RoundRectangle 10"
-                            Stroke="{StaticResource Secondary}"
-                            BackgroundColor="{StaticResource DarkBg2}"
-                            Padding="10,0">
-                        <Entry Text="{Binding Email}"
-                               Placeholder="Електронна пошта"
-                               Keyboard="Email"
-                               IsSpellCheckEnabled="False"
-                               IsTextPredictionEnabled="False"
-                               BackgroundColor="Transparent"
-                               SemanticProperties.Description="Електронна пошта" />
-                    </Border>
-
-                    <Border StrokeShape="RoundRectangle 10"
-                            Stroke="{StaticResource Secondary}"
-                            BackgroundColor="{StaticResource DarkBg2}"
-                            Padding="10,0">
-                        <Entry Text="{Binding Password}"
-                               Placeholder="Пароль"
-                               IsPassword="True"
-                               BackgroundColor="Transparent"
-                               ReturnCommand="{Binding SubmitCommand}"
-                               SemanticProperties.Description="Пароль" />
-                    </Border>
-
-                    <Label Text="{Binding PasswordHint}"
-                           IsVisible="{Binding IsRegisterMode}"
-                           Style="{StaticResource MutedLabel}"
-                           FontSize="12" />
-
-                    <Border StrokeShape="RoundRectangle 10"
-                            Stroke="{StaticResource Secondary}"
-                            BackgroundColor="{StaticResource DarkBg2}"
-                            Padding="10,0"
-                            IsVisible="{Binding IsRegisterMode}">
-                        <Picker Title="Роль"
-                                ItemsSource="{Binding Roles}"
-                                SelectedItem="{Binding SelectedRole}"
-                                ItemDisplayBinding="{Binding Title, x:DataType=vm:RoleOption}"
-                                BackgroundColor="Transparent" />
-                    </Border>
-
-                    <Border Style="{StaticResource ErrorBanner}"
-                            Margin="0"
-                            IsVisible="{Binding HasError}">
-                        <Label Text="{Binding ErrorMessage}"
-                               Style="{StaticResource ErrorLabel}" />
-                    </Border>
-
-                    <Button Text="{Binding SubmitText}"
-                            Command="{Binding SubmitCommand}"
-                            Style="{StaticResource CardActionPrimary}"
-                            HeightRequest="44"
-                            FontSize="15" />
-
-                    <ActivityIndicator IsRunning="{Binding IsBusy}"
-                                       IsVisible="{Binding IsBusy}"
-                                       HeightRequest="20" />
-
-                    <Button Text="{Binding SwitchModeText}"
-                            Command="{Binding SwitchModeCommand}"
-                            Style="{StaticResource LinkButton}"
-                            HorizontalOptions="Center" />
-                </VerticalStackLayout>
-            </Border>
-
-            <!-- Увійшли: профіль, статистика активності, резервне копіювання, вихід -->
-            <VerticalStackLayout Spacing="14"
-                                 VerticalOptions="Start"
-                                 IsVisible="{Binding IsLoggedIn}">
-
-                <!-- Статус-банер операцій експорту/імпорту -->
-                <Border IsVisible="{Binding HasStatusMessage}"
-                        StrokeShape="RoundRectangle 10"
-                        StrokeThickness="1"
-                        Stroke="{StaticResource Accent}"
-                        BackgroundColor="{StaticResource DarkBg1}"
-                        Padding="14,8">
-                    <Label Text="{Binding StatusMessage}"
-                           FontSize="12"
-                           TextColor="{StaticResource Accent}" />
-                </Border>
-
-                <!-- Інформація про профіль -->
-                <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
-                    <VerticalStackLayout Spacing="10">
-                        <Label Text="Обліковий запис"
-                               Style="{StaticResource MutedLabel}" />
-                        <Label Text="{Binding UserEmail}"
+                <!-- Не увійшли: форма входу / реєстрації -->
+                <Border Style="{StaticResource VacancyCard}"
+                        Margin="0"
+                        VerticalOptions="Start"
+                        Padding="20"
+                        IsVisible="{Binding IsLoggedOut}">
+                    <VerticalStackLayout Spacing="14">
+                        <Label Text="{Binding FormTitle}"
                                Style="{StaticResource CardTitle}"
-                               FontSize="20" />
-                        <HorizontalStackLayout Spacing="10">
-                            <Border Style="{StaticResource SkillChip}" Margin="0">
-                                <Label Text="{Binding UserRoleText}"
-                                       Style="{StaticResource BadgeLabel}"
-                                       TextColor="{StaticResource Primary}" />
-                            </Border>
-                            <Label Text="{Binding SessionText}"
-                                   VerticalOptions="Center"
-                                   Style="{StaticResource MutedLabel}" />
-                        </HorizontalStackLayout>
-                        <Button Text="Вийти"
-                                Command="{Binding LogoutCommand}"
-                                Style="{StaticResource CardAction}"
-                                Margin="0,8,0,0" />
-                    </VerticalStackLayout>
-                </Border>
+                               FontSize="22" />
 
-                <!-- Моє місцезнаходження (Автоматичний розрахунок відстані) -->
-                <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
-                    <VerticalStackLayout Spacing="10">
-                        <Label Text="📍 Моє місцезнаходження"
-                               FontFamily="OpenSansSemibold"
-                               FontSize="16"
-                               TextColor="{StaticResource White}" />
-                        <Label Text="Вкажіть вашу домашню адресу для автоматичного розрахунку відстані до офісів вакансій."
+                        <Border Style="{StaticResource CompactFieldBorder}">
+                            <Entry Style="{StaticResource CompactEntry}"
+                                   Text="{Binding Email}"
+                                   Placeholder="Електронна пошта"
+                                   Keyboard="Email"
+                                   IsSpellCheckEnabled="False"
+                                   IsTextPredictionEnabled="False"
+                                   SemanticProperties.Description="Електронна пошта" />
+                        </Border>
+
+                        <Border Style="{StaticResource CompactFieldBorder}">
+                            <Entry Style="{StaticResource CompactEntry}"
+                                   Text="{Binding Password}"
+                                   Placeholder="Пароль"
+                                   IsPassword="True"
+                                   ReturnCommand="{Binding SubmitCommand}"
+                                   SemanticProperties.Description="Пароль" />
+                        </Border>
+
+                        <Label Text="{Binding PasswordHint}"
+                               IsVisible="{Binding IsRegisterMode}"
                                Style="{StaticResource MutedLabel}"
                                FontSize="12" />
-                        <Border StrokeShape="RoundRectangle 10"
-                                Stroke="{StaticResource Secondary}"
-                                BackgroundColor="{StaticResource DarkBg2}"
-                                Padding="10,0">
-                            <Grid ColumnDefinitions="*,Auto">
-                                <Entry Text="{Binding UserAddress}"
-                                       Placeholder="Почніть вводити назву вулиці або міста..."
-                                       BackgroundColor="Transparent" />
-                                <ActivityIndicator Grid.Column="1"
-                                                   IsRunning="{Binding IsLoadingSuggestions}"
-                                                   IsVisible="{Binding IsLoadingSuggestions}"
-                                                   HeightRequest="18"
-                                                   WidthRequest="18"
-                                                   VerticalOptions="Center"
-                                                   Margin="4,0" />
-                            </Grid>
+
+                        <Border Style="{StaticResource CompactFieldBorder}"
+                                IsVisible="{Binding IsRegisterMode}">
+                            <Picker Style="{StaticResource CompactPicker}"
+                                    Title="Роль"
+                                    ItemsSource="{Binding Roles}"
+                                    SelectedItem="{Binding SelectedRole}"
+                                    ItemDisplayBinding="{Binding Title, x:DataType=vm:RoleOption}" />
                         </Border>
 
-                        <!-- Випадаючий список автопідказок адрес -->
-                        <Border IsVisible="{Binding HasSuggestions}"
-                                StrokeShape="RoundRectangle 10"
-                                Stroke="{StaticResource Primary}"
-                                BackgroundColor="{StaticResource DarkBg1}"
-                                Padding="4"
-                                Margin="0,2,0,4">
-                            <VerticalStackLayout Spacing="2">
-                                <Grid ColumnDefinitions="*,Auto" Margin="8,4,8,2">
-                                    <Label Text="💡 Знайдені варіанти (натисніть для вибору):"
-                                           FontSize="11"
-                                           TextColor="{StaticResource TextSecondary}"
-                                           VerticalOptions="Center" />
-                                    <Button Grid.Column="1"
-                                            Text="✕"
-                                            Command="{Binding CloseSuggestionsCommand}"
-                                            Style="{StaticResource LinkButton}"
-                                            HeightRequest="22"
-                                            FontSize="12"
-                                            Padding="6,0" />
-                                </Grid>
-                                <CollectionView ItemsSource="{Binding AddressSuggestions}"
-                                                SelectionMode="None">
-                                    <CollectionView.ItemTemplate>
-                                        <DataTemplate x:DataType="x:String">
-                                            <Border StrokeThickness="0"
-                                                    BackgroundColor="Transparent"
-                                                    Padding="8,7">
-                                                <Border.GestureRecognizers>
-                                                    <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:LoginViewModel}}, Path=SelectAddressSuggestionCommand}"
-                                                                          CommandParameter="{Binding .}" />
-                                                </Border.GestureRecognizers>
-                                                <HorizontalStackLayout Spacing="8">
-                                                    <Label Text="📍" FontSize="13" VerticalOptions="Center" />
-                                                    <Label Text="{Binding .}"
-                                                           FontSize="13"
-                                                           TextColor="{StaticResource White}"
-                                                           LineBreakMode="TailTruncation"
-                                                           VerticalOptions="Center" />
-                                                </HorizontalStackLayout>
-                                            </Border>
-                                        </DataTemplate>
-                                    </CollectionView.ItemTemplate>
-                                </CollectionView>
-                            </VerticalStackLayout>
+                        <Border Style="{StaticResource ErrorBanner}"
+                                Margin="0"
+                                IsVisible="{Binding HasError}">
+                            <Label Text="{Binding ErrorMessage}"
+                                   Style="{StaticResource ErrorLabel}" />
                         </Border>
 
-                        <!-- Візуальна інтерактивна карта вибраної адреси -->
-                        <Border IsVisible="{Binding HasSelectedCoordinates}"
-                                StrokeShape="RoundRectangle 12"
-                                Stroke="{StaticResource Primary}"
-                                StrokeThickness="1"
-                                BackgroundColor="{StaticResource DarkBg1}"
-                                Margin="0,4,0,4"
-                                Padding="0">
-                            <VerticalStackLayout Spacing="0">
-                                <!-- Верхня плашка з адресою та координатами -->
-                                <Border BackgroundColor="#E610101E"
-                                        StrokeThickness="0"
-                                        Padding="10,6">
-                                    <Grid ColumnDefinitions="Auto,*,Auto">
-                                        <Label Text="📍" FontSize="13" VerticalOptions="Center" Margin="0,0,6,0" />
-                                        <Label Grid.Column="1"
-                                               Text="{Binding SelectedAddressDisplay}"
-                                               FontSize="12"
-                                               TextColor="{StaticResource White}"
-                                               FontFamily="OpenSansSemibold"
-                                               LineBreakMode="TailTruncation"
-                                               VerticalOptions="Center" />
-                                        <Label Grid.Column="2"
-                                               Text="{Binding CoordinatesDisplay}"
-                                               FontSize="11"
-                                               TextColor="{StaticResource TextSecondary}"
-                                               VerticalOptions="Center" />
-                                    </Grid>
-                                </Border>
-
-                                <!-- Контейнер карти -->
-                                <WebView x:Name="MapWebView"
-                                         HeightRequest="220"
-                                         HorizontalOptions="Fill" />
-                            </VerticalStackLayout>
-                        </Border>
-
-                        <Button Text="Зберегти адресу 📍"
-                                Command="{Binding SaveAddressCommand}"
+                        <Button Text="{Binding SubmitText}"
+                                Command="{Binding SubmitCommand}"
                                 Style="{StaticResource CardActionPrimary}"
-                                HorizontalOptions="Start" />
+                                HeightRequest="44"
+                                FontSize="15" />
+
+                        <ActivityIndicator IsRunning="{Binding IsBusy}"
+                                           IsVisible="{Binding IsBusy}"
+                                           HeightRequest="20" />
+
+                        <Button Text="{Binding SwitchModeText}"
+                                Command="{Binding SwitchModeCommand}"
+                                Style="{StaticResource LinkButton}"
+                                HorizontalOptions="Center" />
                     </VerticalStackLayout>
                 </Border>
 
-                <!-- Розділ «Моя статистика» (FR-007, US-008) -->
-                <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
-                    <VerticalStackLayout Spacing="12">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <Label Text="Моя статистика активності"
-                                   FontFamily="OpenSansSemibold"
-                                   FontSize="16"
-                                   TextColor="{StaticResource White}"
-                                   VerticalOptions="Center" />
-                            <Button Grid.Column="1"
-                                    Text="🔄"
-                                    Command="{Binding LoadPersonalStatsCommand}"
-                                    Style="{StaticResource LinkButton}"
-                                    FontSize="14"
-                                    Padding="4" />
-                        </Grid>
+                <!-- Увійшли: профіль, статистика активності, резервне копіювання, вихід -->
+                <VerticalStackLayout Spacing="14"
+                                     VerticalOptions="Start"
+                                     IsVisible="{Binding IsLoggedIn}">
 
-                        <!-- Стан відсутності активності (US-008 AC-3) -->
-                        <Label Text="Поки немає активності. Зберігайте вакансії та шукайте, щоб побачити статистику"
-                               IsVisible="{Binding HasNoActivity}"
-                               Style="{StaticResource MutedLabel}"
-                               FontSize="13" />
+                    <!-- Статус-банер операцій експорту/імпорту -->
+                    <Border IsVisible="{Binding HasStatusMessage}"
+                            StrokeShape="RoundRectangle 10"
+                            StrokeThickness="1"
+                            Stroke="{DynamicResource Primary}"
+                            BackgroundColor="{DynamicResource DarkBg1}"
+                            Padding="14,8">
+                        <Label Text="{Binding StatusMessage}"
+                               FontSize="12"
+                               TextColor="{DynamicResource Primary}" />
+                    </Border>
 
-                        <!-- Активність наявна (US-008 AC-1) -->
-                        <VerticalStackLayout Spacing="12" IsVisible="{Binding HasActivity}">
-                            <!-- Лічильники збережених вакансій та пошуків -->
-                            <Grid ColumnDefinitions="*,Auto,*,Auto" ColumnSpacing="8" Padding="0,4">
-                                <Label Text="Збережених:"
-                                       FontSize="13"
-                                       TextColor="{StaticResource White}"
-                                       VerticalOptions="Center" />
-                                <Border Grid.Column="1"
-                                        Style="{StaticResource SkillChip}"
-                                        BackgroundColor="{StaticResource Primary}"
-                                        StrokeThickness="0"
-                                        Margin="0">
-                                    <Label Text="{Binding SavedVacanciesCount}"
-                                           TextColor="{StaticResource White}"
+                    <!-- Інформація про профіль -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
+                        <VerticalStackLayout Spacing="10">
+                            <Label Text="Обліковий запис"
+                                   Style="{StaticResource MutedLabel}" />
+                            <Label Text="{Binding UserEmail}"
+                                   Style="{StaticResource CardTitle}"
+                                   FontSize="20" />
+                            <HorizontalStackLayout Spacing="10">
+                                <Border Style="{StaticResource SkillChip}" Margin="0">
+                                    <Label Text="{Binding UserRoleText}"
+                                           Style="{StaticResource BadgeLabel}"
                                            FontFamily="OpenSansSemibold"
-                                           FontSize="12" />
+                                           TextColor="{DynamicResource Primary}" />
                                 </Border>
+                                <Label Text="{Binding SessionText}"
+                                       VerticalOptions="Center"
+                                       Style="{StaticResource MutedLabel}" />
+                            </HorizontalStackLayout>
+                            <Button Text="Вийти"
+                                    Command="{Binding LogoutCommand}"
+                                    Style="{StaticResource CardAction}"
+                                    Margin="0,8,0,0" />
+                        </VerticalStackLayout>
+                    </Border>
 
-                                <Label Grid.Column="2"
-                                       Text="Пошуків:"
-                                       FontSize="13"
-                                       TextColor="{StaticResource White}"
+                    <!-- Моє місцезнаходження (Автоматичний розрахунок відстані) -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
+                        <VerticalStackLayout Spacing="10">
+                            <HorizontalStackLayout Spacing="7" VerticalOptions="Center">
+                                <Label Text="{x:Static res:Icons.MapPin}"
+                                       FontFamily="Lucide"
+                                       FontSize="16"
+                                       TextColor="{DynamicResource Primary}"
                                        VerticalOptions="Center" />
-                                <Border Grid.Column="3"
-                                        Style="{StaticResource SkillChip}"
-                                        BackgroundColor="{StaticResource Secondary}"
-                                        StrokeThickness="0"
-                                        Margin="0">
-                                    <Label Text="{Binding TotalSearches}"
-                                           TextColor="{StaticResource White}"
-                                           FontFamily="OpenSansSemibold"
-                                           FontSize="12" />
-                                </Border>
-                            </Grid>
+                                <Label Text="Моє місцезнаходження"
+                                       FontFamily="OpenSansSemibold"
+                                       FontSize="15"
+                                       TextColor="{DynamicResource White}"
+                                       VerticalOptions="Center" />
+                            </HorizontalStackLayout>
+                            <Border Style="{StaticResource CompactFieldBorder}">
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <Entry Style="{StaticResource CompactEntry}"
+                                           Text="{Binding UserAddress}"
+                                           Placeholder="Вулиця або місто..." />
+                                    <ActivityIndicator Grid.Column="1"
+                                                       IsRunning="{Binding IsLoadingSuggestions}"
+                                                       IsVisible="{Binding IsLoadingSuggestions}"
+                                                       HeightRequest="18"
+                                                       WidthRequest="18"
+                                                       VerticalOptions="Center"
+                                                       Margin="4,0" />
+                                </Grid>
+                            </Border>
 
-                            <!-- Топ технологій та категорій -->
-                            <Label Text="Частота технологій у пошуку:"
-                                   Style="{StaticResource MutedLabel}"
-                                   FontSize="13" />
-                            <FlexLayout Wrap="Wrap"
-                                        BindableLayout.ItemsSource="{Binding TopTechnologies}">
-                                <BindableLayout.ItemTemplate>
-                                    <DataTemplate x:DataType="x:String">
-                                        <Border Style="{StaticResource SkillChip}">
-                                            <Label Text="{Binding .}"
-                                                   Style="{StaticResource BadgeLabel}"
-                                                   TextColor="{StaticResource White}" />
-                                        </Border>
-                                    </DataTemplate>
-                                </BindableLayout.ItemTemplate>
-                            </FlexLayout>
+                            <!-- Випадаючий список автопідказок адрес -->
+                            <Border IsVisible="{Binding HasSuggestions}"
+                                    StrokeShape="RoundRectangle 10"
+                                    Stroke="{DynamicResource Primary}"
+                                    BackgroundColor="{DynamicResource DarkBg1}"
+                                    Padding="4"
+                                    Margin="0,2,0,4">
+                                <VerticalStackLayout Spacing="2">
+                                    <Grid ColumnDefinitions="*,Auto" Margin="8,4,8,2">
+                                        <Label Text="Оберіть адресу"
+                                               FontSize="11"
+                                               TextColor="{DynamicResource TextSecondary}"
+                                               VerticalOptions="Center" />
+                                        <Button Grid.Column="1"
+                                                Text="{x:Static res:Icons.X}"
+                                                Command="{Binding CloseSuggestionsCommand}"
+                                                Style="{StaticResource GhostIconButton}"
+                                                WidthRequest="26"
+                                                HeightRequest="26"
+                                                MinimumWidthRequest="26"
+                                                MinimumHeightRequest="26" />
+                                    </Grid>
+                                    <CollectionView ItemsSource="{Binding AddressSuggestions}"
+                                                    SelectionMode="None">
+                                        <CollectionView.ItemTemplate>
+                                            <DataTemplate x:DataType="x:String">
+                                                <Border StrokeThickness="0"
+                                                        BackgroundColor="Transparent"
+                                                        Padding="8,7">
+                                                    <Border.GestureRecognizers>
+                                                        <TapGestureRecognizer Command="{Binding Source={RelativeSource AncestorType={x:Type vm:LoginViewModel}}, Path=SelectAddressSuggestionCommand}"
+                                                                              CommandParameter="{Binding .}" />
+                                                    </Border.GestureRecognizers>
+                                                    <HorizontalStackLayout Spacing="8">
+                                                        <Label Text="{x:Static res:Icons.MapPin}"
+                                                               FontFamily="Lucide"
+                                                               FontSize="13"
+                                                               TextColor="{DynamicResource TextMuted}"
+                                                               VerticalOptions="Center" />
+                                                        <Label Text="{Binding .}"
+                                                               FontSize="13"
+                                                               TextColor="{DynamicResource White}"
+                                                               LineBreakMode="TailTruncation"
+                                                               VerticalOptions="Center" />
+                                                    </HorizontalStackLayout>
+                                                </Border>
+                                            </DataTemplate>
+                                        </CollectionView.ItemTemplate>
+                                    </CollectionView>
+                                </VerticalStackLayout>
+                            </Border>
 
-                            <!-- Історія пошукових запитів -->
-                            <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
-                                <Label Text="Останні пошукові запити:"
-                                       Style="{StaticResource MutedLabel}"
-                                       FontSize="13"
+                            <!-- Візуальна інтерактивна карта вибраної адреси -->
+                            <Border IsVisible="{Binding HasSelectedCoordinates}"
+                                    StrokeShape="RoundRectangle 12"
+                                    Stroke="{DynamicResource CardBorder}"
+                                    StrokeThickness="1"
+                                    BackgroundColor="{DynamicResource DarkBg1}"
+                                    Margin="0,4,0,4"
+                                    Padding="0">
+                                <VerticalStackLayout Spacing="0">
+                                    <!-- Верхня плашка з адресою та координатами -->
+                                    <Border BackgroundColor="{DynamicResource TonalSurface}"
+                                            StrokeThickness="0"
+                                            StrokeShape="Rectangle"
+                                            Padding="10,7">
+                                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                                            <Label Text="{x:Static res:Icons.MapPin}"
+                                                   FontFamily="Lucide"
+                                                   FontSize="13"
+                                                   TextColor="{DynamicResource Primary}"
+                                                   VerticalOptions="Center" />
+                                            <Label Grid.Column="1"
+                                                   Text="{Binding SelectedAddressDisplay}"
+                                                   FontSize="12"
+                                                   TextColor="{DynamicResource White}"
+                                                   FontFamily="OpenSansSemibold"
+                                                   LineBreakMode="TailTruncation"
+                                                   VerticalOptions="Center" />
+                                            <Label Grid.Column="2"
+                                                   Text="{Binding CoordinatesDisplay}"
+                                                   FontSize="11"
+                                                   TextColor="{DynamicResource TextSecondary}"
+                                                   VerticalOptions="Center" />
+                                        </Grid>
+                                    </Border>
+
+                                    <!-- Лінивий контейнер карти (WebView створюється лише за наявності координат) -->
+                                    <ContentView x:Name="MapWebViewHost"
+                                                 HeightRequest="220"
+                                                 HorizontalOptions="Fill" />
+                                </VerticalStackLayout>
+                            </Border>
+
+                            <Button Text="Зберегти адресу"
+                                    Command="{Binding SaveAddressCommand}"
+                                    Style="{StaticResource CardActionPrimary}"
+                                    HorizontalOptions="Start" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Розділ «Моя статистика» (FR-007, US-008) -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
+                        <VerticalStackLayout Spacing="12">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <Label Text="Моя статистика активності"
+                                       FontFamily="OpenSansSemibold"
+                                       FontSize="16"
+                                       TextColor="{DynamicResource White}"
                                        VerticalOptions="Center" />
                                 <Button Grid.Column="1"
-                                        Text="Очистити"
-                                        Command="{Binding ClearRecentSearchesCommand}"
-                                        Style="{StaticResource LinkButton}"
-                                        FontSize="11" />
+                                        Text="{x:Static res:Icons.RefreshCw}"
+                                        Command="{Binding LoadPersonalStatsCommand}"
+                                        Style="{StaticResource GhostIconButton}" />
                             </Grid>
 
-                            <VerticalStackLayout BindableLayout.ItemsSource="{Binding RecentSearches}" Spacing="6">
-                                <BindableLayout.ItemTemplate>
-                                    <DataTemplate x:DataType="x:String">
-                                        <Border StrokeShape="RoundRectangle 8"
-                                                StrokeThickness="1"
-                                                Stroke="{StaticResource Secondary}"
-                                                BackgroundColor="{StaticResource DarkBg2}"
-                                                Padding="10,6">
-                                            <Label Text="{Binding .}"
-                                                   TextColor="{StaticResource White}"
-                                                   FontSize="12" />
-                                        </Border>
-                                    </DataTemplate>
-                                </BindableLayout.ItemTemplate>
+                            <!-- Стан відсутності активності (US-008 AC-3) -->
+                            <Label Text="Поки немає активності. Зберігайте вакансії та шукайте, щоб побачити статистику"
+                                   IsVisible="{Binding HasNoActivity}"
+                                   Style="{StaticResource MutedLabel}"
+                                   FontSize="13" />
+
+                            <!-- Активність наявна (US-008 AC-1) -->
+                            <VerticalStackLayout Spacing="12" IsVisible="{Binding HasActivity}">
+                                <!-- Лічильники збережених вакансій та пошуків -->
+                                <Grid ColumnDefinitions="*,Auto,*,Auto" ColumnSpacing="8" Padding="0,4">
+                                    <Label Text="Збережених:"
+                                           FontSize="13"
+                                           TextColor="{DynamicResource White}"
+                                           VerticalOptions="Center" />
+                                    <Border Grid.Column="1"
+                                            Style="{StaticResource SkillChip}"
+                                            BackgroundColor="{DynamicResource Primary}"
+                                            StrokeThickness="0"
+                                            Margin="0">
+                                        <Label Text="{Binding SavedVacanciesCount}"
+                                               TextColor="{DynamicResource OnPrimary}"
+                                               FontFamily="OpenSansSemibold"
+                                               FontSize="12" />
+                                    </Border>
+
+                                    <Label Grid.Column="2"
+                                           Text="Пошуків:"
+                                           FontSize="13"
+                                           TextColor="{DynamicResource White}"
+                                           VerticalOptions="Center" />
+                                    <Border Grid.Column="3"
+                                            Style="{StaticResource SkillChip}"
+                                            BackgroundColor="{DynamicResource TonalSurface}"
+                                            StrokeThickness="0"
+                                            Margin="0">
+                                        <Label Text="{Binding TotalSearches}"
+                                               TextColor="{DynamicResource White}"
+                                               FontFamily="OpenSansSemibold"
+                                               FontSize="12" />
+                                    </Border>
+                                </Grid>
+
+                                <!-- Топ технологій та категорій -->
+                                <Label Text="Частота технологій у пошуку:"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="13" />
+                                <FlexLayout Wrap="Wrap"
+                                            BindableLayout.ItemsSource="{Binding TopTechnologies}">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Border Style="{StaticResource SkillChip}">
+                                                <Label Text="{Binding .}"
+                                                       Style="{StaticResource BadgeLabel}"
+                                                       TextColor="{DynamicResource White}" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </FlexLayout>
+
+                                <!-- Історія пошукових запитів -->
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
+                                    <Label Text="Останні пошукові запити:"
+                                           Style="{StaticResource MutedLabel}"
+                                           FontSize="13"
+                                           VerticalOptions="Center" />
+                                    <Button Grid.Column="1"
+                                            Text="Очистити"
+                                            Command="{Binding ClearRecentSearchesCommand}"
+                                            Style="{StaticResource LinkButton}"
+                                            FontSize="11" />
+                                </Grid>
+
+                                <VerticalStackLayout BindableLayout.ItemsSource="{Binding RecentSearches}" Spacing="6">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Border StrokeShape="RoundRectangle 8"
+                                                    StrokeThickness="0"
+                                                    BackgroundColor="{DynamicResource TonalSurface}"
+                                                    Padding="10,6">
+                                                <Label Text="{Binding .}"
+                                                       TextColor="{DynamicResource White}"
+                                                       FontSize="12" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </VerticalStackLayout>
                             </VerticalStackLayout>
                         </VerticalStackLayout>
-                    </VerticalStackLayout>
-                </Border>
+                    </Border>
 
-                <!-- Розділ резервного копіювання (FR-013) -->
-                <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
-                    <VerticalStackLayout Spacing="10">
-                        <Label Text="Резервне копіювання профілю"
-                               FontFamily="OpenSansSemibold"
-                               FontSize="16"
-                               TextColor="{StaticResource White}" />
-                        <Label Text="Експорт та імпорт особистого прогресу для перенесення між пристроями."
-                               Style="{StaticResource MutedLabel}"
-                               FontSize="12" />
-                        <Grid ColumnDefinitions="*,*" ColumnSpacing="10" Margin="0,4,0,0">
-                            <Button Text="Експорт даних 📥"
-                                    Command="{Binding ExportProgressCommand}"
-                                    Style="{StaticResource CardAction}" />
-                            <Button Grid.Column="1"
-                                    Text="Імпорт даних 📤"
-                                    Command="{Binding ImportProgressCommand}"
-                                    Style="{StaticResource CardAction}" />
-                        </Grid>
-                    </VerticalStackLayout>
-                </Border>
+                    <!-- Розділ резервного копіювання (FR-013) -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="18">
+                        <VerticalStackLayout Spacing="10">
+                            <Label Text="Резервне копіювання"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="15"
+                                   TextColor="{DynamicResource White}" />
+                            <Grid ColumnDefinitions="*,*" ColumnSpacing="10">
+                                <Button Text="Експорт JSON"
+                                        Command="{Binding ExportProgressCommand}"
+                                        Style="{StaticResource CardAction}" />
+                                <Button Grid.Column="1"
+                                        Text="Імпорт JSON"
+                                        Command="{Binding ImportProgressCommand}"
+                                        Style="{StaticResource CardAction}" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Border>
 
-            </VerticalStackLayout>
-        </Grid>
-    </ScrollView>
+                </VerticalStackLayout>
+            </Grid>
+        </ScrollView>
 </ContentPage>

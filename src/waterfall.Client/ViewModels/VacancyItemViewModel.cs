@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Helpers;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
+using Waterfall.Client.Services;
 using Waterfall.Repository.Normalization;
 
 namespace Waterfall.Client.ViewModels;
@@ -31,6 +32,12 @@ public partial class VacancyItemViewModel : ObservableObject
     private readonly IDistanceCalculatorService? _distanceService;
     private readonly Action<Guid, double?>? _onDistanceCalculated;
 
+    private bool _distanceLoadAttempted;
+    private string? _distanceLoadedForAddress;
+    private string? _distanceInFlightAddress;
+    private int _isDistanceLoading;
+    private int _distanceOperationId;
+
     /// <param name="vacancy">Дані вакансії з API.</param>
     /// <param name="gateway">Шлюз для збереження / видалення з «Обраного».</param>
     /// <param name="messenger">Куди повідомити про зміну стану (<see cref="VacancySaveChangedMessage"/>).</param>
@@ -39,6 +46,7 @@ public partial class VacancyItemViewModel : ObservableObject
     /// <param name="distanceService">Сервіс розрахунку реальної відстані до офісу вакансії.</param>
     /// <param name="onDistanceCalculated">Зворотний виклик при завершенні розрахунку відстані (id, km).</param>
     /// <param name="initialDistanceKm">Попередньо розрахована відстань у км (якщо доступна з кешу).</param>
+    /// <param name="canMarkViewed">Чи дозволено відстежувати перегляд вакансії (лише роль JobSeeker за data-model.md §6).</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
@@ -47,7 +55,8 @@ public partial class VacancyItemViewModel : ObservableObject
         IUrlLauncher? urlLauncher = null,
         IDistanceCalculatorService? distanceService = null,
         Action<Guid, double?>? onDistanceCalculated = null,
-        double? initialDistanceKm = null)
+        double? initialDistanceKm = null,
+        bool canMarkViewed = true)
     {
         Vacancy = vacancy;
         _gateway = gateway;
@@ -57,17 +66,23 @@ public partial class VacancyItemViewModel : ObservableObject
         _distanceService = distanceService;
         _onDistanceCalculated = onDistanceCalculated;
         IsSaved = vacancy.IsSaved;
+        CanMarkViewed = canMarkViewed;
+        IsViewed = canMarkViewed && vacancy.IsViewed;
         Category = string.IsNullOrWhiteSpace(vacancy.Category) ? "Інше" : vacancy.Category;
         CategoryGroup = !string.IsNullOrWhiteSpace(vacancy.CategoryGroup)
             ? vacancy.CategoryGroup
             : VacancyCategoryMap.Resolve(Category);
 
-        if (initialDistanceKm.HasValue)
+        CanShowOnMap = HasExactOfficeAddress(GetMapTarget());
+
+        if (initialDistanceKm.HasValue && ShouldResolveDistance(_distanceService?.UserAddress))
         {
             DistanceKm = initialDistanceKm;
             DistanceText = initialDistanceKm.Value < 1.0
                 ? $"{Math.Round(initialDistanceKm.Value * 1000)} м від вас"
                 : $"{initialDistanceKm.Value.ToString("0.0", CultureInfo.InvariantCulture)} км від вас";
+            _distanceLoadAttempted = true;
+            _distanceLoadedForAddress = _distanceService?.UserAddress;
         }
 
         List<string> skills = CleanSkills(vacancy.Skills);
@@ -77,19 +92,24 @@ public partial class VacancyItemViewModel : ObservableObject
 
         messenger.Register<VacancyItemViewModel, UserAddressChangedMessage>(this, static (vm, message) =>
         {
-            _ = vm.RefreshDistanceAsync();
+            if (vm._distanceLoadAttempted)
+            {
+                _ = vm.RefreshDistanceAsync();
+            }
+            else
+            {
+                vm._distanceLoadedForAddress = null;
+                vm.DistanceKm = null;
+                vm.DistanceText = null;
+            }
         });
-
-        if (!initialDistanceKm.HasValue)
-        {
-            _ = RefreshDistanceAsync();
-        }
     }
 
     public VacancyDto Vacancy { get; }
 
     public Guid Id => Vacancy.Id;
     public string Title => Vacancy.Title;
+    public string Company => Vacancy.Company;
     public string Description => Vacancy.Description;
     public IReadOnlyList<string> Skills => Vacancy.Skills;
     public bool IsActive => Vacancy.IsActive;
@@ -169,18 +189,88 @@ public partial class VacancyItemViewModel : ObservableObject
 
     public bool HasDistanceText => !string.IsNullOrWhiteSpace(DistanceText);
 
+    /// <summary>
+    /// Чи має картка взагалі розраховувати відстань: потрібна точна адреса офісу,
+    /// а розпізнані міста вакансії та користувача мають збігатися.
+    /// Нерозпізнане місто (передмістя) не блокує розрахунок.
+    /// </summary>
+    private bool ShouldResolveDistance(string? userAddress)
+    {
+        if (!CanShowOnMap)
+        {
+            return false;
+        }
+
+        string? targetCity = GeoDistanceService.ExtractCityKey(GetMapTarget());
+        string? userCity = GeoDistanceService.ExtractCityKey(userAddress);
+        return targetCity is null
+            || userCity is null
+            || string.Equals(targetCity, userCity, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Мовчки прибирає відстань, не звертаючись до сервісу: картка не підлягає розрахунку,
+    /// але спроба фіксується, щоб повторні виклики не запускали її знову.
+    /// </summary>
+    private void ClearDistanceWithoutResolution(string? userAddress)
+    {
+        _distanceLoadAttempted = true;
+        _distanceLoadedForAddress = userAddress;
+        DistanceKm = null;
+        DistanceText = null;
+        _onDistanceCalculated?.Invoke(Vacancy.Id, null);
+    }
+
+    public Task EnsureDistanceLoadedAsync(CancellationToken ct = default)
+    {
+        string? currentAddress = _distanceService?.UserAddress;
+        if (_distanceService is null || !HasAddress || string.IsNullOrWhiteSpace(currentAddress))
+        {
+            return Task.CompletedTask;
+        }
+
+        if (!ShouldResolveDistance(currentAddress))
+        {
+            ClearDistanceWithoutResolution(currentAddress);
+            return Task.CompletedTask;
+        }
+
+        if ((Volatile.Read(ref _isDistanceLoading) == 1 &&
+             string.Equals(_distanceInFlightAddress, currentAddress, StringComparison.OrdinalIgnoreCase)) ||
+            (_distanceLoadAttempted &&
+             string.Equals(_distanceLoadedForAddress, currentAddress, StringComparison.OrdinalIgnoreCase)))
+        {
+            return Task.CompletedTask;
+        }
+
+        return RefreshDistanceAsync(ct);
+    }
+
     public async Task RefreshDistanceAsync(CancellationToken ct = default)
     {
+        _distanceLoadAttempted = true;
+        string? userAddress = _distanceService?.UserAddress;
+        int opId = Interlocked.Increment(ref _distanceOperationId);
+        _distanceInFlightAddress = userAddress;
+        Volatile.Write(ref _isDistanceLoading, 1);
+
         try
         {
             if (_distanceService is null ||
                 !HasAddress ||
-                string.IsNullOrWhiteSpace(_distanceService.UserAddress) ||
+                string.IsNullOrWhiteSpace(userAddress) ||
                 FullAddress?.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase) == true)
             {
+                _distanceLoadedForAddress = userAddress;
                 DistanceKm = null;
                 DistanceText = null;
                 _onDistanceCalculated?.Invoke(Vacancy.Id, null);
+                return;
+            }
+
+            if (!ShouldResolveDistance(userAddress))
+            {
+                ClearDistanceWithoutResolution(userAddress);
                 return;
             }
 
@@ -189,6 +279,7 @@ public partial class VacancyItemViewModel : ObservableObject
                 target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase) ||
                 target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
             {
+                _distanceLoadedForAddress = userAddress;
                 DistanceKm = null;
                 DistanceText = null;
                 _onDistanceCalculated?.Invoke(Vacancy.Id, null);
@@ -198,6 +289,12 @@ public partial class VacancyItemViewModel : ObservableObject
             try
             {
                 double? km = await _distanceService.CalculateDistanceKmAsync(target, ct);
+                if (opId != Volatile.Read(ref _distanceOperationId))
+                {
+                    return;
+                }
+
+                _distanceLoadedForAddress = userAddress;
                 DistanceKm = km;
                 _onDistanceCalculated?.Invoke(Vacancy.Id, km);
                 if (km.HasValue)
@@ -211,14 +308,33 @@ public partial class VacancyItemViewModel : ObservableObject
                     DistanceText = "Не вдалося розрахувати";
                 }
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                if (opId == Volatile.Read(ref _distanceOperationId))
+                {
+                    _distanceLoadedForAddress = null;
+                }
+            }
             catch (Exception ex) when (IsNetworkError(ex))
             {
+                if (opId != Volatile.Read(ref _distanceOperationId))
+                {
+                    return;
+                }
+
+                _distanceLoadedForAddress = userAddress;
                 DistanceKm = null;
                 _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 DistanceText = "Немає інтернету";
             }
             catch
             {
+                if (opId != Volatile.Read(ref _distanceOperationId))
+                {
+                    return;
+                }
+
+                _distanceLoadedForAddress = userAddress;
                 DistanceKm = null;
                 _onDistanceCalculated?.Invoke(Vacancy.Id, null);
                 DistanceText = "Не вдалося розрахувати";
@@ -226,9 +342,19 @@ public partial class VacancyItemViewModel : ObservableObject
         }
         catch
         {
-            DistanceKm = null;
-            _onDistanceCalculated?.Invoke(Vacancy.Id, null);
-            DistanceText = null;
+            if (opId == Volatile.Read(ref _distanceOperationId))
+            {
+                DistanceKm = null;
+                _onDistanceCalculated?.Invoke(Vacancy.Id, null);
+                DistanceText = null;
+            }
+        }
+        finally
+        {
+            if (opId == Volatile.Read(ref _distanceOperationId))
+            {
+                Volatile.Write(ref _isDistanceLoading, 0);
+            }
         }
     }
 
@@ -272,9 +398,70 @@ public partial class VacancyItemViewModel : ObservableObject
         ? $"{MapLatitude!.Value.ToString("F4", CultureInfo.InvariantCulture)}, {MapLongitude!.Value.ToString("F4", CultureInfo.InvariantCulture)}"
         : string.Empty;
 
-    public string MapToggleText => IsMapExpanded ? "Приховати мапу ▲" : "Показати на мапі 🗺️";
+    public string MapToggleText => IsMapExpanded ? "Приховати мапу" : "Показати на мапі";
 
     public bool HasMapError => !string.IsNullOrWhiteSpace(MapErrorMessage);
+
+    public bool CanShowOnMap { get; }
+
+    private string GetMapTarget() =>
+        !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : (Vacancy.Location ?? string.Empty);
+
+    private static readonly string[] ExactAddressMarkers =
+    [
+        "вул.", "вул ", "вулиц", "просп", "пр-т", "пр.", "пл.", "площ",
+        "бульв", "б-р", "пров.", "провулок", "набережн", "шосе", "узвіз",
+        "алея", "тупик", "мікрорайон", "мкр", "бц ", "бц«", "трц", "тц ",
+        "офіс", "метро", "ст. м.", "unit.city", "gulliver", "parus",
+        "horizon", "eurasia", "ocean plaza", "dream town",
+        "st.", "str.", "street", "ave", "blvd", "sq.", "square", "plaza"
+    ];
+
+    private static bool HasExactOfficeAddress(string? target)
+    {
+        if (string.IsNullOrWhiteSpace(target))
+        {
+            return false;
+        }
+
+        string trimmed = target.Trim();
+        if (trimmed.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("remote", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("віддален", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("дистанц", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("за кордоном", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains("abroad", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (trimmed.Equals("україна", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("ukraine", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("вся україна", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("європа", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Equals("europe", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        foreach (char c in trimmed)
+        {
+            if (char.IsDigit(c))
+            {
+                return true;
+            }
+        }
+
+        foreach (string marker in ExactAddressMarkers)
+        {
+            if (trimmed.Contains(marker, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     [RelayCommand]
     public async Task ToggleMapAsync()
@@ -292,7 +479,7 @@ public partial class VacancyItemViewModel : ObservableObject
             return;
         }
 
-        string target = !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : (Vacancy.Location ?? string.Empty);
+        string target = GetMapTarget();
 
         if (string.IsNullOrWhiteSpace(target) ||
             target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
@@ -360,18 +547,24 @@ public partial class VacancyItemViewModel : ObservableObject
     private void ToggleDetails()
     {
         IsDetailsExpanded = !IsDetailsExpanded;
-        if (IsDetailsExpanded)
+        if (IsDetailsExpanded && CanMarkViewed)
         {
+            IsViewed = true;
             _ = _gateway.RecordVacancyViewAsync(Id);
-            _messenger.Send(new VacancyViewedMessage(Id));
+            _messenger.Send(new VacancyViewedMessage(Id, true));
         }
     }
 
     [RelayCommand]
     private async Task OpenSourceAsync()
     {
-        _ = _gateway.RecordVacancyViewAsync(Id);
-        _messenger.Send(new VacancyViewedMessage(Id));
+        if (CanMarkViewed)
+        {
+            IsViewed = true;
+            _ = _gateway.RecordVacancyViewAsync(Id);
+            _messenger.Send(new VacancyViewedMessage(Id, true));
+        }
+
         if (HasSourceUrl && Uri.TryCreate(SourceUrl, UriKind.Absolute, out Uri? uri))
         {
             try
@@ -388,6 +581,71 @@ public partial class VacancyItemViewModel : ObservableObject
             }
         }
     }
+
+    /// <summary>
+    /// Чи дозволено позначати вакансію як переглянуту (лише авторизований JobSeeker за data-model.md §6).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanMarkViewed { get; set; } = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ViewedButtonText))]
+    public partial bool IsViewed { get; set; }
+
+    /// <summary>
+    /// true під час короткої анімації приховування картки (коли увімкнено «Без переглянутих» і натиснуто кнопку перегляду).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsDismissing { get; set; }
+
+    public string ViewedButtonText => IsViewed ? "Зняти позначку переглянуто" : "Позначити як переглянуто";
+
+    [RelayCommand]
+    private async Task ToggleViewedAsync()
+    {
+        if (!CanMarkViewed)
+        {
+            return;
+        }
+
+        bool target = !IsViewed;
+        IsViewed = target;
+        _messenger.Send(new VacancyViewedMessage(Id, target, Explicit: true));
+
+        if (target)
+        {
+            await _gateway.RecordVacancyViewAsync(Id);
+        }
+        else
+        {
+            await _gateway.UnmarkVacancyViewAsync(Id);
+        }
+    }
+
+    public string? PublishedAtDisplay => Vacancy.PublishedAt != default
+        ? $"Опубл. {Vacancy.PublishedAt.ToLocalTime():dd.MM.yyyy}"
+        : null;
+
+    public string? ParsedAtDisplay
+    {
+        get
+        {
+            DateTimeOffset parsedAt = Vacancy.LastSeenAt != default ? Vacancy.LastSeenAt : Vacancy.FirstSeenAt;
+            return parsedAt != default
+                ? $"Спаршено {parsedAt.ToLocalTime():dd.MM.yyyy}"
+                : null;
+        }
+    }
+
+    public string DatesDisplay => (PublishedAtDisplay, ParsedAtDisplay) switch
+    {
+        ({ } pub, { } parsed) => $"{pub} · {parsed}",
+        ({ } pub, null) => pub,
+        (null, { } parsed) => parsed,
+        _ => string.Empty
+    };
+
+    public bool HasDatesDisplay => !string.IsNullOrEmpty(DatesDisplay);
 
     /// <summary>
     /// Передає вакансію ШІ-консультанту (FR-010): вкладка ШІ відкриється й покаже аналіз.

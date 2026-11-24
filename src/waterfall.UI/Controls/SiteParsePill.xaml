@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:waterfall.UI.Controls"
+             xmlns:res="clr-namespace:waterfall.UI.Resources"
+             x:Class="waterfall.UI.Controls.SiteParsePill"
+             x:Name="Root">
+
+    <Border BindingContext="{x:Reference Root}"
+            x:DataType="controls:SiteParsePill"
+            StrokeShape="RoundRectangle 15"
+            StrokeThickness="0"
+            BackgroundColor="{DynamicResource TonalSurface}"
+            HeightRequest="30">
+        <Border.Triggers>
+            <DataTrigger TargetType="Border" Binding="{Binding IsSiteEnabled}" Value="True">
+                <Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" />
+            </DataTrigger>
+        </Border.Triggers>
+
+        <HorizontalStackLayout Spacing="0" VerticalOptions="Center">
+            <HorizontalStackLayout Spacing="5" Padding="11,0,7,0" VerticalOptions="Center">
+                <HorizontalStackLayout.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ToggleCommand}" />
+                </HorizontalStackLayout.GestureRecognizers>
+                <Label Text="{x:Static res:Icons.Check}"
+                       FontFamily="Lucide"
+                       FontSize="11"
+                       TextColor="{DynamicResource InkPillText}"
+                       VerticalOptions="Center"
+                       IsVisible="{Binding IsSiteEnabled}" />
+                <Label Text="{Binding SiteName}"
+                       FontSize="11.5"
+                       FontFamily="OpenSansSemibold"
+                       TextColor="{DynamicResource TextSecondary}"
+                       VerticalOptions="Center">
+                    <Label.Triggers>
+                        <DataTrigger TargetType="Label" Binding="{Binding IsSiteEnabled}" Value="True">
+                            <Setter Property="TextColor" Value="{DynamicResource InkPillText}" />
+                        </DataTrigger>
+                    </Label.Triggers>
+                </Label>
+            </HorizontalStackLayout>
+
+            <Button Text="{x:Static res:Icons.SlidersHorizontal}"
+                    Clicked="OnSettingsButtonClicked"
+                    Style="{StaticResource GhostIconButton}"
+                    WidthRequest="28"
+                    HeightRequest="28"
+                    MinimumWidthRequest="28"
+                    MinimumHeightRequest="28"
+                    FontSize="11.5">
+                <Button.Triggers>
+                    <DataTrigger TargetType="Button" Binding="{Binding IsSiteEnabled}" Value="True">
+                        <Setter Property="TextColor" Value="{DynamicResource InkPillText}" />
+                    </DataTrigger>
+                </Button.Triggers>
+            </Button>
+        </HorizontalStackLayout>
+    </Border>
+</ContentView>

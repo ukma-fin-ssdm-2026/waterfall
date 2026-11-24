@@ -21,8 +21,7 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
 
     private readonly IDbContextFactory<ClientWaterfallDbContext>? _contextFactory;
     private readonly DbContextOptions<ClientWaterfallDbContext>? _options;
-    private readonly SemaphoreSlim _initLock = new(1, 1);
-    private bool _isInitialized;
+    private volatile bool _isInitialized;
 
     public EfLocalVacancyStore(IDbContextFactory<ClientWaterfallDbContext> contextFactory)
     {
@@ -48,7 +47,7 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
         }
 
         _options = new DbContextOptionsBuilder<ClientWaterfallDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite($"Data Source={databasePath};Default Timeout=5")
             .Options;
     }
 
@@ -74,7 +73,7 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
             return;
         }
 
-        await _initLock.WaitAsync(ct);
+        await ClientWaterfallDbContext.SharedInitLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (_isInitialized)
@@ -83,13 +82,13 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
             }
 
             await using ClientWaterfallDbContext context = CreateContext();
-            await context.Database.EnsureCreatedAsync(ct);
-            await EnsureSchemaUpgradedAsync(context, ct);
+            await context.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
+            await EnsureSchemaUpgradedAsync(context, ct).ConfigureAwait(false);
             _isInitialized = true;
         }
         finally
         {
-            _initLock.Release();
+            ClientWaterfallDbContext.SharedInitLock.Release();
         }
     }
 
@@ -103,7 +102,7 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
         bool shouldClose = connection.State != System.Data.ConnectionState.Open;
         if (shouldClose)
         {
-            await connection.OpenAsync(ct);
+            await connection.OpenAsync(ct).ConfigureAwait(false);
         }
 
         try
@@ -112,8 +111,8 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
             await using (DbCommand pragma = connection.CreateCommand())
             {
                 pragma.CommandText = "PRAGMA table_info('Vacancies');";
-                await using DbDataReader reader = await pragma.ExecuteReaderAsync(ct);
-                while (await reader.ReadAsync(ct))
+                await using DbDataReader reader = await pragma.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                while (await reader.ReadAsync(ct).ConfigureAwait(false))
                 {
                     existingColumns.Add(reader.GetString(1));
                 }
@@ -139,7 +138,7 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
                 {
                     if (!existingColumns.Contains(column))
                     {
-                        await context.Database.ExecuteSqlRawAsync(sql, ct);
+                        await context.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false);
                     }
                 }
             }
@@ -151,219 +150,233 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
                     LastSyncedAt INTEGER NULL,
                     LastSummary TEXT NULL
                 );
-                """, ct);
+                """, ct).ConfigureAwait(false);
         }
         finally
         {
             if (shouldClose)
             {
-                await connection.CloseAsync();
+                await connection.CloseAsync().ConfigureAwait(false);
             }
         }
     }
 
-    public async Task<IReadOnlyList<VacancyDto>> GetAllAsync(CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
+    public Task<IReadOnlyList<VacancyDto>> GetAllAsync(CancellationToken ct = default) =>
+        Task.Run<IReadOnlyList<VacancyDto>>(async () =>
+        {
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
 
-        List<ClientVacancyDB> rows = await context.Vacancies
-            .AsNoTracking()
-            .OrderByDescending(v => v.PublishedAt)
-            .ThenByDescending(v => v.LastSeenAt)
-            .ToListAsync(ct);
+            List<ClientVacancyDB> rows = await context.Vacancies
+                .AsNoTracking()
+                .OrderByDescending(v => v.PublishedAt)
+                .ThenByDescending(v => v.LastSeenAt)
+                .ToListAsync(ct).ConfigureAwait(false);
 
-        return rows.Select(MapToDto).ToList();
-    }
+            return rows.Select(MapToDto).ToList();
+        }, ct);
 
-    public async Task<int> SaveVacanciesAsync(IEnumerable<VacancyDto> vacancies, bool isSynced, CancellationToken ct = default)
+    public Task<int> SaveVacanciesAsync(IEnumerable<VacancyDto> vacancies, bool isSynced, CancellationToken ct = default)
     {
         List<VacancyDto> list = vacancies.Where(v => !string.IsNullOrWhiteSpace(v.Title)).ToList();
         if (list.Count == 0)
         {
-            return 0;
+            return Task.FromResult(0);
         }
 
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-        List<ClientVacancyDB> existing = await context.Vacancies.ToListAsync(ct);
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-        int affected = 0;
-
-        foreach (VacancyDto dto in list)
+        return Task.Run(async () =>
         {
-            ClientVacancyDB? match = FindMatch(existing, dto.Id, dto.Source.ToString(), dto.ExternalId, dto.SourceUrl);
-            if (match is null)
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
+            List<ClientVacancyDB> existing = await context.Vacancies.ToListAsync(ct).ConfigureAwait(false);
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+            int affected = 0;
+
+            foreach (VacancyDto dto in list)
             {
-                ClientVacancyDB entity = MapFromDto(dto, isSynced, now);
-                context.Vacancies.Add(entity);
-                existing.Add(entity);
+                ClientVacancyDB? match = FindMatch(existing, dto.Id, dto.Source.ToString(), dto.ExternalId, dto.SourceUrl);
+                if (match is null)
+                {
+                    ClientVacancyDB entity = MapFromDto(dto, isSynced, now);
+                    context.Vacancies.Add(entity);
+                    existing.Add(entity);
+                    affected++;
+                    continue;
+                }
+
+                // Якщо існуючий локальний запис містить новіші несинхронізовані правки — не затираємо їх старими серверними даними
+                if (!match.IsSynced && isSynced && match.LocalUpdatedAt >= dto.LastSeenAt)
+                {
+                    continue;
+                }
+
+                ApplyDtoToEntity(match, dto, isSynced, now);
                 affected++;
-                continue;
             }
 
-            // Якщо існуючий локальний запис містить новіші несинхронізовані правки — не затираємо їх старими серверними даними
-            if (!match.IsSynced && isSynced && match.LocalUpdatedAt >= dto.LastSeenAt)
+            if (affected > 0)
             {
-                continue;
+                await context.SaveChangesAsync(ct).ConfigureAwait(false);
             }
 
-            ApplyDtoToEntity(match, dto, isSynced, now);
-            affected++;
-        }
+            return affected;
+        }, ct);
+    }
 
-        if (affected > 0)
+    public Task<IReadOnlyList<ClientVacancyDB>> GetUnsyncedAsync(CancellationToken ct = default) =>
+        Task.Run<IReadOnlyList<ClientVacancyDB>>(async () =>
         {
-            await context.SaveChangesAsync(ct);
-        }
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
 
-        return affected;
-    }
+            return await context.Vacancies
+                .AsNoTracking()
+                .Where(v => !v.IsSynced)
+                .OrderBy(v => v.LocalUpdatedAt)
+                .ToListAsync(ct).ConfigureAwait(false);
+        }, ct);
 
-    public async Task<IReadOnlyList<ClientVacancyDB>> GetUnsyncedAsync(CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        return await context.Vacancies
-            .AsNoTracking()
-            .Where(v => !v.IsSynced)
-            .OrderBy(v => v.LocalUpdatedAt)
-            .ToListAsync(ct);
-    }
-
-    public async Task MarkAsSyncedAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    public Task MarkAsSyncedAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
     {
         List<Guid> idList = ids.Distinct().ToList();
         if (idList.Count == 0)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        List<ClientVacancyDB> rows = await context.Vacancies
-            .Where(v => idList.Contains(v.Id))
-            .ToListAsync(ct);
-
-        foreach (ClientVacancyDB row in rows)
+        return Task.Run(async () =>
         {
-            row.IsSynced = true;
-        }
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
 
-        await context.SaveChangesAsync(ct);
+            List<ClientVacancyDB> rows = await context.Vacancies
+                .Where(v => idList.Contains(v.Id))
+                .ToListAsync(ct).ConfigureAwait(false);
+
+            foreach (ClientVacancyDB row in rows)
+            {
+                row.IsSynced = true;
+            }
+
+            await context.SaveChangesAsync(ct).ConfigureAwait(false);
+        }, ct);
     }
 
-    public async Task<(int Added, int Updated)> UpsertFromServerAsync(IEnumerable<VacancySyncItemDto> serverItems, CancellationToken ct = default)
+    public Task<(int Added, int Updated)> UpsertFromServerAsync(IEnumerable<VacancySyncItemDto> serverItems, CancellationToken ct = default)
     {
         List<VacancySyncItemDto> items = serverItems.Where(i => !string.IsNullOrWhiteSpace(i.Title)).ToList();
         if (items.Count == 0)
         {
-            return (0, 0);
+            return Task.FromResult((0, 0));
         }
 
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-        List<ClientVacancyDB> existing = await context.Vacancies.ToListAsync(ct);
-
-        int added = 0;
-        int updated = 0;
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-
-        foreach (VacancySyncItemDto item in items)
+        return Task.Run(async () =>
         {
-            ClientVacancyDB? match = FindMatch(existing, item.Id, item.Source.ToString(), item.ExternalId, item.SourceUrl);
-            if (match is null)
-            {
-                ClientVacancyDB entity = MapFromSyncItem(item, now);
-                context.Vacancies.Add(entity);
-                existing.Add(entity);
-                added++;
-                continue;
-            }
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
+            List<ClientVacancyDB> existing = await context.Vacancies.ToListAsync(ct).ConfigureAwait(false);
 
-            // Якщо серверний запис має інший канонічний Id, але той самий (Source, ExternalId) або SourceUrl —
-            // вирівнюємо ідентифікатор, щоб надалі Id клієнта та сервера збігалися.
-            if (match.Id != item.Id && item.Id != Guid.Empty && !existing.Any(e => e.Id == item.Id))
+            int added = 0;
+            int updated = 0;
+            DateTimeOffset now = DateTimeOffset.UtcNow;
+
+            foreach (VacancySyncItemDto item in items)
             {
-                context.Vacancies.Remove(match);
-                existing.Remove(match);
-                ClientVacancyDB replaced = MapFromSyncItem(item, now);
-                context.Vacancies.Add(replaced);
-                existing.Add(replaced);
+                ClientVacancyDB? match = FindMatch(existing, item.Id, item.Source.ToString(), item.ExternalId, item.SourceUrl);
+                if (match is null)
+                {
+                    ClientVacancyDB entity = MapFromSyncItem(item, now);
+                    context.Vacancies.Add(entity);
+                    existing.Add(entity);
+                    added++;
+                    continue;
+                }
+
+                // Якщо серверний запис має інший канонічний Id, але той самий (Source, ExternalId) або SourceUrl —
+                // вирівнюємо ідентифікатор, щоб надалі Id клієнта та сервера збігалися.
+                if (match.Id != item.Id && item.Id != Guid.Empty && !existing.Any(e => e.Id == item.Id))
+                {
+                    context.Vacancies.Remove(match);
+                    existing.Remove(match);
+                    ClientVacancyDB replaced = MapFromSyncItem(item, now);
+                    context.Vacancies.Add(replaced);
+                    existing.Add(replaced);
+                    updated++;
+                    continue;
+                }
+
+                // Не перезаписуємо несинхронізовані локальні правки, які новіші за серверний стан
+                if (!match.IsSynced && match.LocalUpdatedAt > item.LastSeenAt)
+                {
+                    continue;
+                }
+
+                ApplySyncItemToEntity(match, item, now);
                 updated++;
-                continue;
             }
 
-            // Не перезаписуємо несинхронізовані локальні правки, які новіші за серверний стан
-            if (!match.IsSynced && match.LocalUpdatedAt > item.LastSeenAt)
+            if (added > 0 || updated > 0)
             {
-                continue;
+                await context.SaveChangesAsync(ct).ConfigureAwait(false);
             }
 
-            ApplySyncItemToEntity(match, item, now);
-            updated++;
-        }
-
-        if (added > 0 || updated > 0)
-        {
-            await context.SaveChangesAsync(ct);
-        }
-
-        return (added, updated);
+            return (added, updated);
+        }, ct);
     }
 
-    public async Task<DateTimeOffset?> GetLastSyncedAtAsync(CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        ClientSyncStateDB? state = await context.SyncStates
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Key == VacancySyncStateKey, ct);
-        return state?.LastSyncedAt;
-    }
-
-    public async Task SetLastSyncedAtAsync(DateTimeOffset syncedAt, string? summary = null, CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        ClientSyncStateDB? state = await context.SyncStates
-            .FirstOrDefaultAsync(s => s.Key == VacancySyncStateKey, ct);
-
-        if (state is null)
+    public Task<DateTimeOffset?> GetLastSyncedAtAsync(CancellationToken ct = default) =>
+        Task.Run(async () =>
         {
-            context.SyncStates.Add(new ClientSyncStateDB
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
+
+            ClientSyncStateDB? state = await context.SyncStates
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == VacancySyncStateKey, ct).ConfigureAwait(false);
+            return state?.LastSyncedAt;
+        }, ct);
+
+    public Task SetLastSyncedAtAsync(DateTimeOffset syncedAt, string? summary = null, CancellationToken ct = default) =>
+        Task.Run(async () =>
+        {
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
+
+            ClientSyncStateDB? state = await context.SyncStates
+                .FirstOrDefaultAsync(s => s.Key == VacancySyncStateKey, ct).ConfigureAwait(false);
+
+            if (state is null)
             {
-                Key = VacancySyncStateKey,
-                LastSyncedAt = syncedAt,
-                LastSummary = summary
-            });
-        }
-        else
+                context.SyncStates.Add(new ClientSyncStateDB
+                {
+                    Key = VacancySyncStateKey,
+                    LastSyncedAt = syncedAt,
+                    LastSummary = summary
+                });
+            }
+            else
+            {
+                state.LastSyncedAt = syncedAt;
+                state.LastSummary = summary;
+            }
+
+            await context.SaveChangesAsync(ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task<LocalVacancyStats> GetStatsAsync(CancellationToken ct = default) =>
+        Task.Run(async () =>
         {
-            state.LastSyncedAt = syncedAt;
-            state.LastSummary = summary;
-        }
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
 
-        await context.SaveChangesAsync(ct);
-    }
+            int total = await context.Vacancies.AsNoTracking().CountAsync(ct).ConfigureAwait(false);
+            int unsynced = await context.Vacancies.AsNoTracking().CountAsync(v => !v.IsSynced, ct).ConfigureAwait(false);
+            ClientSyncStateDB? state = await context.SyncStates
+                .AsNoTracking()
+                .FirstOrDefaultAsync(s => s.Key == VacancySyncStateKey, ct).ConfigureAwait(false);
 
-    public async Task<LocalVacancyStats> GetStatsAsync(CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        int total = await context.Vacancies.AsNoTracking().CountAsync(ct);
-        int unsynced = await context.Vacancies.AsNoTracking().CountAsync(v => !v.IsSynced, ct);
-        ClientSyncStateDB? state = await context.SyncStates
-            .AsNoTracking()
-            .FirstOrDefaultAsync(s => s.Key == VacancySyncStateKey, ct);
-
-        return new LocalVacancyStats(total, unsynced, state?.LastSyncedAt);
-    }
+            return new LocalVacancyStats(total, unsynced, state?.LastSyncedAt);
+        }, ct);
 
     public static VacancySyncItemDto MapToSyncItem(ClientVacancyDB entity) => new()
     {
@@ -631,5 +644,5 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
         }
     }
 
-    public void Dispose() => _initLock.Dispose();
+    public void Dispose() { }
 }

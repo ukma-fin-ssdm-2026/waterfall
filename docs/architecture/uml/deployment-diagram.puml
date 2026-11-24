@@ -8,7 +8,7 @@ rectangle "Зона 1: пристрій користувача\n(не контр
     node "User Device\n(Android / Windows)" <<Device>> {
         node ".NET MAUI Execution Environment\n(Android OS / Windows)" <<Execution Environment>> {
             artifact ".NET MAUI Application\n(.apk / .msix)" <<Artifact>> {
-                component "UI Components\n(XAML / MVVM: Catalog, Database,\nFavorites, AI, Analytics, Settings)" as ClientUI
+                component "Host Pages & Native UI\n(DesktopHostPage / PhoneHostPage,\nPhoneSectionHostPage, SectionPagerViewHandler,\nControls Library, ThemeService)" as ClientUI
                 component "HTTP Gateway & Sync Services\n(HttpClient, VacancySyncService,\nOfflineSiteCollector)" as ClientGateway
                 database "Local SQLite DB\n(waterfall_local.db)" as ClientDB
                 ClientUI -down-> ClientGateway

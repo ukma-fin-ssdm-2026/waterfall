@@ -7,7 +7,21 @@
 
     <maui:MauiWinUIApplication.Resources>
         <ResourceDictionary>
-            <!-- TextBox (Entry) - прибираємо нативну рамку та фон Windows, щоб показувався лише зовнішній Border -->
+            <!-- Warm Editorial WinUI NavigationView overrides: flush pill + terracotta indicator (no Windows blue!) -->
+            <SolidColorBrush x:Key="NavigationViewSelectionIndicatorForeground" Color="#D4745E" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#14FFF8F0" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#1CFFF8F0" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#10FFF8F0" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#0EFFF8F0" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#0AFFF8F0" />
+
+            <!-- Neutral Window TitleBar defaults (updated live by ThemeService) -->
+            <SolidColorBrush x:Key="WindowCaptionBackground" Color="#191817" />
+            <SolidColorBrush x:Key="WindowCaptionBackgroundDisabled" Color="#191817" />
+            <SolidColorBrush x:Key="WindowCaptionForeground" Color="#F2EFEA" />
+            <SolidColorBrush x:Key="WindowCaptionForegroundDisabled" Color="#8B847B" />
+
+            <!-- TextBox (Entry) -->
             <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>
             <Thickness x:Key="TextControlBorderThemeThicknessFocused">0</Thickness>
             <Thickness x:Key="TextControlBorderThemeThicknessPointerOver">0</Thickness>

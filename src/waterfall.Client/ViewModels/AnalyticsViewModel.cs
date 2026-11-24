@@ -97,6 +97,9 @@ public partial class AnalyticsViewModel : ObservableObject
     public partial bool IsLoading { get; private set; }
 
     [ObservableProperty]
+    public partial bool IsRefreshing { get; set; }
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsInsufficientData))]
     public partial bool HasEnoughData { get; private set; }
 
@@ -116,7 +119,7 @@ public partial class AnalyticsViewModel : ObservableObject
 
     public bool IsAccessDenied => !IsAnalyst;
 
-    public string AccessDeniedMessage => "Розділ доступний виключно користувачам із роллю «Роботодавець / Аналітик ринку» (FR-008, US-006 AC-3).";
+    public string AccessDeniedMessage => "Доступно лише для ролі «Аналітик». Увійдіть у вкладці «Профіль».";
 
     public ObservableCollection<GradeSalaryItem> SalariesByGrade { get; } = [];
 
@@ -149,6 +152,56 @@ public partial class AnalyticsViewModel : ObservableObject
     [RelayCommand(AllowConcurrentExecutions = true)]
     public async Task CheckAccessAndReloadAsync()
     {
+        if (!await CheckIsAnalystOrClearAsync())
+        {
+            return;
+        }
+
+        await ApplyFiltersCoreAsync(showSpinner: true);
+    }
+
+    /// <summary>
+    /// При відкритті вкладки: перевірити роль і завантажити аналітику лише якщо вона ще не в пам'яті.
+    /// </summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public async Task EnsureLoadedAsync()
+    {
+        if (!await CheckIsAnalystOrClearAsync())
+        {
+            return;
+        }
+
+        if (HasLoaded && ErrorMessage is null)
+        {
+            return;
+        }
+
+        await ApplyFiltersCoreAsync(showSpinner: !HasLoaded);
+    }
+
+    /// <summary>
+    /// Pull-to-refresh на телефоні: перезавантажити актуальний звіт без подвійного спіннера.
+    /// </summary>
+    [RelayCommand(AllowConcurrentExecutions = true)]
+    public async Task RefreshAsync()
+    {
+        try
+        {
+            if (!await CheckIsAnalystOrClearAsync())
+            {
+                return;
+            }
+
+            await ApplyFiltersCoreAsync(showSpinner: false);
+        }
+        finally
+        {
+            IsRefreshing = false;
+        }
+    }
+
+    private async Task<bool> CheckIsAnalystOrClearAsync()
+    {
         string? token = await _tokens.GetTokenAsync(CancellationToken.None);
         AuthSession? session = token is null ? null : AuthSession.FromToken(token);
         IsAnalyst = session is { Role: UserRole.Analyst };
@@ -165,14 +218,16 @@ public partial class AnalyticsViewModel : ObservableObject
             HasLoaded = false;
             ClearCollections();
             ChartsUpdated?.Invoke(this, EventArgs.Empty);
-            return;
+            return false;
         }
 
-        await ApplyFiltersAsync();
+        return true;
     }
 
     [RelayCommand(AllowConcurrentExecutions = true)]
-    private async Task ApplyFiltersAsync()
+    private Task ApplyFiltersAsync() => ApplyFiltersCoreAsync(showSpinner: true);
+
+    private async Task ApplyFiltersCoreAsync(bool showSpinner)
     {
         if (!IsAnalyst)
         {
@@ -189,7 +244,7 @@ public partial class AnalyticsViewModel : ObservableObject
         CancellationToken ct = cts.Token;
 
         ErrorMessage = null;
-        IsLoading = true;
+        IsLoading = showSpinner;
         try
         {
             string? categoryParam = string.IsNullOrWhiteSpace(SelectedCategory)
@@ -270,6 +325,7 @@ public partial class AnalyticsViewModel : ObservableObject
             if (!ct.IsCancellationRequested)
             {
                 IsLoading = false;
+                IsRefreshing = false;
                 OnPropertyChanged(nameof(IsInsufficientData));
             }
         }

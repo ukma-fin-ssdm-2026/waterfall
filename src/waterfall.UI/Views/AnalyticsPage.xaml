@@ -2,233 +2,266 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:Waterfall.Client.ViewModels;assembly=waterfall.Client"
+             xmlns:controls="clr-namespace:waterfall.UI.Controls"
+             xmlns:res="clr-namespace:waterfall.UI.Resources"
              x:Class="waterfall.UI.Views.AnalyticsPage"
              x:DataType="vm:AnalyticsViewModel"
              Title="Аналітика"
-             BackgroundColor="{StaticResource DarkBg2}">
+             BackgroundColor="{DynamicResource DarkBg2}">
 
-    <ScrollView>
-        <VerticalStackLayout Spacing="16" Padding="14">
+    <Grid RowDefinitions="Auto,*">
 
-            <!-- Блокування для ролі «Шукач роботи» та неавторизованих -->
-            <Border IsVisible="{Binding IsAccessDenied}"
-                    Style="{StaticResource VacancyCard}"
-                    BackgroundColor="{StaticResource DarkBg1}">
-                <VerticalStackLayout Spacing="10" Padding="16">
-                    <Label Text="Доступ обмежено 🔒"
-                           Style="{StaticResource CardTitle}"
-                           TextColor="{StaticResource Danger}" />
-                    <Label Text="{Binding AccessDeniedMessage}"
-                           Style="{StaticResource MutedLabel}" />
-                    <Label Text="Увійдіть під обліковим записом аналітика у вкладці «Профіль» для перегляду аналітичних звітів."
-                           TextColor="{StaticResource TextSecondary}"
-                           FontSize="13" />
-                </VerticalStackLayout>
-            </Border>
+        <!-- Phone Header (видимий лише коли Аналітика — окрема вкладка ролі Аналітика) -->
+        <Grid x:Name="PhoneHeaderBar"
+              Grid.Row="0"
+              IsVisible="{OnIdiom Phone=True, Default=False}"
+              Padding="14,10,12,6">
+            <Label Text="Аналітика"
+                   FontFamily="OpenSansSemibold"
+                   FontSize="20"
+                   TextColor="{DynamicResource White}"
+                   VerticalOptions="Center" />
+        </Grid>
 
-            <!-- Контент для Роботодавця / Аналітика -->
-            <VerticalStackLayout Spacing="16" IsVisible="{Binding IsAnalyst}">
+        <RefreshView Grid.Row="1"
+                     IsEnabled="{Binding IsAnalyst}"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+            <ScrollView>
+                <VerticalStackLayout Spacing="16" Padding="14">
 
-                <!-- Панель фільтрів -->
-                <Border Style="{StaticResource VacancyCard}" Padding="16">
-                    <VerticalStackLayout Spacing="12">
-                        <Label Text="Параметри аналітичного звіту"
-                               FontFamily="OpenSansSemibold"
-                               FontSize="15"
-                               TextColor="{StaticResource White}" />
-                        <Grid ColumnDefinitions="*,*,Auto" ColumnSpacing="10">
-                            <Border StrokeShape="RoundRectangle 10"
-                                    Stroke="{StaticResource Secondary}"
-                                    BackgroundColor="{StaticResource DarkBg2}"
-                                    Padding="8,0">
-                                <Picker Title="Категорія / Стек"
-                                        ItemsSource="{Binding Categories}"
-                                        SelectedItem="{Binding SelectedCategory}"
-                                        FontSize="13"
-                                        BackgroundColor="Transparent" />
-                            </Border>
+                <!-- Блокування для ролі «Шукач роботи» та неавторизованих -->
+                <Border IsVisible="{Binding IsAccessDenied}"
+                        Style="{StaticResource VacancyCard}"
+                        Margin="0"
+                        BackgroundColor="{DynamicResource DarkBg1}">
+                    <VerticalStackLayout Spacing="10" Padding="14">
+                        <HorizontalStackLayout Spacing="8" VerticalOptions="Center">
+                            <Label Text="{x:Static res:Icons.Lock}"
+                                   FontFamily="Lucide"
+                                   FontSize="18"
+                                   TextColor="{DynamicResource Danger}"
+                                   VerticalOptions="Center" />
+                            <Label Text="Доступ обмежено"
+                                   Style="{StaticResource CardTitle}"
+                                   TextColor="{DynamicResource Danger}"
+                                   VerticalOptions="Center" />
+                        </HorizontalStackLayout>
+                        <Label Text="{Binding AccessDeniedMessage}"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="13" />
+                    </VerticalStackLayout>
+                </Border>
 
-                            <Border Grid.Column="1"
-                                    StrokeShape="RoundRectangle 10"
-                                    Stroke="{StaticResource Secondary}"
-                                    BackgroundColor="{StaticResource DarkBg2}"
-                                    Padding="8,0">
-                                <Picker Title="Період"
-                                        ItemsSource="{Binding Periods}"
-                                        SelectedItem="{Binding SelectedPeriod}"
-                                        FontSize="13"
-                                        BackgroundColor="Transparent" />
-                            </Border>
+                <!-- Контент для Роботодавця / Аналітика -->
+                <VerticalStackLayout Spacing="16" IsVisible="{Binding IsAnalyst}">
 
-                            <Button Grid.Column="2"
-                                    Text="Оновити"
+                    <!-- Панель фільтрів (адаптивна: на телефоні переноситься в 2 рядки) -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" Padding="16">
+                        <VerticalStackLayout Spacing="12">
+                            <Label Text="Фільтри звіту"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="15"
+                                   TextColor="{DynamicResource White}" />
+                            <Grid ColumnDefinitions="*,*" RowDefinitions="{OnIdiom Phone='Auto', Default='Auto,Auto'}" ColumnSpacing="12" RowSpacing="12">
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="0" Spacing="5">
+                                    <Label Text="Категорія / Стек"
+                                           FontSize="11.5"
+                                           TextColor="{DynamicResource TextSecondary}"
+                                           Margin="2,0,0,0" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}"
+                                                ItemsSource="{Binding Categories}"
+                                                SelectedItem="{Binding SelectedCategory}" />
+                                    </Border>
+                                </VerticalStackLayout>
+
+                                <VerticalStackLayout Grid.Row="0" Grid.Column="1" Spacing="5">
+                                    <Label Text="Період"
+                                           FontSize="11.5"
+                                           TextColor="{DynamicResource TextSecondary}"
+                                           Margin="2,0,0,0" />
+                                    <Border Style="{StaticResource CompactFieldBorder}">
+                                        <Picker Style="{StaticResource CompactPicker}"
+                                                ItemsSource="{Binding Periods}"
+                                                SelectedItem="{Binding SelectedPeriod}" />
+                                    </Border>
+                                </VerticalStackLayout>
+
+                                <Button Grid.Row="1" Grid.ColumnSpan="2"
+                                        IsVisible="{OnIdiom Phone=False, Default=True}"
+                                        Text="Оновити звіт"
+                                        Command="{Binding ApplyFiltersCommand}"
+                                        Style="{StaticResource CardActionPrimary}"
+                                        HorizontalOptions="End" />
+                            </Grid>
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Стан «Недостатньо даних» -->
+                    <Border IsVisible="{Binding IsInsufficientData}"
+                            Style="{StaticResource ErrorBanner}"
+                            Margin="0,4">
+                        <VerticalStackLayout Spacing="8" Padding="10">
+                            <Label Text="Недостатньо даних для розрахунку аналітики"
+                                   FontFamily="OpenSansSemibold"
+                                   Style="{StaticResource ErrorLabel}" />
+                            <Label Text="За обраними фільтрами у базі менше 5 активних вакансій. Спробуйте розширити період або категорію."
+                                   Style="{StaticResource ErrorLabel}"
+                                   FontSize="12" />
+                            <Button Text="Скинути фільтри аналітики"
+                                    Command="{Binding ResetAnalyticsFiltersCommand}"
+                                    Style="{StaticResource CardAction}"
+                                    HorizontalOptions="Start"
+                                    Margin="0,4,0,0" />
+                        </VerticalStackLayout>
+                    </Border>
+
+                    <!-- Банер помилки мережі/сервера -->
+                    <Border IsVisible="{Binding HasError}"
+                            Style="{StaticResource ErrorBanner}"
+                            Margin="0">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                            <Label Text="{Binding ErrorMessage}"
+                                   VerticalOptions="Center"
+                                   Style="{StaticResource ErrorLabel}" />
+                            <Button Grid.Column="1"
+                                    Text="Повторити"
                                     Command="{Binding ApplyFiltersCommand}"
                                     Style="{StaticResource CardActionPrimary}" />
                         </Grid>
-                    </VerticalStackLayout>
-                </Border>
+                    </Border>
 
-                <!-- Стан «Недостатньо даних» -->
-                <Border IsVisible="{Binding IsInsufficientData}"
-                        Style="{StaticResource ErrorBanner}"
-                        Margin="0,4">
-                    <VerticalStackLayout Spacing="8" Padding="10">
-                        <Label Text="Недостатньо даних для розрахунку аналітики"
-                               FontFamily="OpenSansSemibold"
-                               Style="{StaticResource ErrorLabel}" />
-                        <Label Text="За обраними фільтрами у базі менше 5 активних вакансій. Спробуйте розширити період або категорію."
-                               Style="{StaticResource ErrorLabel}"
-                               FontSize="12" />
-                        <Button Text="Скинути фільтри аналітики"
-                                Command="{Binding ResetAnalyticsFiltersCommand}"
-                                Style="{StaticResource CardAction}"
-                                HorizontalOptions="Start"
-                                Margin="0,4,0,0" />
-                    </VerticalStackLayout>
-                </Border>
+                    <!-- Зведені індикатори вибірки -->
+                    <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10" IsVisible="{Binding HasEnoughData}">
+                        <Border Style="{StaticResource StatCard}">
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="Вибірка"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12" />
+                                <Label Text="{Binding TotalVacancies}"
+                                       FontFamily="OpenSansSemibold"
+                                       FontSize="22"
+                                       TextColor="{DynamicResource White}" />
+                                <Label Text="активних вакансій"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="10" />
+                            </VerticalStackLayout>
+                        </Border>
 
-                <!-- Банер помилки мережі/сервера -->
-                <Border IsVisible="{Binding HasError}"
-                        Style="{StaticResource ErrorBanner}">
-                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                        <Label Text="{Binding ErrorMessage}"
-                               VerticalOptions="Center"
-                               Style="{StaticResource ErrorLabel}" />
-                        <Button Grid.Column="1"
-                                Text="Повторити"
-                                Command="{Binding ApplyFiltersCommand}"
-                                Style="{StaticResource CardActionPrimary}" />
+                        <Border Grid.Column="1" Style="{StaticResource StatCard}">
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="Прозорість ЗП"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12" />
+                                <Label Text="{Binding SalaryTransparencyText}"
+                                       FontFamily="OpenSansSemibold"
+                                       FontSize="22"
+                                       TextColor="{DynamicResource Primary}" />
+                                <Label Text="вакансій із зарплатою"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="10" />
+                            </VerticalStackLayout>
+                        </Border>
+
+                        <Border Grid.Column="2" Style="{StaticResource StatCard}">
+                            <VerticalStackLayout Spacing="6">
+                                <Label Text="Поріг входу ≤ 1 р."
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="12" />
+                                <Label Text="{Binding EntryLevelText}"
+                                       FontFamily="OpenSansSemibold"
+                                       FontSize="18"
+                                       TextColor="{DynamicResource Primary}" />
+                                <Label Text="Junior / без досвіду"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="10" />
+                            </VerticalStackLayout>
+                        </Border>
                     </Grid>
-                </Border>
 
-                <!-- Зведені індикатори вибірки -->
-                <Grid ColumnDefinitions="*,*,*" ColumnSpacing="10" IsVisible="{Binding HasEnoughData}">
-                    <Border Style="{StaticResource StatCard}">
-                        <VerticalStackLayout Spacing="6">
-                            <Label Text="Вибірка"
-                                   Style="{StaticResource MutedLabel}"
-                                   FontSize="12" />
-                            <Label Text="{Binding TotalVacancies}"
+                    <!-- 1. Зарплати за грейдами -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" IsVisible="{Binding HasEnoughData}">
+                        <VerticalStackLayout Spacing="12">
+                            <Label Text="Зарплати за грейдами"
                                    FontFamily="OpenSansSemibold"
-                                   FontSize="22"
-                                   TextColor="{StaticResource White}" />
-                            <Label Text="активних вакансій"
-                                   Style="{StaticResource MutedLabel}"
-                                   FontSize="10" />
+                                   FontSize="15"
+                                   TextColor="{DynamicResource White}" />
+                            <GraphicsView x:Name="GradeSalaryChart"
+                                          HeightRequest="232"
+                                          HorizontalOptions="Fill" />
                         </VerticalStackLayout>
                     </Border>
 
-                    <Border Grid.Column="1" Style="{StaticResource StatCard}">
-                        <VerticalStackLayout Spacing="6">
-                            <Label Text="Прозорість ЗП"
-                                   Style="{StaticResource MutedLabel}"
-                                   FontSize="12" />
-                            <Label Text="{Binding SalaryTransparencyText}"
+                    <!-- 2. Топ-5 технологій за ЗП -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" IsVisible="{Binding HasEnoughData}">
+                        <VerticalStackLayout Spacing="12">
+                            <Label Text="Топ-5 технологій за ЗП"
                                    FontFamily="OpenSansSemibold"
-                                   FontSize="22"
-                                   TextColor="{StaticResource Primary}" />
-                            <Label Text="вакансій із зарплатою"
-                                   Style="{StaticResource MutedLabel}"
-                                   FontSize="10" />
+                                   FontSize="15"
+                                   TextColor="{DynamicResource White}" />
+                            <GraphicsView x:Name="TopPayingTechChart"
+                                          HeightRequest="190"
+                                          HorizontalOptions="Fill" />
                         </VerticalStackLayout>
                     </Border>
 
-                    <Border Grid.Column="2" Style="{StaticResource StatCard}">
-                        <VerticalStackLayout Spacing="6">
-                            <Label Text="Поріг входу ≤ 1 р."
-                                   Style="{StaticResource MutedLabel}"
-                                   FontSize="12" />
-                            <Label Text="{Binding EntryLevelText}"
+                    <!-- 3. Формати роботи -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" IsVisible="{Binding HasEnoughData}">
+                        <VerticalStackLayout Spacing="12">
+                            <Label Text="Формати роботи"
                                    FontFamily="OpenSansSemibold"
-                                   FontSize="18"
-                                   TextColor="{StaticResource Accent}" />
-                            <Label Text="Junior / без досвіду"
-                                   Style="{StaticResource MutedLabel}"
-                                   FontSize="10" />
+                                   FontSize="15"
+                                   TextColor="{DynamicResource White}" />
+                            <GraphicsView x:Name="WorkFormatDonutChart"
+                                          HeightRequest="180"
+                                          HorizontalOptions="Fill" />
                         </VerticalStackLayout>
                     </Border>
-                </Grid>
 
-                <!-- 1. Зарплати за грейдами (Junior / Middle / Senior) -->
-                <Border Style="{StaticResource VacancyCard}" IsVisible="{Binding HasEnoughData}">
-                    <VerticalStackLayout Spacing="12">
-                        <Label Text="1. Зарплати за грейдами (середня та вилка)"
-                               FontFamily="OpenSansSemibold"
-                               FontSize="15"
-                               TextColor="{StaticResource White}" />
-                        <GraphicsView x:Name="GradeSalaryChart"
-                                      HeightRequest="220"
-                                      HorizontalOptions="Fill" />
-                    </VerticalStackLayout>
-                </Border>
+                    <!-- 4a. Топ-5 міст -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" IsVisible="{Binding HasEnoughData}">
+                        <VerticalStackLayout Spacing="12">
+                            <Label Text="Топ-5 міст"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="15"
+                                   TextColor="{DynamicResource White}" />
+                            <GraphicsView x:Name="TopCitiesChart"
+                                          HeightRequest="190"
+                                          HorizontalOptions="Fill" />
+                        </VerticalStackLayout>
+                    </Border>
 
-                <!-- 2. Топ-5 найвисокооплачуваніших технологій -->
-                <Border Style="{StaticResource VacancyCard}" IsVisible="{Binding HasEnoughData}">
-                    <VerticalStackLayout Spacing="12">
-                        <Label Text="2. Найвисокооплачуваніші технології (Топ-5 за ЗП)"
-                               FontFamily="OpenSansSemibold"
-                               FontSize="15"
-                               TextColor="{StaticResource White}" />
-                        <GraphicsView x:Name="TopPayingTechChart"
-                                      HeightRequest="180"
-                                      HorizontalOptions="Fill" />
-                    </VerticalStackLayout>
-                </Border>
+                    <!-- 4b. Джерела вакансій -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" IsVisible="{Binding HasEnoughData}">
+                        <VerticalStackLayout Spacing="12">
+                            <Label Text="Джерела вакансій"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="15"
+                                   TextColor="{DynamicResource White}" />
+                            <GraphicsView x:Name="SourcesDonutChart"
+                                          HeightRequest="180"
+                                          HorizontalOptions="Fill" />
+                        </VerticalStackLayout>
+                    </Border>
 
-                <!-- 3. Формат роботи (Remote / Hybrid / Office) -->
-                <Border Style="{StaticResource VacancyCard}" IsVisible="{Binding HasEnoughData}">
-                    <VerticalStackLayout Spacing="12">
-                        <Label Text="3. Розподіл форматів роботи"
-                               FontFamily="OpenSansSemibold"
-                               FontSize="15"
-                               TextColor="{StaticResource White}" />
-                        <GraphicsView x:Name="WorkFormatDonutChart"
-                                      HeightRequest="175"
-                                      HorizontalOptions="Fill" />
-                    </VerticalStackLayout>
-                </Border>
+                    <!-- 5. Топ-5 роботодавців -->
+                    <Border Style="{StaticResource VacancyCard}" Margin="0" IsVisible="{Binding HasEnoughData}">
+                        <VerticalStackLayout Spacing="12">
+                            <Label Text="Топ-5 роботодавців"
+                                   FontFamily="OpenSansSemibold"
+                                   FontSize="15"
+                                   TextColor="{DynamicResource White}" />
+                            <GraphicsView x:Name="TopCompaniesChart"
+                                          HeightRequest="190"
+                                          HorizontalOptions="Fill" />
+                        </VerticalStackLayout>
+                    </Border>
 
-                <!-- 4a. Географія (Топ-5 міст) -->
-                <Border Style="{StaticResource VacancyCard}" IsVisible="{Binding HasEnoughData}">
-                    <VerticalStackLayout Spacing="12">
-                        <Label Text="4. Географія вакансій (Топ-5 міст)"
-                               FontFamily="OpenSansSemibold"
-                               FontSize="15"
-                               TextColor="{StaticResource White}" />
-                        <GraphicsView x:Name="TopCitiesChart"
-                                      HeightRequest="175"
-                                      HorizontalOptions="Fill" />
-                    </VerticalStackLayout>
-                </Border>
-
-                <!-- 4b. Майданчики (Djinni / DOU / Work.ua / Robota.ua) -->
-                <Border Style="{StaticResource VacancyCard}" IsVisible="{Binding HasEnoughData}">
-                    <VerticalStackLayout Spacing="12">
-                        <Label Text="5. Джерела вакансій (майданчики)"
-                               FontFamily="OpenSansSemibold"
-                               FontSize="15"
-                               TextColor="{StaticResource White}" />
-                        <GraphicsView x:Name="SourcesDonutChart"
-                                      HeightRequest="175"
-                                      HorizontalOptions="Fill" />
-                    </VerticalStackLayout>
-                </Border>
-
-                <!-- 5. Топ-5 найактивніших компаній -->
-                <Border Style="{StaticResource VacancyCard}" IsVisible="{Binding HasEnoughData}">
-                    <VerticalStackLayout Spacing="12">
-                        <Label Text="6. Топ-5 найактивніших роботодавців"
-                               FontFamily="OpenSansSemibold"
-                               FontSize="15"
-                               TextColor="{StaticResource White}" />
-                        <GraphicsView x:Name="TopCompaniesChart"
-                                      HeightRequest="175"
-                                      HorizontalOptions="Fill" />
-                    </VerticalStackLayout>
-                </Border>
+                </VerticalStackLayout>
 
             </VerticalStackLayout>
-
-        </VerticalStackLayout>
-    </ScrollView>
+            </ScrollView>
+        </RefreshView>
+    </Grid>
 </ContentPage>

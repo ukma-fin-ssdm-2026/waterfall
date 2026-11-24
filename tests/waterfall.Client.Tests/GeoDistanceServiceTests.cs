@@ -230,6 +230,101 @@ public class GeoDistanceServiceTests
         Assert.Equal(4.2, result.Value);
     }
 
+    [Fact]
+    public async Task CalculateDistanceKmAsync_CityOnlyTarget_ResolvesOfflineWithoutNetwork()
+    {
+        ThrowingHttpHandler handler = new();
+        HttpClient httpClient = new(handler);
+        GeoDistanceService service = new(null, httpClient, TimeSpan.Zero) { UserAddress = "Київ" };
+
+        double? result = await service.CalculateDistanceKmAsync("Львів");
+
+        Assert.NotNull(result);
+        Assert.InRange(result.Value, 450.0, 650.0);
+        // Обидві міські адреси мають розв'язатися з офлайн-таблиці до будь-якого мережевого запиту.
+        Assert.Equal(0, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task CalculateDistanceKmAsync_CityOnlyTarget_WithStreetLevelUserAddress_ResolvesOffline()
+    {
+        ThrowingHttpHandler handler = new();
+        HttpClient httpClient = new(handler);
+        GeoDistanceService service = new(null, httpClient, TimeSpan.Zero) { UserAddress = "вул. Хрещатик, 22, Київ" };
+
+        double? result = await service.CalculateDistanceKmAsync("Львів");
+
+        Assert.NotNull(result);
+        Assert.InRange(result.Value, 400.0, 700.0);
+        // Хрещатик є у довіднику відомих адрес, а Львів — у таблиці центроїдів.
+        Assert.Equal(0, handler.CallCount);
+    }
+
+    [Fact]
+    public async Task CalculateDistanceKmAsync_StreetLevelTarget_StillConsultsGateway()
+    {
+        // Адреси навмисно відсутні у довіднику відомих локацій, тож має спрацювати мережевий шар.
+        List<string> gatewayCalls = new();
+        FakeGateway gateway = new();
+        gateway.CoordinatesHandler = address =>
+        {
+            gatewayCalls.Add(address);
+            return null;
+        };
+
+        ThrowingHttpHandler handler = new();
+        HttpClient httpClient = new(handler);
+        GeoDistanceService service = new(gateway, httpClient, TimeSpan.Zero) { UserAddress = "Київ, вул. Драгоманова, 15" };
+
+        _ = await service.CalculateDistanceKmAsync("Київ, вул. Тургенєвська, 12");
+
+        Assert.NotEmpty(gatewayCalls);
+    }
+
+    [Fact]
+    public void ExtractCityKey_ReturnsSameKey_ForCityOnlyAndCityWithStreet()
+    {
+        string? cityOnly = GeoDistanceService.ExtractCityKey("Київ");
+        string? withStreet = GeoDistanceService.ExtractCityKey("Київ, вул. Хрещатик 22");
+
+        Assert.Equal("київ", cityOnly);
+        Assert.Equal(cityOnly, withStreet);
+    }
+
+    [Fact]
+    public void ExtractCityKey_ReturnsDistinctKeys_ForDifferentCities()
+    {
+        string? kyiv = GeoDistanceService.ExtractCityKey("Київ, вул. Хрещатик 22");
+        string? lviv = GeoDistanceService.ExtractCityKey("Львів");
+
+        Assert.NotNull(kyiv);
+        Assert.NotNull(lviv);
+        Assert.NotEqual(kyiv, lviv);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("Бровари, вул. Гагаріна 5")]
+    [InlineData("Вишневе, Києво-Святошинський район")]
+    [InlineData("Warsaw, Marszałkowska 1")]
+    public void ExtractCityKey_ReturnsNull_ForUnclassifiableAddresses(string? address)
+    {
+        Assert.Null(GeoDistanceService.ExtractCityKey(address));
+    }
+
+    private sealed class ThrowingHttpHandler : HttpMessageHandler
+    {
+        public int CallCount { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            CallCount++;
+            throw new HttpRequestException("Network failure");
+        }
+    }
+
     private sealed class RoutingFakeHttpHandler : HttpMessageHandler
     {
         private readonly string _photonResponse;

@@ -17,8 +17,7 @@ public class EfLocalGeoCacheService : ILocalGeoCacheService
 {
     private readonly IDbContextFactory<ClientWaterfallDbContext>? _contextFactory;
     private readonly DbContextOptions<ClientWaterfallDbContext>? _options;
-    private readonly SemaphoreSlim _initLock = new(1, 1);
-    private bool _isInitialized;
+    private volatile bool _isInitialized;
 
     public EfLocalGeoCacheService(IDbContextFactory<ClientWaterfallDbContext> contextFactory)
     {
@@ -44,7 +43,7 @@ public class EfLocalGeoCacheService : ILocalGeoCacheService
         }
 
         _options = new DbContextOptionsBuilder<ClientWaterfallDbContext>()
-            .UseSqlite($"Data Source={databasePath}")
+            .UseSqlite($"Data Source={databasePath};Default Timeout=5")
             .Options;
     }
 
@@ -70,7 +69,7 @@ public class EfLocalGeoCacheService : ILocalGeoCacheService
             return;
         }
 
-        await _initLock.WaitAsync(ct);
+        await ClientWaterfallDbContext.SharedInitLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             if (_isInitialized)
@@ -79,177 +78,196 @@ public class EfLocalGeoCacheService : ILocalGeoCacheService
             }
 
             await using ClientWaterfallDbContext context = CreateContext();
-            await context.Database.EnsureCreatedAsync(ct);
+            await context.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
             _isInitialized = true;
         }
         finally
         {
-            _initLock.Release();
+            ClientWaterfallDbContext.SharedInitLock.Release();
         }
     }
 
-    public async Task<(double Latitude, double Longitude)?> GetCoordinatesAsync(string address, CancellationToken ct = default)
+    public Task<(double Latitude, double Longitude)?> GetCoordinatesAsync(string address, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(address))
         {
-            return null;
+            return Task.FromResult<(double Latitude, double Longitude)?>(null);
         }
 
-        string norm = EfGeoLocationCacheRepository.NormalizeKey(address);
-        if (string.IsNullOrWhiteSpace(norm))
+        return Task.Run<(double Latitude, double Longitude)?>(async () =>
         {
-            norm = address.Trim().ToLowerInvariant();
-        }
-
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        // 1. Точний збіг за нормалізованим ключем
-        ClientGeoLocationCacheDB? exact = await context.GeoLocationCache
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.NormalizedAddress == norm, ct);
-
-        if (exact != null)
-        {
-            return (exact.Latitude, exact.Longitude);
-        }
-
-        // 2. Збіг за підрядком через LIKE (якщо ключ достатньо довгий)
-        if (norm.Length >= 4)
-        {
-            ClientGeoLocationCacheDB? partial = await context.GeoLocationCache
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => EF.Functions.Like(c.NormalizedAddress, "%" + norm + "%"), ct);
-
-            if (partial != null)
-            {
-                return (partial.Latitude, partial.Longitude);
-            }
-        }
-
-        return null;
-    }
-
-    public async Task SaveCoordinatesAsync(string address, double latitude, double longitude, bool isSynced, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(address))
-        {
-            return;
-        }
-
-        string norm = EfGeoLocationCacheRepository.NormalizeKey(address);
-        if (string.IsNullOrWhiteSpace(norm))
-        {
-            norm = address.Trim().ToLowerInvariant();
-        }
-
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        ClientGeoLocationCacheDB? existing = await context.GeoLocationCache
-            .FirstOrDefaultAsync(c => c.NormalizedAddress == norm, ct);
-
-        if (existing != null)
-        {
-            existing.Latitude = latitude;
-            existing.Longitude = longitude;
-            existing.CreatedAt = DateTimeOffset.UtcNow;
-            existing.IsSynced = isSynced;
-        }
-        else
-        {
-            ClientGeoLocationCacheDB entry = new()
-            {
-                Id = Guid.NewGuid(),
-                NormalizedAddress = norm,
-                Latitude = latitude,
-                Longitude = longitude,
-                CreatedAt = DateTimeOffset.UtcNow,
-                IsSynced = isSynced
-            };
-            context.GeoLocationCache.Add(entry);
-        }
-
-        await context.SaveChangesAsync(ct);
-    }
-
-    public async Task<IReadOnlyList<ClientGeoLocationCacheDB>> GetUnsyncedAsync(CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        return await context.GeoLocationCache
-            .Where(c => !c.IsSynced)
-            .AsNoTracking()
-            .ToListAsync(ct);
-    }
-
-    public async Task MarkAsSyncedAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
-    {
-        List<Guid> idList = ids.ToList();
-        if (idList.Count == 0)
-        {
-            return;
-        }
-
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        List<ClientGeoLocationCacheDB> items = await context.GeoLocationCache
-            .Where(c => idList.Contains(c.Id))
-            .ToListAsync(ct);
-
-        foreach (ClientGeoLocationCacheDB item in items)
-        {
-            item.IsSynced = true;
-        }
-
-        await context.SaveChangesAsync(ct);
-    }
-
-    public async Task UpsertFromServerAsync(IEnumerable<GeoSyncItemDto> items, CancellationToken ct = default)
-    {
-        await EnsureInitializedAsync(ct);
-        await using ClientWaterfallDbContext context = CreateContext();
-
-        foreach (GeoSyncItemDto item in items)
-        {
-            if (string.IsNullOrWhiteSpace(item.Address))
-            {
-                continue;
-            }
-
-            string norm = EfGeoLocationCacheRepository.NormalizeKey(item.Address);
+            string norm = EfGeoLocationCacheRepository.NormalizeKey(address);
             if (string.IsNullOrWhiteSpace(norm))
             {
-                norm = item.Address.Trim().ToLowerInvariant();
+                norm = address.Trim().ToLowerInvariant();
             }
 
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
+
+            // 1. Точний збіг за нормалізованим ключем
+            ClientGeoLocationCacheDB? exact = await context.GeoLocationCache
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.NormalizedAddress == norm, ct).ConfigureAwait(false);
+
+            if (exact != null)
+            {
+                return (exact.Latitude, exact.Longitude);
+            }
+
+            // 2. Збіг за підрядком через LIKE (якщо ключ достатньо довгий)
+            if (norm.Length >= 4)
+            {
+                ClientGeoLocationCacheDB? partial = await context.GeoLocationCache
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(c => EF.Functions.Like(c.NormalizedAddress, "%" + norm + "%"), ct).ConfigureAwait(false);
+
+                if (partial != null)
+                {
+                    return (partial.Latitude, partial.Longitude);
+                }
+            }
+
+            return null;
+        }, ct);
+    }
+
+    public Task SaveCoordinatesAsync(string address, double latitude, double longitude, bool isSynced, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(address))
+        {
+            return Task.CompletedTask;
+        }
+
+        return Task.Run(async () =>
+        {
+            string norm = EfGeoLocationCacheRepository.NormalizeKey(address);
+            if (string.IsNullOrWhiteSpace(norm))
+            {
+                norm = address.Trim().ToLowerInvariant();
+            }
+
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
+
             ClientGeoLocationCacheDB? existing = await context.GeoLocationCache
-                .FirstOrDefaultAsync(c => c.NormalizedAddress == norm, ct);
+                .FirstOrDefaultAsync(c => c.NormalizedAddress == norm, ct).ConfigureAwait(false);
 
             if (existing != null)
             {
-                existing.Latitude = item.Latitude;
-                existing.Longitude = item.Longitude;
-                existing.CreatedAt = item.CreatedAt;
-                existing.IsSynced = true;
+                existing.Latitude = latitude;
+                existing.Longitude = longitude;
+                existing.CreatedAt = DateTimeOffset.UtcNow;
+                existing.IsSynced = isSynced;
             }
             else
             {
                 ClientGeoLocationCacheDB entry = new()
                 {
-                    Id = item.Id != Guid.Empty ? item.Id : Guid.NewGuid(),
+                    Id = Guid.NewGuid(),
                     NormalizedAddress = norm,
-                    Latitude = item.Latitude,
-                    Longitude = item.Longitude,
-                    CreatedAt = item.CreatedAt,
-                    IsSynced = true
+                    Latitude = latitude,
+                    Longitude = longitude,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    IsSynced = isSynced
                 };
                 context.GeoLocationCache.Add(entry);
             }
+
+            await context.SaveChangesAsync(ct).ConfigureAwait(false);
+        }, ct);
+    }
+
+    public Task<IReadOnlyList<ClientGeoLocationCacheDB>> GetUnsyncedAsync(CancellationToken ct = default) =>
+        Task.Run<IReadOnlyList<ClientGeoLocationCacheDB>>(async () =>
+        {
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
+
+            return await context.GeoLocationCache
+                .Where(c => !c.IsSynced)
+                .AsNoTracking()
+                .ToListAsync(ct).ConfigureAwait(false);
+        }, ct);
+
+    public Task MarkAsSyncedAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
+    {
+        List<Guid> idList = ids.ToList();
+        if (idList.Count == 0)
+        {
+            return Task.CompletedTask;
         }
 
-        await context.SaveChangesAsync(ct);
+        return Task.Run(async () =>
+        {
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
+
+            List<ClientGeoLocationCacheDB> items = await context.GeoLocationCache
+                .Where(c => idList.Contains(c.Id))
+                .ToListAsync(ct).ConfigureAwait(false);
+
+            foreach (ClientGeoLocationCacheDB item in items)
+            {
+                item.IsSynced = true;
+            }
+
+            await context.SaveChangesAsync(ct).ConfigureAwait(false);
+        }, ct);
+    }
+
+    public Task UpsertFromServerAsync(IEnumerable<GeoSyncItemDto> items, CancellationToken ct = default)
+    {
+        List<GeoSyncItemDto> itemList = items.ToList();
+        if (itemList.Count == 0)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Task.Run(async () =>
+        {
+            await EnsureInitializedAsync(ct).ConfigureAwait(false);
+            await using ClientWaterfallDbContext context = CreateContext();
+
+            foreach (GeoSyncItemDto item in itemList)
+            {
+                if (string.IsNullOrWhiteSpace(item.Address))
+                {
+                    continue;
+                }
+
+                string norm = EfGeoLocationCacheRepository.NormalizeKey(item.Address);
+                if (string.IsNullOrWhiteSpace(norm))
+                {
+                    norm = item.Address.Trim().ToLowerInvariant();
+                }
+
+                ClientGeoLocationCacheDB? existing = await context.GeoLocationCache
+                    .FirstOrDefaultAsync(c => c.NormalizedAddress == norm, ct).ConfigureAwait(false);
+
+                if (existing != null)
+                {
+                    existing.Latitude = item.Latitude;
+                    existing.Longitude = item.Longitude;
+                    existing.CreatedAt = item.CreatedAt;
+                    existing.IsSynced = true;
+                }
+                else
+                {
+                    ClientGeoLocationCacheDB entry = new()
+                    {
+                        Id = item.Id != Guid.Empty ? item.Id : Guid.NewGuid(),
+                        NormalizedAddress = norm,
+                        Latitude = item.Latitude,
+                        Longitude = item.Longitude,
+                        CreatedAt = item.CreatedAt,
+                        IsSynced = true
+                    };
+                    context.GeoLocationCache.Add(entry);
+                }
+            }
+
+            await context.SaveChangesAsync(ct).ConfigureAwait(false);
+        }, ct);
     }
 }

@@ -5,6 +5,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
+using Waterfall.Client.ViewModels;
 using Waterfall.Repository.Normalization;
 
 namespace Waterfall.Client.Services;
@@ -212,6 +213,52 @@ public static class VacancyFilterEngine
         if (tasks.Count > 0)
         {
             await Task.WhenAll(tasks);
+        }
+    }
+
+    public static async Task PrefetchDistancesAsync(
+        IReadOnlyList<VacancyItemViewModel> cards,
+        IDistanceCalculatorService? distanceService,
+        CancellationToken ct,
+        int maxCount = 20,
+        int initialDelayMs = 600,
+        int interCardDelayMs = 100)
+    {
+        if (distanceService is null || string.IsNullOrWhiteSpace(distanceService.UserAddress) || cards.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            if (initialDelayMs > 0)
+            {
+                await Task.Delay(initialDelayMs, ct);
+            }
+
+            int limit = Math.Min(cards.Count, maxCount);
+            for (int i = 0; i < limit; i++)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                if (!cards[i].CanShowOnMap)
+                {
+                    continue;
+                }
+
+                await cards[i].EnsureDistanceLoadedAsync(ct);
+
+                if (i < limit - 1 && interCardDelayMs > 0)
+                {
+                    await Task.Delay(interCardDelayMs, ct);
+                }
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+        }
+        catch (ObjectDisposedException)
+        {
         }
     }
 

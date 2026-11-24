@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.Messaging;
+using waterfall.UI.Services;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Services;
@@ -8,6 +9,10 @@ namespace waterfall.UI;
 
 public partial class App : Application
 {
+    private readonly IServiceProvider _services;
+    private readonly ThemeService _themeService;
+    private readonly IAuthTokenStore? _tokenStore;
+    private readonly IMessenger? _appMessenger;
     private readonly IVacancySyncService? _vacancySyncService;
     private readonly IDistanceCalculatorService? _distanceService;
 #if DEBUG
@@ -15,17 +20,24 @@ public partial class App : Application
     private readonly IMessenger _messenger;
 
     public App(
+        IServiceProvider services,
+        ThemeService themeService,
         IHttpGatewayService gateway,
         IMessenger messenger,
+        IAuthTokenStore? tokenStore = null,
         IVacancySyncService? vacancySyncService = null,
         IDistanceCalculatorService? distanceService = null)
     {
+        _services = services;
+        _themeService = themeService;
         _gateway = gateway;
         _messenger = messenger;
+        _appMessenger = messenger;
+        _tokenStore = tokenStore;
         _vacancySyncService = vacancySyncService;
         _distanceService = distanceService;
         InitializeComponent();
-        UserAppTheme = AppTheme.Dark;
+        _themeService.Initialize();
         try
         {
             SecureStorage.Default.Remove("waterfall_access_token");
@@ -45,6 +57,7 @@ public partial class App : Application
 
     private async Task InitializeOnStartAsync()
     {
+        await Task.Delay(400);
         try
         {
             AuthResponse response = await _gateway.LoginAsync(new LoginRequest
@@ -62,13 +75,21 @@ public partial class App : Application
     }
 #else
     public App(
+        IServiceProvider services,
+        ThemeService themeService,
+        IAuthTokenStore? tokenStore = null,
+        IMessenger? messenger = null,
         IVacancySyncService? vacancySyncService = null,
         IDistanceCalculatorService? distanceService = null)
     {
+        _services = services;
+        _themeService = themeService;
+        _tokenStore = tokenStore;
+        _appMessenger = messenger;
         _vacancySyncService = vacancySyncService;
         _distanceService = distanceService;
         InitializeComponent();
-        UserAppTheme = AppTheme.Dark;
+        _themeService.Initialize();
         try
         {
             SecureStorage.Default.Remove("waterfall_access_token");
@@ -83,7 +104,13 @@ public partial class App : Application
     protected override void OnStart()
     {
         base.OnStart();
-        _ = TriggerBackgroundSyncAsync();
+        _ = DelayedStartSyncAsync();
+    }
+
+    private async Task DelayedStartSyncAsync()
+    {
+        await Task.Delay(400);
+        await TriggerBackgroundSyncAsync();
     }
 #endif
 
@@ -127,5 +154,29 @@ public partial class App : Application
         }
     }
 
-    protected override Window CreateWindow(IActivationState? activationState) => new Window(new AppShell());
+    protected override Window CreateWindow(IActivationState? activationState)
+    {
+#if WINDOWS
+        Page rootPage = new DesktopHostPage(_services, _tokenStore, _appMessenger, _themeService);
+        Window window = new(rootPage)
+        {
+            Title = "Waterfall"
+        };
+        TitleBar titleBar = new()
+        {
+            Title = "Waterfall",
+            HeightRequest = 32
+        };
+        titleBar.SetDynamicResource(VisualElement.BackgroundColorProperty, "DarkBg2");
+        titleBar.SetDynamicResource(TitleBar.ForegroundColorProperty, "White");
+        window.TitleBar = titleBar;
+#else
+        Window window = new(new waterfall.UI.Views.PhoneHostPage(_services, _tokenStore, _appMessenger, _themeService))
+        {
+            Title = "Waterfall"
+        };
+#endif
+        window.HandlerChanged += (_, _) => _themeService.ApplyWindowChrome();
+        return window;
+    }
 }

@@ -575,6 +575,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+  '/api/v1/profile/views/{vacancyId}':
+    delete:
+      tags:
+        - Profile
+      summary: Зняти позначку «переглянуто» для вакансії користувача.
+      description: Видаляє записи перегляду вказаної вакансії для поточного користувача.
+      operationId: UnmarkVacancyView
+      parameters:
+        - name: vacancyId
+          in: path
+          description: Ідентифікатор вакансії.
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Позначку перегляду знято (або її вже не було).
+        '401':
+          description: Користувач не авторизований.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '403':
+          description: 'Зміна активності доступна лише шукачу роботи (data-model.md §6, інваріант 2).'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/saved-vacancies:
     get:
       tags:

@@ -3,9 +3,10 @@ using Waterfall.Client.ViewModels;
 
 namespace waterfall.UI.Views;
 
-public partial class LoginPage : ContentPage
+public partial class LoginPage : ContentPage, IHostedPage
 {
     private readonly LoginViewModel _viewModel;
+    private WebView? _mapWebView;
 
     public LoginPage(LoginViewModel viewModel)
     {
@@ -17,7 +18,8 @@ public partial class LoginPage : ContentPage
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName == nameof(LoginViewModel.MapHtml))
+        if (e.PropertyName == nameof(LoginViewModel.MapHtml) ||
+            e.PropertyName == nameof(LoginViewModel.HasSelectedCoordinates))
         {
             UpdateMapSource();
         }
@@ -25,18 +27,52 @@ public partial class LoginPage : ContentPage
 
     private void UpdateMapSource()
     {
-        if (!string.IsNullOrEmpty(_viewModel.MapHtml))
+        if (_viewModel.HasSelectedCoordinates && !string.IsNullOrEmpty(_viewModel.MapHtml))
         {
-            MapWebView.Source = new HtmlWebViewSource { Html = _viewModel.MapHtml };
+            if (_mapWebView is null)
+            {
+                _mapWebView = new WebView
+                {
+                    HeightRequest = 220,
+                    HorizontalOptions = LayoutOptions.Fill
+                };
+                MapWebViewHost.Content = _mapWebView;
+            }
+
+            _mapWebView.Source = new HtmlWebViewSource { Html = _viewModel.MapHtml };
+        }
+        else
+        {
+            ReleaseMapWebView();
         }
     }
 
-    /// <summary>
-    /// Відкриття вкладки профілю (сесія не відновлюється автоматично, користувач входить явно).
-    /// </summary>
+    private void ReleaseMapWebView()
+    {
+        if (_mapWebView is not null)
+        {
+            MapWebViewHost.Content = null;
+            _mapWebView = null;
+        }
+    }
+
+    public void OnHostActivated() => OnAppearing();
+
+    public void OnHostDeactivated() => ReleaseMapWebView();
+
     protected override void OnAppearing()
     {
         base.OnAppearing();
         UpdateMapSource();
+        if (_viewModel.IsLoggedIn && _viewModel.LoadPersonalStatsCommand.CanExecute(null))
+        {
+            _viewModel.LoadPersonalStatsCommand.Execute(null);
+        }
+    }
+
+    protected override void OnDisappearing()
+    {
+        ReleaseMapWebView();
+        base.OnDisappearing();
     }
 }

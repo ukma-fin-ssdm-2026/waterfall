@@ -478,6 +478,31 @@ public class CatalogViewModelTests
         Assert.False(vm.IsGuestBannerVisible);
     }
 
+    [Fact]
+    public async Task IsCustomSortActive_And_HasActiveLocalFilters_ReflectState()
+    {
+        Assert.False(_vm.IsCustomSortActive);
+        Assert.False(_vm.HasActiveLocalFilters);
+        Assert.False(_vm.IsFilterHighlightActive);
+
+        _vm.SelectedSortOption = _vm.SortOptions[1];
+        Assert.True(_vm.IsCustomSortActive);
+
+        _vm.ToggleUnifiedOnlyWithSalaryCommand.Execute(null);
+        Assert.True(_vm.HasActiveLocalFilters);
+        Assert.True(_vm.IsFilterHighlightActive);
+
+        _vm.ToggleUnifiedOnlyWithSalaryCommand.Execute(null);
+        _vm.NewWhiteListWord = "C#";
+        await _vm.AddWhiteListWordCommand.ExecuteAsync(null);
+        Assert.True(_vm.HasActiveLocalFilters);
+
+        await _vm.ResetFiltersCommand.ExecuteAsync(null);
+        Assert.False(_vm.IsCustomSortActive);
+        Assert.False(_vm.HasActiveLocalFilters);
+        Assert.False(_vm.IsFilterHighlightActive);
+    }
+
     private static VacancyDto[] Vacancies(params string[] titles) => [.. FakeGateway.Page(1, titles.Length, hasNext: false, titles).Items];
 
     private Task SearchSiteAsync(CatalogViewModel vm, params string[] titles) => SearchSiteAsync(vm, Vacancies(titles));

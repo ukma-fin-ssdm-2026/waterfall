@@ -18,6 +18,8 @@ namespace Waterfall.Client.Data;
 /// </summary>
 public class ClientWaterfallDbContext : DbContext
 {
+    internal static readonly SemaphoreSlim SharedInitLock = new(1, 1);
+
     public ClientWaterfallDbContext(DbContextOptions<ClientWaterfallDbContext> options) : base(options)
     {
     }

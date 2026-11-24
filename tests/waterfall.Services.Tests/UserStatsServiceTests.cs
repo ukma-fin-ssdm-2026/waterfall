@@ -304,4 +304,22 @@ public sealed class UserStatsServiceTests
         Assert.DoesNotContain(_searchQueryRepository.Queries, q => q.UserId == userId);
         Assert.Single(_searchQueryRepository.Queries);
     }
+
+    [Fact]
+    public async Task UnmarkVacancyViewAsync_AnalystIsForbidden_JobSeekerDeletesView()
+    {
+        Guid analystId = SeedUser("Analyst");
+        Guid jobSeekerId = SeedUser("JobSeeker");
+        Guid vacancyId = Guid.NewGuid();
+        await _service.RecordVacancyViewAsync(jobSeekerId, vacancyId);
+
+        UserStatsRecordResult analystResult = await _service.UnmarkVacancyViewAsync(analystId, vacancyId);
+        UserStatsRecordResult firstUnmark = await _service.UnmarkVacancyViewAsync(jobSeekerId, vacancyId);
+        UserStatsRecordResult secondUnmark = await _service.UnmarkVacancyViewAsync(jobSeekerId, vacancyId);
+
+        Assert.Equal(UserStatsRecordResult.Forbidden, analystResult);
+        Assert.Equal(UserStatsRecordResult.Recorded, firstUnmark);
+        Assert.Equal(UserStatsRecordResult.Skipped, secondUnmark);
+        Assert.Empty(_viewRepository.Views);
+    }
 }

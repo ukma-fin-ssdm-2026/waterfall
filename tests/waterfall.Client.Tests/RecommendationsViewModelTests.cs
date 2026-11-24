@@ -197,4 +197,37 @@ public class RecommendationsViewModelTests
 
         Assert.Equal(expectedBasisText, vm.RecommendedBasisText);
     }
+
+    [Fact]
+    public async Task EnsureLoaded_SkipsWhenClean_ReloadsAfterAuthChange()
+    {
+        FakeGateway gateway = new();
+        StrongReferenceMessenger messenger = new();
+        RecommendationsViewModel vm = new(gateway, messenger);
+
+        Task firstLoad = vm.EnsureLoadedCommand.ExecuteAsync(null);
+        FakeGateway.RecommendationCall call1 = await gateway.WaitForRecommendationCallAsync(1);
+        call1.Response.SetResult(new RecommendationsResultDto
+        {
+            Items = [CreateVacancy(Guid.NewGuid(), "First", isSaved: false)],
+            SavedCount = 1
+        });
+        await firstLoad;
+
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+        Assert.Single(gateway.RecommendationCalls);
+
+        messenger.Send(new UserAuthStateChangedMessage(true, "other@test.com"));
+        Task reloadTask = vm.EnsureLoadedCommand.ExecuteAsync(null);
+        FakeGateway.RecommendationCall call2 = await gateway.WaitForRecommendationCallAsync(2);
+        call2.Response.SetResult(new RecommendationsResultDto
+        {
+            Items = [CreateVacancy(Guid.NewGuid(), "Second", isSaved: false)],
+            SavedCount = 2
+        });
+        await reloadTask;
+
+        Assert.Equal(2, gateway.RecommendationCalls.Count);
+        Assert.Equal("Second", vm.Recommendations[0].Title);
+    }
 }
