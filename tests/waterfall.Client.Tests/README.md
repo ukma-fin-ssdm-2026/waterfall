@@ -12,7 +12,7 @@
 
 ## Тести
 
-354 тестових випадків у 20 класах (актуалізовано 22.11.2026):
+387 тестових випадків у 21 класі (актуалізовано 25.11.2026):
 
 | Клас | Випадків | Що перевіряє |
 | :--- | :---: | :--- |
@@ -20,6 +20,7 @@
 | [`HttpGatewayServiceTests`](HttpGatewayServiceTests.cs) | 37 | URL і тіла всіх REST-ендпоінтів (зокрема `GetVacanciesAsync(VacancyQueryOptions)`, `StartMultiSiteSearchAsync`/`GetMultiSiteSearchAsync`, `SyncVacanciesAsync`), Bearer, enum-рядки, обробка помилок/кодувань/тайм-аутів |
 | [`VacancyItemViewModelTests`](VacancyItemViewModelTests.cs) | 69 | форматування зарплати/джерела/компанії/статусу, відстані, перемикач «Обраного» та реакція на повідомлення |
 | [`CatalogSiteSearchTests`](CatalogSiteSearchTests.cs) | 33 | пошук на 4 сайтах із каталогу (DOU, Djinni, Work.ua, Robota.ua), коди фільтрів, `fromPage`, `listOnly`, прогрес, кеш |
+| [`CatalogFilterPersistenceTests`](CatalogFilterPersistenceTests.cs) | 24 | REL-002: фільтри каталогу й форми пошуку на сайтах пишуться в сховище при кожній зміні й відновлюються в новому екземплярі; відновлений запит не потрапляє в історію повторно; зіпсований запис, невідомий варіант списку, некоректна кількість сторінок і задовгий текст не ламають запуск; кожне з полів форм сайтів переживає перезапуск із нестандартним значенням |
 | [`CatalogViewModelTests`](CatalogViewModelTests.cs) | 30 | локальна фільтрація каталогу, вайт-/бан-лист, «Без переглянутих», «Включно без ЗП», debounce, сортування, скидання фільтрів, банер помилок |
 | [`AIConsultantViewModelTests`](AIConsultantViewModelTests.cs) | 22 | чат ШІ-консультанта (SSE `meta`/`vacancies`/`delta`/`done`/`error`), аналіз вакансій (`relevance`), відновлення після помилки |
 | [`GeoDistanceServiceTests`](GeoDistanceServiceTests.cs) | 28 | геокодування, розрахунок відстані OSRM і формулою гаверсинів, офлайн-кешування |
