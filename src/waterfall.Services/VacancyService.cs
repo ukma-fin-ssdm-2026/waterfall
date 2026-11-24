@@ -4,9 +4,11 @@
 using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Repository.Normalization;
+using Waterfall.Services.Configuration;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Common;
 using Waterfall.Services.Models.Vacancies;
@@ -27,19 +29,22 @@ public class VacancyService : IVacancyService
     private readonly IVacancyViewRepository? _vacancyViewRepository;
     private readonly IVacancyCacheService _cacheService;
     private readonly ILogger<VacancyService> _logger;
+    private readonly bool _acceptClientVacancies;
 
     public VacancyService(
         IVacancyRepository vacancyRepository,
         ISavedVacancyRepository savedVacancyRepository,
         IVacancyCacheService cacheService,
         ILogger<VacancyService> logger,
-        IVacancyViewRepository? vacancyViewRepository = null)
+        IVacancyViewRepository? vacancyViewRepository = null,
+        IOptions<VacancySyncOptions>? syncOptions = null)
     {
         _vacancyRepository = vacancyRepository;
         _savedVacancyRepository = savedVacancyRepository;
         _cacheService = cacheService;
         _logger = logger;
         _vacancyViewRepository = vacancyViewRepository;
+        _acceptClientVacancies = syncOptions?.Value.AcceptClientVacancies ?? false;
     }
 
     public async Task<PagedResult<VacancyDto>> GetAllAsync(VacancyFilterParameters filter, CancellationToken ct = default, Guid? userId = null)
@@ -156,106 +161,20 @@ public class VacancyService : IVacancyService
         return dto;
     }
 
-    public async Task<VacancyDto> CreateAsync(CreateVacancyRequest request, CancellationToken ct = default)
-    {
-        DateTimeOffset now = DateTimeOffset.UtcNow;
-        string description = request.Description.Trim();
-        string? experience = request.Experience?.Trim();
-        VacancyDB entity = new VacancyDB
-        {
-            Id = Guid.NewGuid(),
-            Title = request.Title.Trim(),
-            Company = request.Company.Trim(),
-            Description = description,
-            Category = request.Category.Trim(),
-            Location = request.Location.Trim(),
-            FullAddress = request.FullAddress?.Trim(),
-            Schedule = request.Schedule?.Trim(),
-            Experience = experience,
-            // Досвід у місяцях виводимо з тексту: поля для нього в запиті немає, а фільтр каталогу працює з числом
-            ExperienceMonths = VacancyExperienceParser.ParseMonths(experience, description),
-            SalaryMin = request.SalaryMin,
-            SalaryMax = request.SalaryMax,
-            Currency = request.Currency.ToUpperInvariant(),
-            Source = request.Source.ToString(),
-            SourceUrl = request.SourceUrl.Trim(),
-            SkillsJson = JsonSerializer.Serialize(request.Skills ?? Array.Empty<string>()),
-            PublishedAt = now,
-            FirstSeenAt = now,
-            LastSeenAt = now,
-            IsActive = true
-        };
-
-        VacancyDB created = await _vacancyRepository.CreateAsync(entity, ct);
-
-        await _cacheService.InvalidateCatalogAsync(ct);
-
-        return MapToDto(created, isSaved: false);
-    }
-
-    public async Task<VacancyDto?> UpdateAsync(Guid id, UpdateVacancyRequest request, CancellationToken ct = default)
-    {
-        VacancyDB? entity = await _vacancyRepository.GetByIdAsync(id, ct);
-        if (entity == null)
-        {
-            _logger.LogWarning("Спроба оновити неіснуючу вакансію з Id {VacancyId}", id);
-            return null;
-        }
-
-        if (request.Title != null) entity.Title = request.Title.Trim();
-        if (request.Company != null) entity.Company = request.Company.Trim();
-        if (request.Description != null) entity.Description = request.Description.Trim();
-        if (request.Category != null) entity.Category = request.Category.Trim();
-        if (request.Location != null) entity.Location = request.Location.Trim();
-        if (request.FullAddress != null) entity.FullAddress = request.FullAddress.Trim();
-        if (request.Schedule != null) entity.Schedule = request.Schedule.Trim();
-        if (request.Experience != null) entity.Experience = request.Experience.Trim();
-        if (request.Experience != null || request.Description != null)
-        {
-            // Оновлюємо похідне число разом із текстом, інакше фільтр за досвідом розійдеться з описом
-            entity.ExperienceMonths = VacancyExperienceParser.ParseMonths(entity.Experience, entity.Description);
-        }
-
-        if (request.SalaryMin.HasValue) entity.SalaryMin = request.SalaryMin;
-        if (request.SalaryMax.HasValue) entity.SalaryMax = request.SalaryMax;
-        if (request.Currency != null) entity.Currency = request.Currency.ToUpperInvariant();
-        if (request.Source.HasValue) entity.Source = request.Source.Value.ToString();
-        if (request.SourceUrl != null) entity.SourceUrl = request.SourceUrl.Trim();
-        if (request.Skills != null) entity.SkillsJson = JsonSerializer.Serialize(request.Skills);
-        if (request.IsActive.HasValue) entity.IsActive = request.IsActive.Value;
-        entity.LastSeenAt = DateTimeOffset.UtcNow;
-
-        VacancyDB? updated = await _vacancyRepository.UpdateAsync(entity, ct);
-        if (updated == null)
-        {
-            _logger.LogWarning("Не вдалося оновити вакансію з Id {VacancyId}: запис зник між читанням та записом (можлива гонка)", id);
-            return null;
-        }
-
-        await _cacheService.InvalidateVacancyAsync(id, ct);
-
-        bool isSaved = await _savedVacancyRepository.ExistsForVacancyAsync(id, null, ct);
-        return MapToDto(updated, isSaved);
-    }
-
-    public async Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
-    {
-        bool deleted = await _vacancyRepository.DeleteAsync(id, ct);
-        if (deleted)
-        {
-            await _cacheService.InvalidateVacancyAsync(id, ct);
-        }
-
-        return deleted;
-    }
-
     public async Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         DateTimeOffset serverTime = DateTimeOffset.UtcNow;
 
         List<VacancyDB> sanitized = [];
-        if (request.ClientVacancies is { Count: > 0 })
+        if (request.ClientVacancies is { Count: > 0 } && !_acceptClientVacancies)
+        {
+            // VacancySync:AcceptClientVacancies = false: у спільну базу пише лише серверний парсер, клієнт лише отримує дані
+            _logger.LogInformation(
+                "Синхронізація вакансій: {Count} вакансій від клієнта не прийнято (VacancySync:AcceptClientVacancies = false).",
+                request.ClientVacancies.Count);
+        }
+        else if (request.ClientVacancies is { Count: > 0 })
         {
             // Обмежуємо один пакет до 1000 записів (клієнт нарізає більші обсяги на батчі)
             foreach (VacancySyncItemDto item in request.ClientVacancies.Take(1000))
@@ -289,6 +208,7 @@ public class VacancyService : IVacancyService
             ServerVacancies = serverRows.Select(MapToSyncItem).ToList(),
             ServerTime = serverTime,
             ReceivedFromClient = sanitized.Count,
+            ClientVacanciesAccepted = _acceptClientVacancies,
             CreatedOnServer = merge.Created,
             UpdatedOnServer = merge.Updated,
             TotalServerVacancies = totalServer

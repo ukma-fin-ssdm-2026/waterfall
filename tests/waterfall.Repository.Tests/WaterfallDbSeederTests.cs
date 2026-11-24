@@ -40,6 +40,27 @@ public class WaterfallDbSeederTests : IDisposable
     }
 
     [Fact]
+    public async Task SeedAsync_WithoutDemoData_CreatesSchemaButNoFakeVacanciesOrTestAccounts()
+    {
+        // Поза Development API викликає сідер без демо-даних: тестових акаунтів із відомими паролями бути не може
+        using (WaterfallDbContext db = new(_options))
+        {
+            await WaterfallDbSeeder.SeedAsync(db, includeDemoData: false);
+        }
+
+        using (WaterfallDbContext db = new(_options))
+        {
+            Assert.False(await db.Vacancies.AnyAsync());
+            Assert.False(await db.SavedVacancies.AnyAsync());
+            Assert.False(await db.Users.AnyAsync());
+            Assert.False(await db.UserPersonalData.AnyAsync());
+            Assert.False(await db.GeoLocationCache.AnyAsync());
+            // Таблиці, які сідер дописує сам (не з моделі EnsureCreated), теж на місці
+            Assert.Equal(0, await db.SiteSearchCache.CountAsync());
+        }
+    }
+
+    [Fact]
     public async Task SeedAsync_IsIdempotent_WhenCalledMultipleTimes()
     {
         using (WaterfallDbContext db = new(_options))

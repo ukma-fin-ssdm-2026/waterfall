@@ -36,6 +36,7 @@ public partial class App : Application
         _tokenStore = tokenStore;
         _vacancySyncService = vacancySyncService;
         _distanceService = distanceService;
+        SyncAfterLogin(messenger);
         InitializeComponent();
         _themeService.Initialize();
         try
@@ -65,13 +66,12 @@ public partial class App : Application
                 Email = "123@123",
                 Password = "123@123123@123"
             });
+            // Синхронізацію запустить обробник входу (SyncAfterLogin): без входу сервер її не віддає
             _messenger.Send(new UserAuthStateChangedMessage(true, response.Email));
         }
         catch
         {
         }
-
-        await TriggerBackgroundSyncAsync();
     }
 #else
     public App(
@@ -88,6 +88,11 @@ public partial class App : Application
         _appMessenger = messenger;
         _vacancySyncService = vacancySyncService;
         _distanceService = distanceService;
+        if (messenger is not null)
+        {
+            SyncAfterLogin(messenger);
+        }
+
         InitializeComponent();
         _themeService.Initialize();
         try
@@ -101,18 +106,21 @@ public partial class App : Application
         SubscribeConnectivitySync();
     }
 
-    protected override void OnStart()
-    {
-        base.OnStart();
-        _ = DelayedStartSyncAsync();
-    }
-
-    private async Task DelayedStartSyncAsync()
-    {
-        await Task.Delay(400);
-        await TriggerBackgroundSyncAsync();
-    }
+    // Токен при старті видаляється, а /vacancies/sync і /geo/sync вимагають входу:
+    // синхронізація стартує після входу (SyncAfterLogin), а не при старті
 #endif
+
+    /// <summary>
+    /// Синхронізація бази й геокешу одразу після входу: сервер віддає їх лише автентифікованим користувачам.
+    /// </summary>
+    private void SyncAfterLogin(IMessenger messenger) =>
+        messenger.Register<App, UserAuthStateChangedMessage>(this, static (app, message) =>
+        {
+            if (message.IsLoggedIn)
+            {
+                _ = app.TriggerBackgroundSyncAsync();
+            }
+        });
 
     private void SubscribeConnectivitySync()
     {

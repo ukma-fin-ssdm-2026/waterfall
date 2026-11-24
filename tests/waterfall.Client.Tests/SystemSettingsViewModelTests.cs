@@ -1,7 +1,11 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
+// AI: налаштування фонового збору через сервер і лише для ролі Admin; перевірено: запуск dotnet test, самоперевірка автора (§8)
 
-using System.Globalization;
+using System.Net;
+using System.Text;
 using System.Text.Json;
+using Waterfall.Client.Models.Auth;
+using Waterfall.Client.Models.SystemSettings;
 using Waterfall.Client.ViewModels;
 using Xunit;
 
@@ -9,187 +13,218 @@ namespace Waterfall.Client.Tests;
 
 public class SystemSettingsViewModelTests
 {
-    [Fact]
-    public void DefaultState_HasBackgroundParsingDisabled_AndIntervalFromIngestionSettings()
+    private readonly FakeGateway _gateway = new();
+    private readonly InMemoryTokenStore _tokens = new();
+
+    private static string Jwt(UserRole role)
     {
-        // Act
+        static string B64(string s) => Convert.ToBase64String(Encoding.UTF8.GetBytes(s)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        string payload = JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["email"] = "user@test.com",
+            ["role"] = role.ToString(),
+            ["exp"] = DateTimeOffset.UtcNow.AddHours(2).ToUnixTimeSeconds()
+        });
+        return $"{B64("""{"alg":"HS256","typ":"JWT"}""")}.{B64(payload)}.sig";
+    }
+
+    private SystemSettingsViewModel CreateVm() => new(_gateway, _tokens, localVacancyStore: null, vacancySyncService: null);
+
+    [Fact]
+    public void DefaultState_HasBackgroundParsingDisabled_AndThirtyMinutes()
+    {
         SystemSettingsViewModel vm = new();
 
-        // Assert
         // Вимога: по дефолту фолз
         Assert.False(vm.IsBackgroundParsingEnabled);
         Assert.Equal("Вимкнено", vm.StatusLabelText);
         Assert.Contains("Вимкнено", vm.ParsingStatusBadgeText);
-
-        // Вимога: інтервал парсингу з готового файлу сеттінг інджестшн сервісу ("00:30:00")
         Assert.Equal("00:30:00", vm.SelectedInterval);
         Assert.Equal("30 хвилин (00:30:00)", vm.SelectedIntervalDisplay);
-        Assert.NotEmpty(vm.IntervalOptions);
         Assert.Contains("30 хвилин (00:30:00)", vm.IntervalOptions);
+        Assert.False(vm.IsAdmin);
+        Assert.False(vm.SaveSettingsCommand.CanExecute(null));
+    }
 
-        // Перевірка завантажених параметрів сервісу
-        Assert.True(vm.DouPages > 0);
-        Assert.True(vm.WorkUaPages > 0);
-        Assert.True(vm.RobotaUaPages > 0);
-        Assert.True(vm.DjinniPages > 0);
-        Assert.NotEmpty(vm.RequestDelay);
+    [Theory]
+    [InlineData(UserRole.JobSeeker)]
+    [InlineData(UserRole.Analyst)]
+    public async Task NonAdmin_DoesNotSeeServerSettings_AndCannotSave(UserRole role)
+    {
+        await _tokens.SetTokenAsync(Jwt(role));
+        _gateway.SystemSettings = _gateway.SystemSettings with { BackgroundParsingEnabled = true };
+        SystemSettingsViewModel vm = CreateVm();
+
+        await vm.LoadServerSettingsAsync();
+
+        Assert.False(vm.IsAdmin);
+        Assert.True(vm.IsNotAdmin);
+        // Налаштування сервера навіть не запитуються
+        Assert.False(vm.IsBackgroundParsingEnabled);
+        Assert.False(vm.SaveSettingsCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task NotLoggedIn_IsTreatedAsNonAdmin()
+    {
+        SystemSettingsViewModel vm = CreateVm();
+
+        await vm.LoadServerSettingsAsync();
+
+        Assert.False(vm.IsAdmin);
+    }
+
+    [Fact]
+    public async Task Admin_LoadsSettingsFromServer()
+    {
+        await _tokens.SetTokenAsync(Jwt(UserRole.Admin));
+        _gateway.SystemSettings = new SystemSettingsDto
+        {
+            BackgroundParsingEnabled = true,
+            Interval = TimeSpan.FromHours(2),
+            DjinniPages = 1,
+            WorkUaPages = 2,
+            RobotaUaPages = 0,
+            DouPages = 1,
+            RequestDelay = TimeSpan.FromSeconds(3)
+        };
+        SystemSettingsViewModel vm = CreateVm();
+
+        await vm.LoadServerSettingsAsync();
+
+        Assert.True(vm.IsAdmin);
+        Assert.True(vm.IsBackgroundParsingEnabled);
+        Assert.Equal("02:00:00", vm.SelectedInterval);
+        Assert.Equal("2 години (02:00:00)", vm.SelectedIntervalDisplay);
+        Assert.Equal(2, vm.WorkUaPages);
+        Assert.Equal(0, vm.RobotaUaPages);
+        Assert.Equal("00:00:03", vm.RequestDelay);
+        Assert.True(vm.SaveSettingsCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task Admin_SavesToggleAndInterval_ToServer()
+    {
+        await _tokens.SetTokenAsync(Jwt(UserRole.Admin));
+        SystemSettingsViewModel vm = CreateVm();
+        await vm.LoadServerSettingsAsync();
+
+        vm.ToggleBackgroundParsingCommand.Execute(null);
+        vm.SelectedIntervalDisplay = "1 година (01:00:00)";
+        await vm.SaveSettingsCommand.ExecuteAsync(null);
+
+        UpdateSystemSettingsRequest sent = Assert.Single(_gateway.SystemSettingsUpdates);
+        Assert.True(sent.BackgroundParsingEnabled);
+        Assert.Equal(TimeSpan.FromHours(1), sent.Interval);
+        Assert.True(vm.IsSuccessStatus);
+        Assert.Contains("збережено на сервері", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task DayInterval_IsSentAsOneDay_NotTwentyFourDays()
+    {
+        await _tokens.SetTokenAsync(Jwt(UserRole.Admin));
+        SystemSettingsViewModel vm = CreateVm();
+        await vm.LoadServerSettingsAsync();
+
+        vm.SelectedIntervalDisplay = "24 години (1.00:00:00)";
+        await vm.SaveSettingsCommand.ExecuteAsync(null);
+
+        Assert.Equal(TimeSpan.FromDays(1), Assert.Single(_gateway.SystemSettingsUpdates).Interval);
+        Assert.Equal("24 години (1.00:00:00)", vm.SelectedIntervalDisplay);
+    }
+
+    [Fact]
+    public async Task ServerRejectsAsForbidden_HidesSettingsAndExplains()
+    {
+        await _tokens.SetTokenAsync(Jwt(UserRole.Admin));
+        SystemSettingsViewModel vm = CreateVm();
+        await vm.LoadServerSettingsAsync();
+        // Роль на сервері змінили, а токен ще старий
+        _gateway.SystemSettingsError = new ApiException(HttpStatusCode.Forbidden, null, "Forbidden");
+
+        vm.ToggleBackgroundParsingCommand.Execute(null);
+        await vm.SaveSettingsCommand.ExecuteAsync(null);
+
+        Assert.False(vm.IsAdmin);
+        Assert.False(vm.IsSuccessStatus);
+        Assert.Contains("лише адміністратор", vm.StatusMessage);
+    }
+
+    [Fact]
+    public async Task UnknownIntervalFromServer_IsShownAsIs()
+    {
+        await _tokens.SetTokenAsync(Jwt(UserRole.Admin));
+        _gateway.SystemSettings = _gateway.SystemSettings with { Interval = TimeSpan.FromMinutes(45) };
+        SystemSettingsViewModel vm = CreateVm();
+
+        await vm.LoadServerSettingsAsync();
+
+        Assert.Equal("00:45:00", vm.SelectedInterval);
+        Assert.Contains("00:45:00 (інтервал)", vm.IntervalOptions);
+    }
+
+    [Fact]
+    public async Task Admin_SavingUnchangedValues_DoesNotCallServer()
+    {
+        // Сторінка зберігає автоматично, зокрема коли перемикач змінило саме завантаження з сервера
+        await _tokens.SetTokenAsync(Jwt(UserRole.Admin));
+        SystemSettingsViewModel vm = CreateVm();
+        await vm.LoadServerSettingsAsync();
+
+        await vm.SaveSettingsCommand.ExecuteAsync(null);
+
+        Assert.Empty(_gateway.SystemSettingsUpdates);
+    }
+
+    [Fact]
+    public async Task NonAdmin_SaveCalledDirectly_DoesNothing()
+    {
+        await _tokens.SetTokenAsync(Jwt(UserRole.JobSeeker));
+        SystemSettingsViewModel vm = CreateVm();
+        await vm.LoadServerSettingsAsync();
+        vm.IsBackgroundParsingEnabled = true;
+
+        await vm.SaveSettingsAsync();
+
+        Assert.Empty(_gateway.SystemSettingsUpdates);
     }
 
     [Fact]
     public void ToggleBackgroundParsingCommand_TogglesFlag()
     {
-        // Arrange
         SystemSettingsViewModel vm = new();
-        Assert.False(vm.IsBackgroundParsingEnabled);
 
-        // Act
         vm.ToggleBackgroundParsingCommand.Execute(null);
-
-        // Assert
         Assert.True(vm.IsBackgroundParsingEnabled);
-        Assert.Equal("Увімкнено", vm.StatusLabelText);
         Assert.Contains("Активно", vm.ParsingStatusBadgeText);
 
-        // Act 2
         vm.ToggleBackgroundParsingCommand.Execute(null);
-
-        // Assert 2
         Assert.False(vm.IsBackgroundParsingEnabled);
-        Assert.Equal("Вимкнено", vm.StatusLabelText);
     }
 
     [Fact]
-    public void ChangingIntervalDisplay_UpdatesSelectedInterval()
+    public void ResetToDefaults_ResetsOnScreen_WithoutCallingServer()
     {
-        // Arrange
-        SystemSettingsViewModel vm = new();
-
-        // Act
-        vm.SelectedIntervalDisplay = "1 година (01:00:00)";
-
-        // Assert
-        Assert.Equal("01:00:00", vm.SelectedInterval);
-        Assert.Equal("1 година (01:00:00)", vm.SelectedIntervalDisplay);
-
-        // Act 2
-        vm.SelectedIntervalDisplay = "15 хвилин (00:15:00)";
-
-        // Assert 2
-        Assert.Equal("00:15:00", vm.SelectedInterval);
-    }
-
-    [Fact]
-    public void ResetToDefaultsCommand_ResetsBackgroundParsingToFalse()
-    {
-        // Arrange
-        SystemSettingsViewModel vm = new();
+        SystemSettingsViewModel vm = CreateVm();
         vm.IsBackgroundParsingEnabled = true;
-        vm.SelectedIntervalDisplay = "2 години (02:00:00)";
+        vm.SelectedIntervalDisplay = "4 години (04:00:00)";
 
-        // Act
         vm.ResetToDefaultsCommand.Execute(null);
 
-        // Assert
         Assert.False(vm.IsBackgroundParsingEnabled);
         Assert.Equal("00:30:00", vm.SelectedInterval);
-        Assert.Equal("30 хвилин (00:30:00)", vm.SelectedIntervalDisplay);
-        Assert.True(vm.HasStatusMessage);
-        Assert.True(vm.IsSuccessStatus);
+        Assert.Empty(_gateway.SystemSettingsUpdates);
     }
 
     [Fact]
-    public void SaveSettingsCommand_SetsSuccessStatus()
+    public void DismissStatus_HidesBanner_WithoutResettingSettings()
     {
-        // Arrange: тимчасовий файл налаштувань, щоб тест не переписував справжній src/api/appsettings.json
-        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
-        File.WriteAllText(path, """{ "Ingestion": { "Enabled": false, "Interval": "00:30:00", "RobotaUaPages": 1 } }""");
-        try
-        {
-            SystemSettingsViewModel vm = new(path);
-            vm.SelectedIntervalDisplay = "1 година (01:00:00)";
+        SystemSettingsViewModel vm = new() { IsBackgroundParsingEnabled = true, StatusMessage = "щось" };
 
-            // Act
-            vm.SaveSettingsCommand.Execute(null);
+        vm.DismissStatusCommand.Execute(null);
 
-            // Assert
-            Assert.True(vm.HasStatusMessage);
-            Assert.True(vm.IsSuccessStatus);
-            using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(path));
-            JsonElement ingestion = saved.RootElement.GetProperty("Ingestion");
-            Assert.Equal("01:00:00", ingestion.GetProperty("Interval").GetString());
-            Assert.Equal(1, ingestion.GetProperty("RobotaUaPages").GetInt32()); // решта параметрів лишається
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    [Fact]
-    public void LoadedSettings_ShowEnabledParsingFromFile_AndSavingKeepsItEnabled()
-    {
-        // Arrange: збір на сервері ввімкнений
-        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
-        File.WriteAllText(path, """{ "Ingestion": { "Enabled": true, "Interval": "00:30:00" } }""");
-        try
-        {
-            SystemSettingsViewModel vm = new(path);
-
-            // Assert: екран показує справжній стан, а не завжди «Вимкнено»
-            Assert.True(vm.IsBackgroundParsingEnabled);
-            Assert.Equal("Увімкнено", vm.StatusLabelText);
-
-            // Act: зберегли інший параметр — збір не має вимкнутися
-            vm.SelectedIntervalDisplay = "1 година (01:00:00)";
-            vm.SaveSettingsCommand.Execute(null);
-
-            using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(path));
-            Assert.True(saved.RootElement.GetProperty("Ingestion").GetProperty("Enabled").GetBoolean());
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    [Fact]
-    public void DayInterval_IsWrittenAsOneDay_NotTwentyFourDays()
-    {
-        // Arrange: файл, збережений до виправлення, з «24:00:00»
-        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
-        File.WriteAllText(path, """{ "Ingestion": { "Enabled": false, "Interval": "24:00:00" } }""");
-        try
-        {
-            SystemSettingsViewModel vm = new(path);
-
-            // Assert: на екрані — доба, а значення таке, яке сервер прочитає як добу
-            Assert.Equal("24 години (1.00:00:00)", vm.SelectedIntervalDisplay);
-            Assert.Equal(TimeSpan.FromDays(1), TimeSpan.Parse(vm.SelectedInterval, CultureInfo.InvariantCulture));
-
-            // Act
-            vm.SaveSettingsCommand.Execute(null);
-
-            using JsonDocument saved = JsonDocument.Parse(File.ReadAllText(path));
-            Assert.Equal("1.00:00:00", saved.RootElement.GetProperty("Ingestion").GetProperty("Interval").GetString());
-        }
-        finally
-        {
-            File.Delete(path);
-        }
-    }
-
-    [Fact]
-    public void MissingSettingsFile_ShowsParsingDisabled()
-    {
-        // Arrange: файлу налаштувань немає (застосунок не на тому комп'ютері, що API)
-        string path = Path.Combine(Path.GetTempPath(), $"waterfall-settings-{Guid.NewGuid():N}.json");
-
-        // Act
-        SystemSettingsViewModel vm = new(path);
-
-        // Assert: як і сервер без налаштувань, збір вимкнений
-        Assert.False(vm.IsBackgroundParsingEnabled);
-        Assert.Equal("Вимкнено", vm.StatusLabelText);
+        Assert.False(vm.HasStatusMessage);
+        Assert.True(vm.IsBackgroundParsingEnabled);
     }
 }
-

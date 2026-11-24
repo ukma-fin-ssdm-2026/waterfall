@@ -9,6 +9,7 @@ using Waterfall.Client.Models.Auth;
 using Waterfall.Client.Models.Common;
 using Waterfall.Client.Models.SavedVacancies;
 using Waterfall.Client.Models.SiteSearch;
+using Waterfall.Client.Models.SystemSettings;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Tests;
@@ -56,6 +57,22 @@ internal sealed class FakeGateway : IHttpGatewayService
     public List<RecommendationCall> RecommendationCalls { get; } = [];
 
     public List<AnalyticsCall> AnalyticsCalls { get; } = [];
+
+    /// <summary>Системні налаштування сервера, які віддає GET /admin/settings.</summary>
+    public SystemSettingsDto SystemSettings { get; set; } = new()
+    {
+        Interval = TimeSpan.FromMinutes(30),
+        DjinniPages = 3,
+        WorkUaPages = 3,
+        RobotaUaPages = 1,
+        DouPages = 1,
+        RequestDelay = TimeSpan.FromSeconds(2)
+    };
+
+    /// <summary>Помилка для запитів системних налаштувань (наприклад, 403 для не-адміна).</summary>
+    public Exception? SystemSettingsError { get; set; }
+
+    public List<UpdateSystemSettingsRequest> SystemSettingsUpdates { get; } = [];
 
     /// <summary>
     /// Відповідь на SaveVacancyAsync / UnsaveVacancyAsync; null — успіх.
@@ -137,6 +154,21 @@ internal sealed class FakeGateway : IHttpGatewayService
         }
 
         return RecommendationCalls[count - 1];
+    }
+
+    public Task<SystemSettingsDto> GetSystemSettingsAsync(CancellationToken ct = default) =>
+        SystemSettingsError is null ? Task.FromResult(SystemSettings) : Task.FromException<SystemSettingsDto>(SystemSettingsError);
+
+    public Task<SystemSettingsDto> UpdateSystemSettingsAsync(UpdateSystemSettingsRequest request, CancellationToken ct = default)
+    {
+        if (SystemSettingsError is not null)
+        {
+            return Task.FromException<SystemSettingsDto>(SystemSettingsError);
+        }
+
+        SystemSettingsUpdates.Add(request);
+        SystemSettings = SystemSettings with { BackgroundParsingEnabled = request.BackgroundParsingEnabled, Interval = request.Interval };
+        return Task.FromResult(SystemSettings);
     }
 
     public Task<MarketAnalyticsDto> GetMarketAnalyticsAsync(string? category = null, int months = 3, CancellationToken ct = default)

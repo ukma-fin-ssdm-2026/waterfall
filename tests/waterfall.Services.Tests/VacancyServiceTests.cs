@@ -1,6 +1,8 @@
 // AI: модульні тести бізнес-сервісу вакансій (VacancyService, REL-001, PERF-001, Lab 06); перевірено: запуск dotnet test, самоперевірка автора (Денис Сидоренко, §8)
 
+using Microsoft.Extensions.Options;
 using Waterfall.Repository.Entities;
+using Waterfall.Services.Configuration;
 using Waterfall.Services.Models.Common;
 using Waterfall.Services.Models.Vacancies;
 
@@ -259,104 +261,6 @@ public sealed class VacancyServiceTests
         Assert.Empty(_cacheService.DetailCache); // Must not cache personal DTO
     }
 
-    [Fact]
-    public async Task CreateAsync_TrimsFields_SavesToRepo_AndInvalidatesCatalog()
-    {
-        // Arrange
-        CreateVacancyRequest request = new()
-        {
-            Title = "  Fullstack Developer  ",
-            Company = "  Acme Corp  ",
-            Description = "  Great role  ",
-            Category = "  Web  ",
-            Location = "  Kyiv  ",
-            Currency = "usd",
-            Source = JobSource.Dou,
-            SourceUrl = "  https://jobs.dou.ua/1  ",
-            Skills = ["React", "Node.js"]
-        };
-
-        // Act
-        VacancyDto result = await _service.CreateAsync(request);
-
-        // Assert
-        Assert.NotEqual(Guid.Empty, result.Id);
-        Assert.Equal("Fullstack Developer", result.Title);
-        Assert.Equal("Acme Corp", result.Company);
-        Assert.Equal("USD", result.Currency);
-        Assert.Equal(JobSource.Dou, result.Source);
-        Assert.Equal(2, result.Skills.Count);
-        Assert.Equal(1, _cacheService.InvalidateCatalogCallCount);
-        Assert.Single(_vacancyRepo.CreatedVacancies);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_ExistingVacancy_UpdatesFields_AndInvalidatesVacancyCache()
-    {
-        // Arrange
-        Guid id = Guid.NewGuid();
-        VacancyDB entity = CreateEntity("Old Title");
-        entity.Id = id;
-        _vacancyRepo.Vacancies.Add(entity);
-
-        UpdateVacancyRequest request = new()
-        {
-            Title = "Updated Title",
-            SalaryMin = 5000,
-            Skills = ["Golang", "Kubernetes"]
-        };
-
-        // Act
-        VacancyDto? updated = await _service.UpdateAsync(id, request);
-
-        // Assert
-        Assert.NotNull(updated);
-        Assert.Equal("Updated Title", updated.Title);
-        Assert.Equal(5000, updated.SalaryMin);
-        Assert.Contains(id, _cacheService.InvalidateVacancyCalls);
-        Assert.Single(_vacancyRepo.UpdatedVacancies);
-    }
-
-    [Fact]
-    public async Task UpdateAsync_NonExistentVacancy_ReturnsNull()
-    {
-        // Arrange & Act
-        VacancyDto? result = await _service.UpdateAsync(Guid.NewGuid(), new UpdateVacancyRequest());
-
-        // Assert
-        Assert.Null(result);
-        Assert.Empty(_cacheService.InvalidateVacancyCalls);
-    }
-
-    [Fact]
-    public async Task DeleteAsync_ExistingVacancy_DeletesFromRepo_AndInvalidatesCache()
-    {
-        // Arrange
-        Guid id = Guid.NewGuid();
-        VacancyDB entity = CreateEntity();
-        entity.Id = id;
-        _vacancyRepo.Vacancies.Add(entity);
-
-        // Act
-        bool result = await _service.DeleteAsync(id);
-
-        // Assert
-        Assert.True(result);
-        Assert.Contains(id, _vacancyRepo.DeletedIds);
-        Assert.Contains(id, _cacheService.InvalidateVacancyCalls);
-    }
-
-    [Fact]
-    public async Task DeleteAsync_NonExistentVacancy_ReturnsFalse_AndDoesNotInvalidateCache()
-    {
-        // Arrange & Act
-        bool result = await _service.DeleteAsync(Guid.NewGuid());
-
-        // Assert
-        Assert.False(result);
-        Assert.Empty(_cacheService.InvalidateVacancyCalls);
-    }
-
     [Theory]
     [InlineData(null, 0)]
     [InlineData("", 0)]
@@ -402,29 +306,6 @@ public sealed class VacancyServiceTests
         Assert.Equal(24, Assert.Single(_vacancyRepo.GetAllMaxExperienceCalls));
         Assert.Equal("Finance", Assert.Single(_vacancyRepo.GetAllCategoryGroupCalls));
         Assert.Equal(["1С", "Excel"], Assert.Single(_vacancyRepo.GetAllSkillsCalls));
-    }
-
-    [Fact]
-    public async Task CreateAsync_DerivesExperienceMonthsFromText()
-    {
-        // Arrange
-        CreateVacancyRequest request = new()
-        {
-            Title = "Middle .NET Developer",
-            Company = "Acme",
-            Description = "Цікава робота",
-            Category = ".NET",
-            Location = "Віддалено",
-            Experience = "2+ роки",
-            Source = JobSource.Djinni,
-            SourceUrl = "https://djinni.co/jobs/1/"
-        };
-
-        // Act
-        VacancyDto result = await _service.CreateAsync(request);
-
-        // Assert
-        Assert.Equal(24, result.ExperienceMonths);
     }
 
     [Fact]
@@ -484,6 +365,8 @@ public sealed class VacancyServiceTests
     [Fact]
     public async Task SyncVacanciesAsync_SanitizesMergesInvalidatesCacheAndReturnsServerData()
     {
+        VacancyService acceptingService = new(_vacancyRepo, _savedRepo, _cacheService, _logger,
+            syncOptions: Options.Create(new VacancySyncOptions { AcceptClientVacancies = true }));
         VacancyDB serverExisting = CreateEntity("Server Collected Job", source: "Dou");
         serverExisting.ExternalId = "dou-1";
         serverExisting.LastSeenAt = DateTimeOffset.UtcNow;
@@ -513,12 +396,61 @@ public sealed class VacancyServiceTests
             ]
         };
 
-        VacancySyncResponseDto response = await _service.SyncVacanciesAsync(request);
+        VacancySyncResponseDto response = await acceptingService.SyncVacanciesAsync(request);
 
+        Assert.True(response.ClientVacanciesAccepted);
         Assert.Equal(1, response.ReceivedFromClient);
         Assert.Equal(1, response.CreatedOnServer);
         Assert.Equal(2, response.TotalServerVacancies);
         Assert.Equal(2, response.ServerVacancies.Count);
         Assert.Equal(1, _cacheService.InvalidateCatalogCallCount);
+    }
+
+    [Fact]
+    public async Task SyncVacanciesAsync_ByDefault_IgnoresClientVacanciesButReturnsServerData()
+    {
+        // Без налаштування VacancySync:AcceptClientVacancies у спільну базу пише лише серверний парсер
+        VacancyDB serverExisting = CreateEntity("Server Collected Job", source: "Dou");
+        serverExisting.ExternalId = "dou-1";
+        serverExisting.LastSeenAt = DateTimeOffset.UtcNow;
+        _vacancyRepo.Vacancies.Add(serverExisting);
+
+        VacancySyncRequestDto request = new()
+        {
+            FullSync = true,
+            ClientVacancies =
+            [
+                new VacancySyncItemDto
+                {
+                    ExternalId = "dj-offline-1",
+                    Title = "Offline Collected Developer",
+                    Source = JobSource.Djinni,
+                    SourceUrl = "https://djinni.co/jobs/offline-1/"
+                },
+                // Спроба переписати серверну вакансію «новішою» датою теж ігнорується
+                new VacancySyncItemDto
+                {
+                    Id = serverExisting.Id,
+                    ExternalId = "dou-1",
+                    Title = "Підроблена назва",
+                    Source = JobSource.Dou,
+                    LastSeenAt = DateTimeOffset.UtcNow.AddYears(70),
+                    IsActive = false
+                }
+            ]
+        };
+
+        VacancySyncResponseDto response = await _service.SyncVacanciesAsync(request);
+
+        Assert.False(response.ClientVacanciesAccepted);
+        Assert.Equal(0, response.ReceivedFromClient);
+        Assert.Equal(0, response.CreatedOnServer);
+        Assert.Equal(0, response.UpdatedOnServer);
+        Assert.Equal(1, response.TotalServerVacancies);
+        VacancySyncItemDto returned = Assert.Single(response.ServerVacancies);
+        Assert.Equal("Server Collected Job", returned.Title);
+        Assert.True(serverExisting.IsActive);
+        Assert.Single(_vacancyRepo.Vacancies);
+        Assert.Equal(0, _cacheService.InvalidateCatalogCallCount);
     }
 }

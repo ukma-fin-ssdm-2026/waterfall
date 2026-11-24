@@ -32,6 +32,7 @@ public record RegisterRequest
     /// Серверні перевірки доступу завжди виконуються на сервері за role claim JWT (THR-13).
     /// </summary>
     /// <example>0</example>
-    [EnumDataType(typeof(UserRole), ErrorMessage = "Поле role повинно бути одним із значень: JobSeeker, Analyst")]
+    // Admin при реєстрації недоступний: інакше будь-хто став би адміністратором
+    [AllowedValues(UserRole.JobSeeker, UserRole.Analyst, ErrorMessage = "Поле role повинно бути одним із значень: JobSeeker, Analyst")]
     public UserRole Role { get; init; } = UserRole.JobSeeker;
 }

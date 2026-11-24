@@ -13,7 +13,6 @@ namespace Waterfall.Api.Controllers;
 /// Ендпоінти геокодування та отримання збережених координат із постійного кешу бази даних.
 /// </summary>
 [ApiController]
-[AllowAnonymous]
 [Route("api/v1/geo")]
 [Produces("application/json")]
 [SwaggerTag("Геокодування та постійний геокеш адрес")]
@@ -30,6 +29,7 @@ public class GeoController : ApiControllerBase
     /// Отримати географічні координати адреси.
     /// </summary>
     [HttpGet("coordinates")]
+    [AllowAnonymous]
     [SwaggerOperation(Summary = "Отримати координати адреси", Description = "Повертає широту й довготу з таблиці GeoLocationCache бази даних (або оновлює кеш із публічних геоданих).", OperationId = "GetCoordinates")]
     [ProducesResponseType(typeof(CoordinatesDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
@@ -57,10 +57,13 @@ public class GeoController : ApiControllerBase
     /// <summary>
     /// Двостороння синхронізація геокешу з клієнтом.
     /// </summary>
+    // Синхронізація змінює спільний геокеш, тож лише після входу (THR-14)
     [HttpPost("sync")]
+    [Authorize]
     [SwaggerOperation(Summary = "Синхронізувати геокеш", Description = "Приймає знайдені офлайн координати з клієнта та повертає всі актуальні збережені координати з сервера.", OperationId = "SyncCoordinates")]
     [ProducesResponseType(typeof(GeoSyncResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<GeoSyncResponseDto>> SyncCoordinates([FromBody] GeoSyncRequestDto? request, CancellationToken ct)
     {
         if (request == null || !ModelState.IsValid)

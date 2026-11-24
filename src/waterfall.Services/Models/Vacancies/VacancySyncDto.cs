@@ -64,6 +64,9 @@ public sealed record VacancySyncResponseDto
     /// <summary>Скільки валідних записів отримано від клієнта у цьому запиті.</summary>
     public int ReceivedFromClient { get; init; }
 
+    /// <summary>Чи сервер зберігає вакансії від клієнта (VacancySync:AcceptClientVacancies); false — надіслані clientVacancies проігноровано.</summary>
+    public bool ClientVacanciesAccepted { get; init; }
+
     /// <summary>Скільки нових вакансій додано до серверної БД.</summary>
     public int CreatedOnServer { get; init; }
 

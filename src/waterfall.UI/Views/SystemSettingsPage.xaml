@@ -139,6 +139,22 @@
                     </VerticalStackLayout>
                 </Border>
 
+                <!-- Не адміністратору: фоновий збір — налаштування сервера, їх змінює лише адміністратор -->
+                <Border Style="{StaticResource SettingsCard}" IsVisible="{Binding IsNotAdmin}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="9">
+                        <Label Text="{x:Static res:Icons.Lock}" FontFamily="Lucide" FontSize="15" TextColor="{DynamicResource TextSecondary}" VerticalOptions="Start" Margin="0,1,0,0" />
+                        <VerticalStackLayout Grid.Column="1" Spacing="3">
+                            <Label Text="Збір вакансій у фоні" Style="{StaticResource SettingsSectionTitle}" />
+                            <Label Text="Фоновий збір на сервері вмикає й налаштовує лише адміністратор."
+                                   FontSize="12.5"
+                                   TextColor="{DynamicResource TextSecondary}"
+                                   LineBreakMode="WordWrap" />
+                        </VerticalStackLayout>
+                    </Grid>
+                </Border>
+
+                <!-- Налаштування сервера: лише для ролі Admin (сервер теж перевіряє роль) -->
+                <VerticalStackLayout Spacing="12" IsVisible="{Binding IsAdmin}">
                 <!-- Збір вакансій у фоні -->
                 <Border Style="{StaticResource SettingsCard}">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
@@ -238,7 +254,7 @@
                             </Border>
                         </FlexLayout>
 
-                        <Label Text="{Binding ConfigFilePath}"
+                        <Label Text="{Binding ConfigFilePath, StringFormat='Зберігається: {0}'}"
                                FontSize="11"
                                TextColor="{DynamicResource TextMuted}"
                                LineBreakMode="TailTruncation" />
@@ -255,6 +271,7 @@
                             MinimumHeightRequest="38"
                             Margin="0,0,0,8" />
                 </FlexLayout>
+                </VerticalStackLayout>
 
             </VerticalStackLayout>
     </ScrollView>

@@ -193,15 +193,6 @@ public sealed class FakeCatalogService : IVacancyService
     public Task<VacancyDto?> GetByIdAsync(Guid id, CancellationToken ct = default, Guid? userId = null)
         => Task.FromResult(Vacancies.FirstOrDefault(vacancy => vacancy.Id == id));
 
-    public Task<VacancyDto> CreateAsync(CreateVacancyRequest request, CancellationToken ct = default)
-        => throw new NotSupportedException("Каталог у тестах ШІ-консультанта доступний лише для читання.");
-
-    public Task<VacancyDto?> UpdateAsync(Guid id, UpdateVacancyRequest request, CancellationToken ct = default)
-        => throw new NotSupportedException("Каталог у тестах ШІ-консультанта доступний лише для читання.");
-
-    public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
-        => throw new NotSupportedException("Каталог у тестах ШІ-консультанта доступний лише для читання.");
-
     public Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default)
         => throw new NotSupportedException("Каталог у тестах ШІ-консультанта доступний лише для читання.");
 

@@ -7,6 +7,75 @@ servers:
   - url: http://localhost:3000
     description: Локальний сервер розробки
 paths:
+  /api/v1/admin/settings:
+    get:
+      tags:
+        - AdminSettings
+      summary: Поточні системні налаштування сервера.
+      description: 'Повертає налаштування фонового збору вакансій: чи увімкнений, інтервал, кількість сторінок і паузу між запитами.'
+      operationId: GetSystemSettings
+      responses:
+        '200':
+          description: Налаштування фонового збору.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettingsDto'
+        '401':
+          description: Потрібно увійти.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '403':
+          description: Лише для ролі Admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+    put:
+      tags:
+        - AdminSettings
+      summary: Змінити системні налаштування сервера.
+      description: Увімкнення чи вимкнення фонового збору діє за кілька секунд без перезапуску; новий інтервал — після перезапуску API.
+      operationId: UpdateSystemSettings
+      requestBody:
+        description: Увімкнення фонового збору та інтервал (від 10 хвилин до доби).
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSystemSettingsRequest'
+          text/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSystemSettingsRequest'
+          application/*+json:
+            schema:
+              $ref: '#/components/schemas/UpdateSystemSettingsRequest'
+      responses:
+        '200':
+          description: Налаштування збережено; у відповіді — нові значення.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettingsDto'
+        '400':
+          description: Невалідний інтервал.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Потрібно увійти.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '403':
+          description: Лише для ролі Admin.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/ai-consultant/messages:
     post:
       tags:
@@ -334,6 +403,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
+        '429':
+          description: 'Забагато спроб входу з цієї адреси (не більше 5 за хвилину, THR-01); заголовок Retry-After каже, скільки чекати.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/geo/coordinates:
     get:
       tags:
@@ -392,6 +467,12 @@ paths:
                 $ref: '#/components/schemas/GeoSyncResponseDto'
         '400':
           description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: Unauthorized
           content:
             application/json:
               schema:
@@ -1030,37 +1111,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-    post:
-      tags:
-        - Vacancies
-      summary: Створити або імпортувати нову вакансію.
-      description: Додає нову вакансію до єдиного каталогу (ручне розміщення або збереження модулем збору даних).
-      operationId: CreateVacancy
-      requestBody:
-        description: Дані нової вакансії.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateVacancyRequest'
-          text/json:
-            schema:
-              $ref: '#/components/schemas/CreateVacancyRequest'
-          application/*+json:
-            schema:
-              $ref: '#/components/schemas/CreateVacancyRequest'
-      responses:
-        '201':
-          description: Вакансію успішно створено. У заголовку Location міститься посилання на новий ресурс.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VacancyDto'
-        '400':
-          description: Помилка валідації вхідного запиту.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/vacancies/recommendations:
     get:
       tags:
@@ -1117,80 +1167,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiErrorResponse'
-    put:
-      tags:
-        - Vacancies
-      summary: Оновити дані існуючої вакансії.
-      description: Оновлює інформацію про вакансію за її унікальним ідентифікатором.
-      operationId: UpdateVacancy
-      parameters:
-        - name: id
-          in: path
-          description: 'Унікальний ідентифікатор вакансії, що оновлюється.'
-          required: true
-          schema:
-            type: string
-            format: uuid
-      requestBody:
-        description: Оновлені поля вакансії.
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateVacancyRequest'
-          text/json:
-            schema:
-              $ref: '#/components/schemas/UpdateVacancyRequest'
-          application/*+json:
-            schema:
-              $ref: '#/components/schemas/UpdateVacancyRequest'
-      responses:
-        '200':
-          description: Вакансію успішно оновлено.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/VacancyDto'
-        '400':
-          description: Помилка валідації полів запиту.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-        '404':
-          description: Вакансію для оновлення не знайдено.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
-    delete:
-      tags:
-        - Vacancies
-      summary: Видалити вакансію з каталогу.
-      description: Видаляє вакансію за її ідентифікатором з каталогу системи.
-      operationId: DeleteVacancy
-      parameters:
-        - name: id
-          in: path
-          description: Унікальний ідентифікатор вакансії.
-          required: true
-          schema:
-            type: string
-            format: uuid
-      responses:
-        '204':
-          description: Вакансію успішно видалено.
-        '404':
-          description: Вакансію не знайдено.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ApiErrorResponse'
   /api/v1/vacancies/sync:
     post:
       tags:
         - Vacancies
       summary: Двостороння синхронізація бази вакансій між локальною БД клієнта та сервером.
-      description: "Клієнт надсилає вакансії, зібрані або змінені в офлайні; сервер об'єднує їх зі своєю базою\r\n(дедуплікація за Source+ExternalId / Id / SourceUrl, Last-Write-Wins за LastSeenAt) та повертає\r\nвсі актуальні вакансії сервера (або зміни з моменту LastSyncedAt)."
+      description: "Клієнт надсилає вакансії, зібрані або змінені в офлайні; сервер об'єднує їх зі своєю базою\r\n(дедуплікація за Source+ExternalId / Id / SourceUrl, Last-Write-Wins за LastSeenAt) та повертає\r\nвсі актуальні вакансії сервера (або зміни з моменту LastSyncedAt).\r\nВакансії клієнта зберігаються лише з VacancySync:AcceptClientVacancies = true; за замовчуванням (false) сервер їх ігнорує й лише віддає свої."
       operationId: SyncVacancies
       requestBody:
         description: Несинхронізовані локальні вакансії клієнта та мітка часу останньої синхронізації.
@@ -1213,6 +1195,12 @@ paths:
                 $ref: '#/components/schemas/VacancySyncResponseDto'
         '400':
           description: Порожній або невалідний запит синхронізації.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiErrorResponse'
+        '401':
+          description: 'Потрібно увійти: сервер віддає базу лише користувачам застосунку.'
           content:
             application/json:
               schema:
@@ -1313,112 +1301,6 @@ components:
           format: double
       additionalProperties: false
       description: DTO географічних координат (широта й довгота).
-    CreateVacancyRequest:
-      required:
-        - category
-        - company
-        - currency
-        - description
-        - location
-        - sourceUrl
-        - title
-      type: object
-      properties:
-        title:
-          maxLength: 200
-          minLength: 2
-          type: string
-          description: Назва посади / позиції.
-          example: Middle .NET Developer
-        company:
-          maxLength: 200
-          minLength: 2
-          type: string
-          description: Назва компанії-роботодавця.
-          example: Genesis Tech
-        description:
-          maxLength: 10000
-          minLength: 10
-          type: string
-          description: Повний опис вакансії.
-          example: Розробка бекенд сервісів на .NET 10.
-        category:
-          maxLength: 100
-          minLength: 0
-          type: string
-          description: Категорія / напрям.
-          example: .NET
-        location:
-          maxLength: 200
-          minLength: 0
-          type: string
-          description: Локація / місто / формат роботи.
-          example: Київ (Віддалено)
-        fullAddress:
-          maxLength: 300
-          minLength: 0
-          type: string
-          description: Повна адреса офісу (за наявності).
-          nullable: true
-          example: 'Київ, вул. Мечникова, 2'
-        schedule:
-          maxLength: 100
-          minLength: 0
-          type: string
-          description: Графік роботи.
-          nullable: true
-          example: Повна зайнятість
-        experience:
-          maxLength: 100
-          minLength: 0
-          type: string
-          description: Необхідний досвід.
-          nullable: true
-          example: 2+ роки
-        salaryMin:
-          maximum: 1000000
-          minimum: 0
-          type: number
-          description: Мінімальна заробітна плата.
-          format: double
-          nullable: true
-          example: 2500
-        salaryMax:
-          maximum: 1000000
-          minimum: 0
-          type: number
-          description: Максимальна заробітна плата.
-          format: double
-          nullable: true
-          example: 4000
-        currency:
-          minLength: 1
-          pattern: ^(USD|EUR|UAH)$
-          type: string
-          description: 'Валюта виплати заробітної плати (USD, EUR, UAH).'
-          example: USD
-        source:
-          $ref: '#/components/schemas/JobSource'
-        sourceUrl:
-          maxLength: 2048
-          minLength: 1
-          type: string
-          description: Посилання на оригінал вакансії.
-          format: uri
-          example: https://djinni.co/jobs/example/
-        skills:
-          maxItems: 30
-          type: array
-          items:
-            type: string
-          description: Список ключових навичок.
-          nullable: true
-          example:
-            - .NET 10
-            - C#
-            - PostgreSQL
-      additionalProperties: false
-      description: Модель запиту на створення нової вакансії через REST API.
     ErrorPayload:
       type: object
       properties:
@@ -1921,6 +1803,40 @@ components:
           format: int32
       additionalProperties: false
       description: 'Елемент агрегованої частоти: назва технології/категорії та кількість переглядів і збережень.'
+    SystemSettingsDto:
+      type: object
+      properties:
+        backgroundParsingEnabled:
+          type: boolean
+          description: Чи збирає сервер вакансії у фоні (Ingestion:Enabled); зміна діє без перезапуску.
+        interval:
+          type: string
+          description: Як часто збирати (Ingestion:Interval); новий інтервал діє після перезапуску API.
+          format: date-span
+          example: '00:30:00'
+        djinniPages:
+          type: integer
+          description: Скільки сторінок Djinni читати за один збір.
+          format: int32
+        workUaPages:
+          type: integer
+          description: Скільки сторінок Work.ua читати за один збір.
+          format: int32
+        robotaUaPages:
+          type: integer
+          description: Скільки сторінок Robota.ua читати за один збір.
+          format: int32
+        douPages:
+          type: integer
+          description: Чи читати RSS-стрічку DOU (1) чи ні (0).
+          format: int32
+        requestDelay:
+          type: string
+          description: Пауза перед кожним запитом до сайту.
+          format: date-span
+          example: '00:00:02'
+      additionalProperties: false
+      description: 'Системні налаштування сервера, які бачить адміністратор: фоновий збір вакансій (секція Ingestion).'
     TechSalaryDto:
       type: object
       properties:
@@ -1937,103 +1853,19 @@ components:
           type: string
           nullable: true
       additionalProperties: false
-    UpdateVacancyRequest:
+    UpdateSystemSettingsRequest:
       type: object
       properties:
-        title:
-          maxLength: 200
-          minLength: 2
-          type: string
-          description: Назва посади / позиції.
-          nullable: true
-          example: Lead .NET Developer
-        company:
-          maxLength: 200
-          minLength: 2
-          type: string
-          description: Назва компанії-роботодавця.
-          nullable: true
-          example: Genesis Tech
-        description:
-          maxLength: 10000
-          minLength: 10
-          type: string
-          description: Повний опис вакансії.
-          nullable: true
-          example: Оновлений опис посади...
-        category:
-          maxLength: 100
-          minLength: 0
-          type: string
-          description: Професійна категорія / напрям.
-          nullable: true
-          example: .NET
-        location:
-          maxLength: 200
-          minLength: 0
-          type: string
-          description: Місто / формат роботи.
-          nullable: true
-          example: Віддалено
-        fullAddress:
-          maxLength: 300
-          minLength: 0
-          type: string
-          description: Повна адреса офісу (за наявності).
-          nullable: true
-        schedule:
-          maxLength: 100
-          minLength: 0
-          type: string
-          description: Графік роботи.
-          nullable: true
-        experience:
-          maxLength: 100
-          minLength: 0
-          type: string
-          description: Необхідний досвід.
-          nullable: true
-        salaryMin:
-          maximum: 1000000
-          minimum: 0
-          type: number
-          description: Мінімальна заробітна плата.
-          format: double
-          nullable: true
-        salaryMax:
-          maximum: 1000000
-          minimum: 0
-          type: number
-          description: Максимальна заробітна плата.
-          format: double
-          nullable: true
-        currency:
-          pattern: ^(USD|EUR|UAH)$
-          type: string
-          description: 'Валюта виплати заробітної плати (USD, EUR, UAH).'
-          nullable: true
-        source:
-          $ref: '#/components/schemas/JobSource'
-        sourceUrl:
-          maxLength: 2048
-          minLength: 1
-          type: string
-          description: Посилання на оригінал вакансії.
-          format: uri
-          nullable: true
-        skills:
-          maxItems: 30
-          type: array
-          items:
-            type: string
-          description: Список ключових навичок.
-          nullable: true
-        isActive:
+        backgroundParsingEnabled:
           type: boolean
-          description: Ознака активності вакансії.
-          nullable: true
+          description: Увімкнути чи вимкнути фоновий збір.
+        interval:
+          type: string
+          description: 'Інтервал збору: від 10 хвилин до доби.'
+          format: date-span
+          example: '00:30:00'
       additionalProperties: false
-      description: Модель запиту на оновлення існуючої вакансії (PUT/PATCH).
+      description: 'Що адміністратор може змінити: увімкнення фонового збору та його інтервал (те, що редагується у вкладці «Системні налаштування»).'
     UserAddressDto:
       type: object
       properties:
@@ -2047,8 +1879,9 @@ components:
       enum:
         - JobSeeker
         - Analyst
+        - Admin
       type: string
-      description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\r\n1 = Analyst (доступ до агрегованої аналітики)."
+      description: "Роль користувача платформи (FR-008): 0 = JobSeeker (шукач роботи, за замовчуванням),\r\n1 = Analyst (доступ до агрегованої аналітики), 2 = Admin (лише системні налаштування сервера)."
     UserStatsDto:
       type: object
       properties:
@@ -2355,6 +2188,9 @@ components:
           type: integer
           description: Скільки валідних записів отримано від клієнта у цьому запиті.
           format: int32
+        clientVacanciesAccepted:
+          type: boolean
+          description: Чи сервер зберігає вакансії від клієнта (VacancySync:AcceptClientVacancies); false — надіслані clientVacancies проігноровано.
         createdOnServer:
           type: integer
           description: Скільки нових вакансій додано до серверної БД.
@@ -2400,6 +2236,8 @@ components:
 security:
   - Bearer: [ ]
 tags:
+  - name: AdminSettings
+    description: Системні налаштування сервера (лише роль Admin)
   - name: AIConsultant
     description: 'ШІ-консультант: підбір вакансій звичайною мовою (SSE)'
   - name: Analytics
@@ -2415,4 +2253,4 @@ tags:
   - name: SiteSearches
     description: 'Пошук вакансій на Djinni, DOU, Work.ua та Robota.ua за фільтрами на запит користувача (один або кілька сайтів одночасно)'
   - name: Vacancies
-    description: Керування агрегованими вакансіями платформи Waterfall (CRUD)
+    description: Каталог агрегованих вакансій платформи Waterfall (лише читання; наповнює серверний парсер)

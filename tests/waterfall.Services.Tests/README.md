@@ -16,11 +16,11 @@
 
 ## Опис набору тестів
 
-206 тестових випадків у 21 класі (205 виконуються у CI + 1 опційний `LlmLiveSmokeTests` за `WATERFALL_LLM_LIVE=1`; актуалізовано 20.11.2026):
+203 тестових випадків у 21 класі (202 виконуються у CI + 1 опційний `LlmLiveSmokeTests` за `WATERFALL_LLM_LIVE=1`; актуалізовано 22.11.2026):
 
 | Клас тесту | Кількість випадків | Що перевіряє |
 | :--- | :---: | :--- |
-| [`VacancyServiceTests`](VacancyServiceTests.cs) | 28 | Cache-Aside HIT/MISS, Stale-Cache fallback (REL-001), ізоляція `IsSaved`/`IsViewed`, CRUD + інвалідація кешу, стійкість `ParseSkills`, `SyncVacanciesAsync` (двосторонній обмін з інвалідацією кешу) |
+| [`VacancyServiceTests`](VacancyServiceTests.cs) | 23 | Cache-Aside HIT/MISS, синхронізація з клієнтом лише з `VacancySync:AcceptClientVacancies = true` (за замовчуванням вакансії клієнта ігноруються), Stale-Cache fallback (REL-001), ізоляція `IsSaved`/`IsViewed`, стійкість `ParseSkills`, `SyncVacanciesAsync` (двосторонній обмін з інвалідацією кешу) |
 | [`AIConsultantServiceTests`](AIConsultantServiceTests.cs) | 22 | витяг фільтра, збереження контексту діалогу (FR-009), релаксація критеріїв, заборона вигаданих вакансій (FUNC-001), обробка недоступності LLM |
 | [`FallbackChatClientTests`](FallbackChatClientTests.cs) | 18 | ланцюжок резервування LLM-провайдерів, таймаути спроби/загальний, поведінка на 429/5xx vs 400/401/403 |
 | [`SensitiveTextMaskerTests`](SensitiveTextMaskerTests.cs) | 15 | маскування email і телефонів перед відправкою до LLM (THR-06) |

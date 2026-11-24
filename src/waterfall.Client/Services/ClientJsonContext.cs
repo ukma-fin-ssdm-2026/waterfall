@@ -26,6 +26,8 @@ namespace Waterfall.Client.Services;
 [JsonSerializable(typeof(List<string>))]
 [JsonSerializable(typeof(RecommendationsResultDto))]
 [JsonSerializable(typeof(MarketAnalyticsDto))]
+[JsonSerializable(typeof(Waterfall.Client.Models.SystemSettings.SystemSettingsDto))]
+[JsonSerializable(typeof(Waterfall.Client.Models.SystemSettings.UpdateSystemSettingsRequest))]
 [JsonSerializable(typeof(GradeSalaryDto))]
 [JsonSerializable(typeof(TechSalaryDto))]
 [JsonSerializable(typeof(CategoryShareDto))]

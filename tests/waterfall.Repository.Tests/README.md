@@ -12,7 +12,7 @@
 
 ## Опис набору тестів
 
-145 тестових випадків в 11 класах на реальній in-memory SQLite (актуалізовано 20.11.2026):
+147 тестових випадків в 11 класах на реальній in-memory SQLite (актуалізовано 22.11.2026):
 
 | Клас тесту | Кількість випадків | Що перевіряє |
 | :--- | :---: | :--- |
@@ -26,7 +26,7 @@
 | [`EfUserRepositoryTests`](EfUserRepositoryTests.cs) | 3 | пошук і збереження облікових записів користувачів |
 | [`EfVacancyViewRepositoryTests`](EfVacancyViewRepositoryTests.cs) | 3 | фіксація та підрахунок переглядів вакансій |
 | [`NonFunctionalPerformanceTests`](NonFunctionalPerformanceTests.cs) | 2 | виконувані NFR-тести: `PERF_001` (p95 < 1000 мс на 10 000 записів) та `SEC_001` (0 паролів у відкритому вигляді) |
-| [`WaterfallDbSeederTests`](WaterfallDbSeederTests.cs) | 3 | ідемпотентне сідування початкових даних, геокешу та автоматичний апгрейд legacy SQLite схеми |
+| [`WaterfallDbSeederTests`](WaterfallDbSeederTests.cs) | 4 | ідемпотентне сідування початкових даних, геокешу та автоматичний апгрейд legacy SQLite схеми; без демо-даних (поза Development) — лише структура бази, без фейкових вакансій і тестових акаунтів |
 
 ---
 
