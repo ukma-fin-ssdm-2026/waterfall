@@ -150,6 +150,7 @@ public sealed class PhoneSectionHostPage : ContentPage, IHostedPage
 
         CatalogViewModel catalogVm = _services.GetRequiredService<CatalogViewModel>();
         ParseSitePreferences.Attach(catalogVm);
+        CatalogFilterPreferences.Attach(catalogVm);
 
         Button parseSettingsButton = new()
         {

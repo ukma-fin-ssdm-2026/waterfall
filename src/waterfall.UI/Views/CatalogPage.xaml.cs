@@ -16,6 +16,7 @@ public partial class CatalogPage : ContentPage, IHostedPage
     {
         InitializeComponent();
         ParseSitePreferences.Attach(viewModel);
+        CatalogFilterPreferences.Attach(viewModel);
         // На першому відкритті тримаємо overlay-шторки закритими,
         // не змінюючи значення за замовчуванням у ViewModel (щоб тести PR #186 лишалися зеленими).
         viewModel.IsParsePanelVisible = false;

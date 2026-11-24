@@ -1629,6 +1629,34 @@ public partial class CatalogViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFilterHighlightActive));
     }
 
+    /// <summary>
+    /// Відновлює збережений рядок пошуку й списки слів після перезапуску (REL-002).
+    /// Відновлений запит не записується в історію пошуків повторно: користувач його вже вводив.
+    /// </summary>
+    public void RestoreSavedFilters(string searchText, IEnumerable<string> whiteListWords, IEnumerable<string> banListWords)
+    {
+        _appliedQuery = Normalize(searchText);
+        SearchText = searchText;
+
+        WhiteListWords.Clear();
+        foreach (string word in whiteListWords)
+        {
+            WhiteListWords.Add(word);
+        }
+
+        BanListWords.Clear();
+        foreach (string word in banListWords)
+        {
+            BanListWords.Add(word);
+        }
+
+        NotifyWordListProperties();
+        if (HasLoaded)
+        {
+            ApplyLocalFilterAndSort();
+        }
+    }
+
     partial void OnSelectedSortOptionChanged(string value)
     {
         if (_isSyncingSort)
