@@ -394,6 +394,7 @@ internal sealed class FakeGateway : IHttpGatewayService
 
     public List<string> RecordedSearches { get; } = [];
     public List<Guid> RecordedVacancyViews { get; } = [];
+    public List<Guid> UnmarkedVacancyViews { get; } = [];
     public int ClearSearchHistoryCalls { get; private set; }
 
     public Task<Waterfall.Client.Models.Profile.UserStatsDto?> GetPersonalStatsAsync(CancellationToken ct = default) =>
@@ -419,6 +420,12 @@ internal sealed class FakeGateway : IHttpGatewayService
     public Task<bool> RecordVacancyViewAsync(Guid vacancyId, CancellationToken ct = default)
     {
         RecordedVacancyViews.Add(vacancyId);
+        return Task.FromResult(true);
+    }
+
+    public Task<bool> UnmarkVacancyViewAsync(Guid vacancyId, CancellationToken ct = default)
+    {
+        UnmarkedVacancyViews.Add(vacancyId);
         return Task.FromResult(true);
     }
     /// <summary>

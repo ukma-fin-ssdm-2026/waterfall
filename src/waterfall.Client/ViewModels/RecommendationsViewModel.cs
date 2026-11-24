@@ -51,6 +51,14 @@ public partial class RecommendationsViewModel : ObservableObject
             }
         });
 
+        _messenger.Register<RecommendationsViewModel, VacancyViewedMessage>(this, static (vm, message) =>
+        {
+            foreach (VacancyItemViewModel item in vm.Recommendations.Where(v => v.Id == message.VacancyId))
+            {
+                item.IsViewed = message.IsViewed;
+            }
+        });
+
         _messenger.Register<RecommendationsViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
         {
             vm._isDirty = true;

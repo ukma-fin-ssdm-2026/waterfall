@@ -251,6 +251,26 @@ public sealed class HttpGatewayService : IHttpGatewayService
         }
     }
 
+    public async Task<bool> UnmarkVacancyViewAsync(Guid vacancyId, CancellationToken ct = default)
+    {
+        if (vacancyId == Guid.Empty)
+        {
+            return false;
+        }
+
+        try
+        {
+            using HttpResponseMessage response = await SendCoreAsync(
+                new HttpRequestMessage(HttpMethod.Delete, $"api/v1/profile/views/{vacancyId}"),
+                ct);
+            return response.IsSuccessStatusCode;
+        }
+        catch (ApiException)
+        {
+            return false;
+        }
+    }
+
     public async IAsyncEnumerable<AiStreamEvent> SendAiMessageAsync(Guid? sessionId, string text, [EnumeratorCancellation] CancellationToken ct = default)
     {
         HttpRequestMessage request = Post(

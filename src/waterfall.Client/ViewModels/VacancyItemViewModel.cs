@@ -46,6 +46,7 @@ public partial class VacancyItemViewModel : ObservableObject
     /// <param name="distanceService">Сервіс розрахунку реальної відстані до офісу вакансії.</param>
     /// <param name="onDistanceCalculated">Зворотний виклик при завершенні розрахунку відстані (id, km).</param>
     /// <param name="initialDistanceKm">Попередньо розрахована відстань у км (якщо доступна з кешу).</param>
+    /// <param name="canMarkViewed">Чи дозволено відстежувати перегляд вакансії (лише роль JobSeeker за data-model.md §6).</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
@@ -54,7 +55,8 @@ public partial class VacancyItemViewModel : ObservableObject
         IUrlLauncher? urlLauncher = null,
         IDistanceCalculatorService? distanceService = null,
         Action<Guid, double?>? onDistanceCalculated = null,
-        double? initialDistanceKm = null)
+        double? initialDistanceKm = null,
+        bool canMarkViewed = true)
     {
         Vacancy = vacancy;
         _gateway = gateway;
@@ -64,6 +66,8 @@ public partial class VacancyItemViewModel : ObservableObject
         _distanceService = distanceService;
         _onDistanceCalculated = onDistanceCalculated;
         IsSaved = vacancy.IsSaved;
+        CanMarkViewed = canMarkViewed;
+        IsViewed = canMarkViewed && vacancy.IsViewed;
         Category = string.IsNullOrWhiteSpace(vacancy.Category) ? "Інше" : vacancy.Category;
         CategoryGroup = !string.IsNullOrWhiteSpace(vacancy.CategoryGroup)
             ? vacancy.CategoryGroup
@@ -543,18 +547,24 @@ public partial class VacancyItemViewModel : ObservableObject
     private void ToggleDetails()
     {
         IsDetailsExpanded = !IsDetailsExpanded;
-        if (IsDetailsExpanded)
+        if (IsDetailsExpanded && CanMarkViewed)
         {
+            IsViewed = true;
             _ = _gateway.RecordVacancyViewAsync(Id);
-            _messenger.Send(new VacancyViewedMessage(Id));
+            _messenger.Send(new VacancyViewedMessage(Id, true));
         }
     }
 
     [RelayCommand]
     private async Task OpenSourceAsync()
     {
-        _ = _gateway.RecordVacancyViewAsync(Id);
-        _messenger.Send(new VacancyViewedMessage(Id));
+        if (CanMarkViewed)
+        {
+            IsViewed = true;
+            _ = _gateway.RecordVacancyViewAsync(Id);
+            _messenger.Send(new VacancyViewedMessage(Id, true));
+        }
+
         if (HasSourceUrl && Uri.TryCreate(SourceUrl, UriKind.Absolute, out Uri? uri))
         {
             try
@@ -571,6 +581,71 @@ public partial class VacancyItemViewModel : ObservableObject
             }
         }
     }
+
+    /// <summary>
+    /// Чи дозволено позначати вакансію як переглянуту (лише авторизований JobSeeker за data-model.md §6).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanMarkViewed { get; set; } = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ViewedButtonText))]
+    public partial bool IsViewed { get; set; }
+
+    /// <summary>
+    /// true під час короткої анімації приховування картки (коли увімкнено «Без переглянутих» і натиснуто кнопку перегляду).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsDismissing { get; set; }
+
+    public string ViewedButtonText => IsViewed ? "Зняти позначку переглянуто" : "Позначити як переглянуто";
+
+    [RelayCommand]
+    private async Task ToggleViewedAsync()
+    {
+        if (!CanMarkViewed)
+        {
+            return;
+        }
+
+        bool target = !IsViewed;
+        IsViewed = target;
+        _messenger.Send(new VacancyViewedMessage(Id, target, Explicit: true));
+
+        if (target)
+        {
+            await _gateway.RecordVacancyViewAsync(Id);
+        }
+        else
+        {
+            await _gateway.UnmarkVacancyViewAsync(Id);
+        }
+    }
+
+    public string? PublishedAtDisplay => Vacancy.PublishedAt != default
+        ? $"Опубл. {Vacancy.PublishedAt.ToLocalTime():dd.MM.yyyy}"
+        : null;
+
+    public string? ParsedAtDisplay
+    {
+        get
+        {
+            DateTimeOffset parsedAt = Vacancy.LastSeenAt != default ? Vacancy.LastSeenAt : Vacancy.FirstSeenAt;
+            return parsedAt != default
+                ? $"Спаршено {parsedAt.ToLocalTime():dd.MM.yyyy}"
+                : null;
+        }
+    }
+
+    public string DatesDisplay => (PublishedAtDisplay, ParsedAtDisplay) switch
+    {
+        ({ } pub, { } parsed) => $"{pub} · {parsed}",
+        ({ } pub, null) => pub,
+        (null, { } parsed) => parsed,
+        _ => string.Empty
+    };
+
+    public bool HasDatesDisplay => !string.IsNullOrEmpty(DatesDisplay);
 
     /// <summary>
     /// Передає вакансію ШІ-консультанту (FR-010): вкладка ШІ відкриється й покаже аналіз.

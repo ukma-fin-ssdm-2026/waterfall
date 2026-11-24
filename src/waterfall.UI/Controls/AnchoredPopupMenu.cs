@@ -63,7 +63,7 @@ public sealed class AnchoredPopupMenu : ContentView
                 Opacity = 0.32f
             }
         };
-        _card.SetDynamicResource(Border.StrokeProperty, "CardBorder");
+        _card.SetDynamicResource(Border.StrokeProperty, "CardBorderBrush");
         _card.SetDynamicResource(VisualElement.BackgroundColorProperty, "DarkBg1");
 
         Content = new Grid

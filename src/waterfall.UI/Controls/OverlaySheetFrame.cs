@@ -156,7 +156,7 @@ public sealed class OverlaySheetFrame : ContentView
         }
 
         Card.SetDynamicResource(VisualElement.BackgroundColorProperty, "DarkBg1");
-        Card.SetDynamicResource(Border.StrokeProperty, "CardBorder");
+        Card.SetDynamicResource(Border.StrokeProperty, "CardBorderBrush");
 
         Content = new Grid
         {

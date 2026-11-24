@@ -241,6 +241,85 @@ public class VacancyItemViewModelTests
     }
 
     [Fact]
+    public async Task ToggleViewedCommand_MarksAndUnmarksAndPersistsViaGateway()
+    {
+        Guid id = Guid.NewGuid();
+        List<VacancyViewedMessage> messages = [];
+        _messenger.Register<VacancyViewedMessage>(this, (_, m) => messages.Add(m));
+
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = id,
+            Title = "Backend Dev",
+            Description = "Desc",
+            IsViewed = false
+        }, _gateway, _messenger, _errors.Add);
+
+        Assert.False(item.IsViewed);
+
+        await item.ToggleViewedCommand.ExecuteAsync(null);
+        Assert.True(item.IsViewed);
+        Assert.Contains(id, _gateway.RecordedVacancyViews);
+
+        await item.ToggleViewedCommand.ExecuteAsync(null);
+        Assert.False(item.IsViewed);
+        Assert.Contains(id, _gateway.UnmarkedVacancyViews);
+
+        Assert.Equal([new VacancyViewedMessage(id, true, Explicit: true), new VacancyViewedMessage(id, false, Explicit: true)], messages);
+    }
+
+    [Fact]
+    public async Task NonJobSeeker_CanMarkViewedFalse_DoesNotRecordViewOrMarkViewed()
+    {
+        Guid id = Guid.NewGuid();
+        List<VacancyViewedMessage> messages = [];
+        _messenger.Register<VacancyViewedMessage>(this, (_, m) => messages.Add(m));
+        FakeUrlLauncher launcher = new();
+
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = id,
+            Title = "Backend Dev",
+            Description = "Desc",
+            SourceUrl = "https://djinni.co/jobs/123",
+            IsViewed = true
+        }, _gateway, _messenger, _errors.Add, launcher, canMarkViewed: false);
+
+        Assert.False(item.CanMarkViewed);
+        Assert.False(item.IsViewed);
+
+        await item.ToggleViewedCommand.ExecuteAsync(null);
+        item.ToggleDetailsCommand.Execute(null);
+        await item.OpenSourceCommand.ExecuteAsync(null);
+
+        Assert.False(item.IsViewed);
+        Assert.Empty(_gateway.RecordedVacancyViews);
+        Assert.Empty(_gateway.UnmarkedVacancyViews);
+        Assert.Empty(messages);
+    }
+
+    [Fact]
+    public void DatesDisplay_FormatsPublishedAndParsedDates()
+    {
+        DateTimeOffset published = new(2026, 11, 10, 12, 0, 0, TimeSpan.Zero);
+        DateTimeOffset parsed = new(2026, 11, 24, 12, 0, 0, TimeSpan.Zero);
+
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            PublishedAt = published,
+            LastSeenAt = parsed
+        }, _gateway, _messenger, _errors.Add);
+
+        Assert.True(item.HasDatesDisplay);
+        Assert.Equal($"Опубл. {published.ToLocalTime():dd.MM.yyyy}", item.PublishedAtDisplay);
+        Assert.Equal($"Спаршено {parsed.ToLocalTime():dd.MM.yyyy}", item.ParsedAtDisplay);
+        Assert.Equal($"{item.PublishedAtDisplay} · {item.ParsedAtDisplay}", item.DatesDisplay);
+    }
+
+    [Fact]
     public async Task RefreshDistance_SetsNoInternetText_WhenNetworkThrows()
     {
         FakeDistanceService service = new() { ThrowNetworkError = true };

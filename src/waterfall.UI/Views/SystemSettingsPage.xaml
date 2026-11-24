@@ -131,12 +131,10 @@
                                        VerticalOptions="Center" />
                             </HorizontalStackLayout>
 
-                            <Switch x:Name="AmoledSwitch"
-                                    Grid.Column="1"
-                                    Toggled="OnAmoledToggled"
-                                    OnColor="{DynamicResource Primary}"
-                                    ThumbColor="{DynamicResource OnPrimary}"
-                                    VerticalOptions="Center" />
+                            <controls:ToggleSwitchControl x:Name="AmoledSwitch"
+                                                          Grid.Column="1"
+                                                          Toggled="OnAmoledToggled"
+                                                          VerticalOptions="Center" />
                         </Grid>
                     </VerticalStackLayout>
                 </Border>
@@ -162,12 +160,10 @@
                             </Border>
                         </FlexLayout>
 
-                        <Switch Grid.Column="1"
-                                IsToggled="{Binding IsBackgroundParsingEnabled}"
-                                Toggled="OnBackgroundParsingToggled"
-                                OnColor="{DynamicResource Primary}"
-                                ThumbColor="{DynamicResource OnPrimary}"
-                                VerticalOptions="Center" />
+                        <controls:ToggleSwitchControl Grid.Column="1"
+                                                      IsToggled="{Binding IsBackgroundParsingEnabled}"
+                                                      Toggled="OnBackgroundParsingToggled"
+                                                      VerticalOptions="Center" />
                     </Grid>
                 </Border>
 

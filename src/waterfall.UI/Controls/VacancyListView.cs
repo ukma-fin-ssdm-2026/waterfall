@@ -57,6 +57,7 @@ public sealed class VacancyListView : ContentView
         _collectionView = new CollectionView
         {
             SelectionMode = SelectionMode.None,
+            ItemsUpdatingScrollMode = ItemsUpdatingScrollMode.KeepScrollOffset,
             ItemTemplate = new DataTemplate(static () => new VacancyCard())
         };
 

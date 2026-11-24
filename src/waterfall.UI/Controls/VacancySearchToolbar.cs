@@ -119,7 +119,7 @@ public sealed class VacancySearchToolbar : ContentView
             Padding = new Thickness(4, 0),
             Content = searchBar
         };
-        searchBorder.SetDynamicResource(Border.StrokeProperty, "Secondary");
+        searchBorder.SetDynamicResource(Border.StrokeProperty, "SecondaryBrush");
         searchBorder.SetDynamicResource(VisualElement.BackgroundColorProperty, "DarkBg1");
 
         View sortElement;
@@ -171,7 +171,7 @@ public sealed class VacancySearchToolbar : ContentView
                 VerticalOptions = LayoutOptions.Center,
                 Content = pickerGrid
             };
-            pickerBorder.SetDynamicResource(Border.StrokeProperty, "Secondary");
+            pickerBorder.SetDynamicResource(Border.StrokeProperty, "SecondaryBrush");
             pickerBorder.SetDynamicResource(VisualElement.BackgroundColorProperty, "DarkBg1");
             sortElement = pickerBorder;
         }

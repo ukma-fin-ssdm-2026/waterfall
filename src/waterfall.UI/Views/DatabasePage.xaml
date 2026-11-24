@@ -17,38 +17,20 @@
                     <VerticalStackLayout Spacing="12">
                                     <Label Text="Джерела" Style="{StaticResource SheetSectionTitle}" />
                                     <FlexLayout Wrap="Wrap">
-                                        <Button Text="{Binding DouFilterLabel}" Command="{Binding ToggleDouFilterCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6">
-                                            <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding IncludeDou}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                                        </Button>
-                                        <Button Text="{Binding WorkUaFilterLabel}" Command="{Binding ToggleWorkUaFilterCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6">
-                                            <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding IncludeWorkUa}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                                        </Button>
-                                        <Button Text="{Binding DjinniFilterLabel}" Command="{Binding ToggleDjinniFilterCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6">
-                                            <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding IncludeDjinni}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                                        </Button>
-                                        <Button Text="{Binding RobotaUaFilterLabel}" Command="{Binding ToggleRobotaUaFilterCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6">
-                                            <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding IncludeRobotaUa}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                                        </Button>
-                                        <Button Text="Усі" Command="{Binding SelectAllSourcesCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6" />
+                                        <controls:FilterChipControl Text="{Binding DouFilterLabel}" Command="{Binding ToggleDouFilterCommand}" IsActive="{Binding IncludeDou}" Margin="0,0,6,6" />
+                                        <controls:FilterChipControl Text="{Binding WorkUaFilterLabel}" Command="{Binding ToggleWorkUaFilterCommand}" IsActive="{Binding IncludeWorkUa}" Margin="0,0,6,6" />
+                                        <controls:FilterChipControl Text="{Binding DjinniFilterLabel}" Command="{Binding ToggleDjinniFilterCommand}" IsActive="{Binding IncludeDjinni}" Margin="0,0,6,6" />
+                                        <controls:FilterChipControl Text="{Binding RobotaUaFilterLabel}" Command="{Binding ToggleRobotaUaFilterCommand}" IsActive="{Binding IncludeRobotaUa}" Margin="0,0,6,6" />
+                                        <controls:FilterChipControl Text="Усі" Command="{Binding SelectAllSourcesCommand}" Margin="0,0,6,6" />
                                     </FlexLayout>
 
                                     <Label Text="Швидкі прапорці" Style="{StaticResource SheetSectionTitle}" />
                                     <FlexLayout Wrap="Wrap">
-                                        <Button Text="З ЗП" Command="{Binding ToggleOnlyWithSalaryCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6">
-                                            <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding OnlyWithSalary}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                                        </Button>
-                                        <Button Text="Включно без ЗП" Command="{Binding ToggleIncludeNoSalaryCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6">
-                                            <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding IncludeNoSalary}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                                        </Button>
-                                        <Button Text="Лише обрані" Command="{Binding ToggleOnlySavedCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6">
-                                            <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding OnlySaved}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                                        </Button>
-                                        <Button Text="Без переглянутих" Command="{Binding ToggleHideViewedCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6">
-                                            <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding HideViewed}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                                        </Button>
-                                        <Button Text="Лише в назві" Command="{Binding ToggleTitleOnlyCommand}" Style="{StaticResource FilterChip}" Margin="0,0,6,6">
-                                            <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding TitleOnly}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                                        </Button>
+                                        <controls:FilterChipControl Text="З ЗП" Command="{Binding ToggleOnlyWithSalaryCommand}" IsActive="{Binding OnlyWithSalary}" Margin="0,0,6,6" />
+                                        <controls:FilterChipControl Text="Включно без ЗП" Command="{Binding ToggleIncludeNoSalaryCommand}" IsActive="{Binding IncludeNoSalary}" Margin="0,0,6,6" />
+                                        <controls:FilterChipControl Text="Лише обрані" Command="{Binding ToggleOnlySavedCommand}" IsActive="{Binding OnlySaved}" Margin="0,0,6,6" />
+                                        <controls:FilterChipControl Text="Без переглянутих" Command="{Binding ToggleHideViewedCommand}" IsActive="{Binding HideViewed}" IsVisible="{Binding CanTrackViews}" Margin="0,0,6,6" />
+                                        <controls:FilterChipControl Text="Лише в назві" Command="{Binding ToggleTitleOnlyCommand}" IsActive="{Binding TitleOnly}" Margin="0,0,6,6" />
                                     </FlexLayout>
 
                                     <Label Text="Категорії, досвід та формат" Style="{StaticResource SheetSectionTitle}" />
@@ -175,38 +157,23 @@
                 </HorizontalStackLayout>
             </controls:VacancySearchToolbar>
 
-            <!-- Рядок 1 (лише Desktop): Єдина компактна смуга джерел і швидких прапорців -->
+            <!-- Рядок 1 (лише Desktop): Компактна смуга швидких фільтрів + перехід до сайтів у панелі фільтрів -->
             <ScrollView Grid.Row="1"
                         IsVisible="{OnIdiom Phone=False, Default=True}"
                         Orientation="Horizontal"
                         HorizontalScrollBarVisibility="Never"
                         Padding="12,0,12,6">
                 <HorizontalStackLayout Spacing="6" VerticalOptions="Center">
-                    <Button Text="{Binding DouFilterLabel}" Command="{Binding ToggleDouFilterCommand}" Style="{StaticResource FilterChip}">
-                        <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding IncludeDou}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                    </Button>
-                    <Button Text="{Binding WorkUaFilterLabel}" Command="{Binding ToggleWorkUaFilterCommand}" Style="{StaticResource FilterChip}">
-                        <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding IncludeWorkUa}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                    </Button>
-                    <Button Text="{Binding DjinniFilterLabel}" Command="{Binding ToggleDjinniFilterCommand}" Style="{StaticResource FilterChip}">
-                        <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding IncludeDjinni}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                    </Button>
-                    <Button Text="{Binding RobotaUaFilterLabel}" Command="{Binding ToggleRobotaUaFilterCommand}" Style="{StaticResource FilterChip}">
-                        <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding IncludeRobotaUa}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                    </Button>
+                    <controls:FilterChipControl Text="{Binding SourcesChipText}"
+                                                Command="{Binding ToggleFilterPanelCommand}"
+                                                SemanticProperties.Description="Обрати сайти вакансій у фільтрах" />
 
                     <BoxView WidthRequest="1" HeightRequest="18" Color="{DynamicResource DividerColor}" Margin="2,0" VerticalOptions="Center" />
 
-                    <Button Text="З ЗП" Command="{Binding ToggleOnlyWithSalaryCommand}" Style="{StaticResource FilterChip}">
-                        <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding OnlyWithSalary}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                    </Button>
-                    <Button Text="Обрані" Command="{Binding ToggleOnlySavedCommand}" Style="{StaticResource FilterChip}">
-                        <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding OnlySaved}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                    </Button>
-                    <Button Text="Без переглянутих" Command="{Binding ToggleHideViewedCommand}" Style="{StaticResource FilterChip}">
-                        <Button.Triggers><DataTrigger TargetType="Button" Binding="{Binding HideViewed}" Value="True"><Setter Property="BackgroundColor" Value="{DynamicResource InkPillBg}" /><Setter Property="TextColor" Value="{DynamicResource InkPillText}" /></DataTrigger></Button.Triggers>
-                    </Button>
-                    <Button Text="Скинути" Command="{Binding ResetFiltersCommand}" Style="{StaticResource FilterChip}" TextColor="{DynamicResource Primary}" />
+                    <controls:FilterChipControl Text="З ЗП" Command="{Binding ToggleOnlyWithSalaryCommand}" IsActive="{Binding OnlyWithSalary}" />
+                    <controls:FilterChipControl Text="Обрані" Command="{Binding ToggleOnlySavedCommand}" IsActive="{Binding OnlySaved}" />
+                    <controls:FilterChipControl Text="Без переглянутих" Command="{Binding ToggleHideViewedCommand}" IsActive="{Binding HideViewed}" IsVisible="{Binding CanTrackViews}" />
+                    <controls:FilterChipControl Text="Скинути" Command="{Binding ResetFiltersCommand}" IsAccentText="True" />
                 </HorizontalStackLayout>
             </ScrollView>
 

@@ -51,6 +51,14 @@ public partial class FavoritesViewModel : ObservableObject
             vm.OnCountChanged();
         });
 
+        messenger.Register<FavoritesViewModel, VacancyViewedMessage>(this, static (vm, message) =>
+        {
+            foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
+            {
+                item.IsViewed = message.IsViewed;
+            }
+        });
+
         messenger.Register<FavoritesViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
         {
             vm._isDirty = true;

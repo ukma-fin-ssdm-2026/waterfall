@@ -16,12 +16,12 @@
             <TapGestureRecognizer Tapped="OnToggleDetailsTapped" />
         </Border.GestureRecognizers>
 
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
               ColumnDefinitions="*,Auto"
               ColumnSpacing="10"
               RowSpacing="0">
 
-            <!-- Рядок 0: Заголовок (зліва) + серце «Обраного» на 2 рядки справа -->
+            <!-- Рядок 0: Заголовок (зліва) + переглянуто/обране на 2 рядки справа -->
             <Label x:Name="TitleLabel"
                    Grid.Row="0"
                    Grid.Column="0"
@@ -32,34 +32,61 @@
                    BackgroundColor="Transparent"
                    TextColor="#F2EFEA" />
 
-            <Border x:Name="HeartBorder"
-                    Grid.Row="0"
-                    Grid.RowSpan="2"
-                    Grid.Column="1"
-                    WidthRequest="34"
-                    HeightRequest="34"
-                    StrokeShape="RoundRectangle 9"
-                    StrokeThickness="0"
-                    Stroke="Transparent"
-                    BackgroundColor="Transparent"
-                    VerticalOptions="Start"
-                    SemanticProperties.Hint="Додати до обраного або прибрати з нього">
-                <Border.GestureRecognizers>
-                    <TapGestureRecognizer Tapped="OnToggleSaveTapped" />
-                </Border.GestureRecognizers>
-                <Path x:Name="HeartPath"
-                      Data="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"
-                      Aspect="Uniform"
-                      WidthRequest="17"
-                      HeightRequest="17"
-                      HorizontalOptions="Center"
-                      VerticalOptions="Center"
-                      StrokeThickness="1.7"
-                      StrokeLineJoin="Round"
-                      StrokeLineCap="Round"
-                      Fill="Transparent"
-                      Stroke="#767068" />
-            </Border>
+            <HorizontalStackLayout Grid.Row="0"
+                                   Grid.RowSpan="2"
+                                   Grid.Column="1"
+                                   Spacing="2"
+                                   VerticalOptions="Start">
+                <Border x:Name="ViewedBorder"
+                        WidthRequest="34"
+                        HeightRequest="34"
+                        StrokeShape="RoundRectangle 9"
+                        StrokeThickness="0"
+                        Stroke="Transparent"
+                        BackgroundColor="Transparent"
+                        VerticalOptions="Center"
+                        SemanticProperties.Hint="Позначити вакансію як переглянуту або зняти позначку">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnToggleViewedTapped" />
+                    </Border.GestureRecognizers>
+                    <Label x:Name="ViewedIconLabel"
+                           Text="{x:Static res:Icons.Eye}"
+                           FontFamily="Lucide"
+                           FontSize="16"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"
+                           HorizontalTextAlignment="Center"
+                           VerticalTextAlignment="Center"
+                           BackgroundColor="Transparent"
+                           TextColor="#767068" />
+                </Border>
+
+                <Border x:Name="HeartBorder"
+                        WidthRequest="34"
+                        HeightRequest="34"
+                        StrokeShape="RoundRectangle 9"
+                        StrokeThickness="0"
+                        Stroke="Transparent"
+                        BackgroundColor="Transparent"
+                        VerticalOptions="Center"
+                        SemanticProperties.Hint="Додати до обраного або прибрати з нього">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnToggleSaveTapped" />
+                    </Border.GestureRecognizers>
+                    <Path x:Name="HeartPath"
+                          Data="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"
+                          Aspect="Uniform"
+                          WidthRequest="17"
+                          HeightRequest="17"
+                          HorizontalOptions="Center"
+                          VerticalOptions="Center"
+                          StrokeThickness="1.7"
+                          StrokeLineJoin="Round"
+                          StrokeLineCap="Round"
+                          Fill="Transparent"
+                          Stroke="#767068" />
+                </Border>
+            </HorizontalStackLayout>
 
             <!-- Рядок 1: Зарплата -->
             <Label x:Name="SalaryLabel"
@@ -115,9 +142,22 @@
                 </Border>
             </HorizontalStackLayout>
 
-            <!-- Рядок 4: Адреса офісу та кнопка «Показати на мапі» -->
+            <!-- Рядок 4: Дати публікації та парсингу -->
+            <Label x:Name="DatesLabel"
+                   Grid.Row="4"
+                   Grid.ColumnSpan="2"
+                   Margin="0,2,0,0"
+                   FontFamily="OpenSansRegular"
+                   FontSize="11"
+                   LineBreakMode="TailTruncation"
+                   MaxLines="1"
+                   IsVisible="False"
+                   BackgroundColor="Transparent"
+                   TextColor="#767068" />
+
+            <!-- Рядок 5: Адреса офісу та кнопка «Показати на мапі» -->
             <Grid x:Name="AddressRow"
-                  Grid.Row="4"
+                  Grid.Row="5"
                   Grid.ColumnSpan="2"
                   Margin="0,6,0,0"
                   ColumnDefinitions="Auto,*,Auto"
@@ -155,16 +195,16 @@
                 </Label>
             </Grid>
 
-            <!-- Рядок 5: Лінивий контейнер мапи (індикатор, помилка й WebView створюються лише після кліку) -->
+            <!-- Рядок 6: Лінивий контейнер мапи (індикатор, помилка й WebView створюються лише після кліку) -->
             <ContentView x:Name="CardMapHost"
-                         Grid.Row="5"
+                         Grid.Row="6"
                          Grid.ColumnSpan="2"
                          Margin="0,4,0,0"
                          IsVisible="False" />
 
-            <!-- Рядок 6: Короткий опис -->
+            <!-- Рядок 7: Короткий опис -->
             <Label x:Name="DescriptionLabel"
-                   Grid.Row="6"
+                   Grid.Row="7"
                    Grid.ColumnSpan="2"
                    Margin="0,6,0,0"
                    FontFamily="OpenSansRegular"
@@ -174,9 +214,9 @@
                    BackgroundColor="Transparent"
                    TextColor="#ABA49A" />
 
-            <!-- Рядок 7: Тональні безрамкові теги навичок в один рядок -->
+            <!-- Рядок 8: Тональні безрамкові теги навичок в один рядок -->
             <HorizontalStackLayout x:Name="SkillsRow"
-                                   Grid.Row="7"
+                                   Grid.Row="8"
                                    Grid.ColumnSpan="2"
                                    Margin="0,6,0,0"
                                    Spacing="5"
@@ -242,17 +282,17 @@
                 </Border>
             </HorizontalStackLayout>
 
-            <!-- Рядок 8: Розділювач -->
+            <!-- Рядок 9: Розділювач -->
             <BoxView x:Name="DividerBox"
-                     Grid.Row="8"
+                     Grid.Row="9"
                      Grid.ColumnSpan="2"
                      Margin="0,7,0,6"
                      HeightRequest="1"
                      BackgroundColor="Transparent"
                      Color="#2E2B27" />
 
-            <!-- Рядок 9: Тихий нижній футер -->
-            <Grid Grid.Row="9"
+            <!-- Рядок 10: Тихий нижній футер -->
+            <Grid Grid.Row="10"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="Auto,*,Auto"
                   ColumnSpacing="8"
@@ -330,9 +370,9 @@
                 </HorizontalStackLayout>
             </Grid>
 
-            <!-- Рядок 10: Лінивий розгорнутий опис (наповнюється лише при натисканні на картку) -->
+            <!-- Рядок 11: Лінивий розгорнутий опис (наповнюється лише при натисканні на картку) -->
             <ContentView x:Name="DetailsHost"
-                         Grid.Row="10"
+                         Grid.Row="11"
                          Grid.ColumnSpan="2"
                          Margin="0,8,0,0"
                          IsVisible="False" />

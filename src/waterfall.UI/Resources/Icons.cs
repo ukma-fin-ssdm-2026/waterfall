@@ -38,6 +38,7 @@ public static class Icons
     public const string TriangleAlert = "\uE193";
     public const string ArrowUpDown = "\uE37D";
     public const string Briefcase = "\uE062";
+    public const string Eye = "\uE0BA";
     public const string EyeOff = "\uE0BB";
     public const string Banknote = "\uE052";
     public const string GraduationCap = "\uE234";

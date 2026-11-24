@@ -157,10 +157,35 @@ public sealed class CollapsibleSiteCard : ContentView
                 Children = { headerGrid, _bodyHost }
             }
         };
-        _cardBorder.SetDynamicResource(Border.StrokeProperty, "CardBorder");
-        _cardBorder.SetDynamicResource(VisualElement.BackgroundColorProperty, "DarkBg2");
 
         Content = _cardBorder;
+        ApplyThemeAndState();
+
+        Loaded += OnLoaded;
+        Unloaded += OnUnloaded;
+    }
+
+    private void OnLoaded(object? sender, EventArgs e)
+    {
+        ThemeService.PaletteChanged -= OnPaletteChanged;
+        ThemeService.PaletteChanged += OnPaletteChanged;
+        ApplyThemeAndState();
+    }
+
+    private void OnUnloaded(object? sender, EventArgs e)
+    {
+        ThemeService.PaletteChanged -= OnPaletteChanged;
+    }
+
+    private void OnPaletteChanged(object? sender, EventArgs e)
+    {
+        if (!MainThread.IsMainThread)
+        {
+            MainThread.BeginInvokeOnMainThread(ApplyThemeAndState);
+            return;
+        }
+
+        ApplyThemeAndState();
     }
 
     public string SiteName
@@ -205,25 +230,39 @@ public sealed class CollapsibleSiteCard : ContentView
         set => SetValue(BodyContentProperty, value);
     }
 
-    private void UpdateEnabledVisuals(bool enabled)
-    {
-        _checkGlyph.IsVisible = enabled;
-        _cardBorder.SetDynamicResource(Border.StrokeProperty, enabled ? "Primary" : "CardBorder");
-        _checkboxBorder.SetDynamicResource(Border.StrokeProperty, enabled ? "Primary" : "Secondary");
-        if (enabled)
-        {
-            _checkboxBorder.SetDynamicResource(VisualElement.BackgroundColorProperty, "Primary");
-        }
-        else
-        {
-            _checkboxBorder.BackgroundColor = Colors.Transparent;
-        }
-    }
+    private void UpdateEnabledVisuals(bool enabled) => ApplyThemeAndState();
 
     private void UpdateExpandedVisuals(bool expanded)
     {
         _bodyHost.IsVisible = expanded;
         _expandButton.Text = expanded ? Icons.ChevronUp : Icons.ChevronDown;
-        _expandButton.SetDynamicResource(Button.TextColorProperty, expanded ? "Primary" : "TextMuted");
+        ApplyThemeAndState();
     }
+
+    private void ApplyThemeAndState()
+    {
+        Color primary = GetThemeColor("Primary", "#D4745E");
+        Color onPrimary = GetThemeColor("OnPrimary", "#FFFFFF");
+        Color secondary = GetThemeColor("Secondary", "#34302C");
+        Color cardBorder = GetThemeColor("CardBorder", "#2D2A26");
+        Color cardBg = GetThemeColor("DarkBg2", "#191817");
+        Color textMuted = GetThemeColor("TextMuted", "#767068");
+
+        bool enabled = IsSiteEnabled;
+        _checkGlyph.IsVisible = enabled;
+        _checkGlyph.TextColor = onPrimary;
+
+        _cardBorder.Background = new SolidColorBrush(cardBg);
+        _cardBorder.Stroke = new SolidColorBrush(enabled ? primary : cardBorder);
+
+        _checkboxBorder.Stroke = new SolidColorBrush(enabled ? primary : secondary);
+        _checkboxBorder.Background = enabled ? new SolidColorBrush(primary) : Brush.Transparent;
+
+        _expandButton.TextColor = IsExpanded ? primary : textMuted;
+    }
+
+    private static Color GetThemeColor(string key, string fallbackHex) =>
+        Application.Current?.Resources.TryGetValue(key, out object? value) == true && value is Color color
+            ? color
+            : Color.FromArgb(fallbackHex);
 }

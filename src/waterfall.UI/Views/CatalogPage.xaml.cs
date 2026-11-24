@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.Windows.Input;
 using waterfall.UI.Resources;
 using waterfall.UI.Services;
 using Waterfall.Client.ViewModels;
@@ -175,28 +174,6 @@ public partial class CatalogPage : ContentPage, IHostedPage
         if (_viewModel.ImportVacanciesCommand.CanExecute(null))
         {
             await _viewModel.ImportVacanciesCommand.ExecuteAsync(null);
-        }
-    }
-
-    private void OnOpenDouSettingsClicked(object? sender, EventArgs e) =>
-        OpenSiteSettings(_viewModel.IsDouPanelVisible, _viewModel.SelectDouFilterCommand);
-
-    private void OnOpenWorkUaSettingsClicked(object? sender, EventArgs e) =>
-        OpenSiteSettings(_viewModel.IsWorkUaPanelVisible, _viewModel.SelectWorkUaFilterCommand);
-
-    private void OnOpenDjinniSettingsClicked(object? sender, EventArgs e) =>
-        OpenSiteSettings(_viewModel.IsDjinniPanelVisible, _viewModel.SelectDjinniFilterCommand);
-
-    private void OnOpenRobotaUaSettingsClicked(object? sender, EventArgs e) =>
-        OpenSiteSettings(_viewModel.IsRobotaUaPanelVisible, _viewModel.SelectRobotaUaFilterCommand);
-
-    private void OpenSiteSettings(bool isPanelVisible, ICommand selectCommand)
-    {
-        _viewModel.IsLocalFilterPanelVisible = false;
-        _viewModel.IsParsePanelVisible = true;
-        if (!isPanelVisible)
-        {
-            selectCommand.Execute(null);
         }
     }
 

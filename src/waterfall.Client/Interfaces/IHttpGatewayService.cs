@@ -120,6 +120,11 @@ public interface IHttpGatewayService
     Task<bool> RecordVacancyViewAsync(Guid vacancyId, CancellationToken ct = default);
 
     /// <summary>
+    /// Зняти позначку «переглянуто» для вакансії поточного користувача.
+    /// </summary>
+    Task<bool> UnmarkVacancyViewAsync(Guid vacancyId, CancellationToken ct = default);
+
+    /// <summary>
     /// Чат з ШІ-консультантом (FR-002, FR-009). Події стрімляться в міру надходження; сервер сам
     /// зберігає контекст сесії, тож <paramref name="sessionId"/> = null починає новий діалог.
     /// Помилки до початку потоку — <see cref="AiConsultantException"/> з кодом сервера

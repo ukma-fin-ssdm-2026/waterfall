@@ -187,6 +187,7 @@ public sealed class FakeUserStatsService : IUserStatsService
     public List<Guid> GetStatsCalls { get; } = [];
     public List<(Guid UserId, string Query)> RecordSearchCalls { get; } = [];
     public List<(Guid UserId, Guid VacancyId)> RecordViewCalls { get; } = [];
+    public List<(Guid UserId, Guid VacancyId)> UnmarkViewCalls { get; } = [];
     public List<Guid> ClearSearchHistoryCalls { get; } = [];
 
     public UserStatsDto StatsToReturn { get; set; } = new();
@@ -208,6 +209,12 @@ public sealed class FakeUserStatsService : IUserStatsService
     public Task<UserStatsRecordResult> RecordVacancyViewAsync(Guid userId, Guid vacancyId, CancellationToken ct = default)
     {
         RecordViewCalls.Add((userId, vacancyId));
+        return Task.FromResult(ViewResult);
+    }
+
+    public Task<UserStatsRecordResult> UnmarkVacancyViewAsync(Guid userId, Guid vacancyId, CancellationToken ct = default)
+    {
+        UnmarkViewCalls.Add((userId, vacancyId));
         return Task.FromResult(ViewResult);
     }
 

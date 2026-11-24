@@ -66,4 +66,20 @@ public class EfVacancyViewRepository : IVacancyViewRepository
             .ToListAsync(ct);
         return [.. viewed];
     }
+
+    public async Task<bool> DeleteForUserAsync(Guid userId, Guid vacancyId, CancellationToken ct = default)
+    {
+        List<VacancyViewDB> rows = await _context.VacancyViews
+            .Where(v => v.UserId == userId && v.VacancyId == vacancyId)
+            .ToListAsync(ct);
+
+        if (rows.Count == 0)
+        {
+            return false;
+        }
+
+        _context.VacancyViews.RemoveRange(rows);
+        await _context.SaveChangesAsync(ct);
+        return true;
+    }
 }

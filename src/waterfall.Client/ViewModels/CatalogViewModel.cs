@@ -93,6 +93,7 @@ public partial class CatalogViewModel : ObservableObject
         _localVacancyStore = localVacancyStore;
         _offlineCollector = offlineCollector;
         _fileDialog = fileDialog;
+        CanTrackViews = tokenStore is null;
 
         // Зміна «Обраного» з іншої вкладки: оновлюємо картку на місці, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
@@ -103,8 +104,36 @@ public partial class CatalogViewModel : ObservableObject
             }
         });
 
-        // Перегляд вакансії в картці: запам'ятовуємо для фільтра «Приховати переглянуті» (сам список одразу не змінюємо)
-        messenger.Register<CatalogViewModel, VacancyViewedMessage>(this, static (vm, message) => vm._viewedIds.Add(message.VacancyId));
+        // Перегляд вакансії в картці (ручний перемикач або відкриття): синхронізуємо стан і фільтр «Без переглянутих».
+        messenger.Register<CatalogViewModel, VacancyViewedMessage>(this, static (vm, message) =>
+        {
+            if (message.IsViewed)
+            {
+                vm._viewedIds.Add(message.VacancyId);
+            }
+            else
+            {
+                vm._viewedIds.Remove(message.VacancyId);
+            }
+
+            for (int i = 0; i < vm._loadedDtos.Count; i++)
+            {
+                if (vm._loadedDtos[i].Id == message.VacancyId)
+                {
+                    vm._loadedDtos[i] = vm._loadedDtos[i] with { IsViewed = message.IsViewed };
+                }
+            }
+
+            foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
+            {
+                item.IsViewed = message.IsViewed;
+            }
+
+            if (vm.UnifiedHideViewed && message.IsViewed && message.Explicit)
+            {
+                _ = vm.DismissViewedItemAsync(message.VacancyId);
+            }
+        });
 
         // Зміна стану авторизації користувача
         messenger.Register<CatalogViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
@@ -113,6 +142,11 @@ public partial class CatalogViewModel : ObservableObject
             if (!message.IsLoggedIn)
             {
                 vm.IsGuestBannerDismissed = false;
+                vm.ApplyCanTrackViews(false);
+            }
+            else if (vm._tokenStore is not null)
+            {
+                _ = vm.RefreshAuthStatusAsync(CancellationToken.None);
             }
         });
 
@@ -201,6 +235,12 @@ public partial class CatalogViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Чи дозволено відстежувати та фільтрувати переглянуті вакансії (лише JobSeeker за data-model.md §6).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanTrackViews { get; set; } = true;
+
+    /// <summary>
     /// Оновлює статус авторизації на основі збереженого токена.
     /// </summary>
     public async Task RefreshAuthStatusAsync(CancellationToken ct = default)
@@ -211,11 +251,36 @@ public partial class CatalogViewModel : ObservableObject
             {
                 string? token = await _tokenStore.GetTokenAsync(ct);
                 Waterfall.Client.Models.Auth.AuthSession? session = token is null ? null : Waterfall.Client.Models.Auth.AuthSession.FromToken(token);
-                IsUserLoggedIn = session is not null && !session.IsExpired(_time.GetUtcNow());
+                bool loggedIn = session is not null && !session.IsExpired(_time.GetUtcNow());
+                IsUserLoggedIn = loggedIn;
+                ApplyCanTrackViews(loggedIn && session!.Role == Waterfall.Client.Models.Auth.UserRole.JobSeeker);
             }
             catch
             {
                 IsUserLoggedIn = false;
+                ApplyCanTrackViews(false);
+            }
+        }
+    }
+
+    private void ApplyCanTrackViews(bool canTrack)
+    {
+        CanTrackViews = canTrack;
+        if (!canTrack)
+        {
+            _viewedIds.Clear();
+            if (UnifiedHideViewed)
+            {
+                UnifiedHideViewed = false;
+            }
+        }
+
+        foreach (VacancyItemViewModel item in Vacancies)
+        {
+            item.CanMarkViewed = canTrack;
+            if (!canTrack)
+            {
+                item.IsViewed = false;
             }
         }
     }
@@ -285,6 +350,7 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesCount))]
     [NotifyPropertyChangedFor(nameof(FetchButtonText))]
+    [NotifyPropertyChangedFor(nameof(ParseSitesChipText))]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesSummary))]
     public partial bool IsDouParseEnabled { get; set; } = true;
 
@@ -292,6 +358,7 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesCount))]
     [NotifyPropertyChangedFor(nameof(FetchButtonText))]
+    [NotifyPropertyChangedFor(nameof(ParseSitesChipText))]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesSummary))]
     public partial bool IsWorkUaParseEnabled { get; set; }
 
@@ -299,6 +366,7 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesCount))]
     [NotifyPropertyChangedFor(nameof(FetchButtonText))]
+    [NotifyPropertyChangedFor(nameof(ParseSitesChipText))]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesSummary))]
     public partial bool IsDjinniParseEnabled { get; set; }
 
@@ -306,6 +374,7 @@ public partial class CatalogViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesCount))]
     [NotifyPropertyChangedFor(nameof(FetchButtonText))]
+    [NotifyPropertyChangedFor(nameof(ParseSitesChipText))]
     [NotifyPropertyChangedFor(nameof(SelectedParseSitesSummary))]
     public partial bool IsRobotaUaParseEnabled { get; set; }
 
@@ -315,6 +384,9 @@ public partial class CatalogViewModel : ObservableObject
         + (IsWorkUaParseEnabled ? 1 : 0)
         + (IsDjinniParseEnabled ? 1 : 0)
         + (IsRobotaUaParseEnabled ? 1 : 0);
+
+    /// <summary>Короткий текст чипа для відкриття панелі вибору сайтів.</summary>
+    public string ParseSitesChipText => $"Сайти ({SelectedParseSitesCount})";
 
     /// <summary>Текст головної кнопки запуску парсингу залежно від кількості обраних сайтів.</summary>
     public string FetchButtonText => SelectedParseSitesCount switch
@@ -2768,7 +2840,8 @@ public partial class CatalogViewModel : ObservableObject
             _urlLauncher,
             _distanceService,
             onDistanceCalculated: (id, dist) => _distanceCache[id] = dist,
-            initialDistanceKm: cachedKm);
+            initialDistanceKm: cachedKm,
+            canMarkViewed: CanTrackViews);
     }
 
     private async Task ExecuteLocalFilterAndSortAsync(bool updateBanner)
@@ -2972,6 +3045,27 @@ public partial class CatalogViewModel : ObservableObject
         }
 
         return null;
+    }
+
+    private async Task DismissViewedItemAsync(Guid vacancyId)
+    {
+        VacancyItemViewModel? item = Vacancies.FirstOrDefault(v => v.Id == vacancyId);
+        if (item is null)
+        {
+            return;
+        }
+
+        item.IsDismissing = true;
+        await Task.Delay(300);
+
+        if (UnifiedHideViewed && item.IsViewed && Vacancies.Remove(item))
+        {
+            TotalCount = Math.Max(0, TotalCount - 1);
+        }
+        else
+        {
+            item.IsDismissing = false;
+        }
     }
 
     private static string? Normalize(string? search) => string.IsNullOrWhiteSpace(search) ? null : search.Trim();

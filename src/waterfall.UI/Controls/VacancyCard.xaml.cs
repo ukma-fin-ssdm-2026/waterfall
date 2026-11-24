@@ -84,6 +84,8 @@ public partial class VacancyCard : ContentView
     }
 
     private const int LiveCardsPruneThreshold = 96;
+    private const string ViewedTransitionAnimName = "ViewedTransition";
+    private const string DismissCollapseAnimName = "DismissCollapse";
     private static readonly List<WeakReference<VacancyCard>> LiveCards = [];
     private static CardPalette s_palette = CardPalette.Load();
     private static bool s_paletteIsDefault;
@@ -187,6 +189,7 @@ public partial class VacancyCard : ContentView
 
         TitleLabel.TextColor = p.TextPrimary;
         CompanyLabel.TextColor = p.TextSecondary;
+        DatesLabel.TextColor = p.TextMuted;
         ArchivedBadge.BackgroundColor = p.TonalSurface;
         ArchivedLabel.TextColor = p.TextMuted;
         AddressPinLabel.TextColor = p.TextMuted;
@@ -214,6 +217,7 @@ public partial class VacancyCard : ContentView
         {
             ApplySalaryState(_currentViewModel);
             ApplySavedState(_currentViewModel);
+            ApplyViewedState(_currentViewModel);
             UpdateMetaRow(_currentViewModel);
             UpdateDetailsToggle(_currentViewModel);
             if (_currentViewModel.IsMapExpanded)
@@ -232,6 +236,9 @@ public partial class VacancyCard : ContentView
             MetaLabel.TextColor = p.TextMuted;
             HeartPath.Fill = Brush.Transparent;
             HeartPath.Stroke = s_heartMutedBrush;
+            ViewedBorder.BackgroundColor = Colors.Transparent;
+            ViewedIconLabel.Text = Icons.Eye;
+            ViewedIconLabel.TextColor = p.TextMuted;
             DetailsChevronLabel.TextColor = p.TextMuted;
         }
     }
@@ -265,6 +272,12 @@ public partial class VacancyCard : ContentView
 
     private void BindToViewModel(VacancyItemViewModel vm)
     {
+        this.AbortAnimation(ViewedTransitionAnimName);
+        this.AbortAnimation(DismissCollapseAnimName);
+        HeightRequest = -1;
+        CardBorder.CancelAnimations();
+        CardBorder.IsVisible = true;
+        CardBorder.TranslationX = 0;
         CardBorder.Opacity = vm.IsActive ? 1.0 : 0.74;
         if (HeartPath.Scale != 1.0)
         {
@@ -276,9 +289,13 @@ public partial class VacancyCard : ContentView
         SalaryLabel.Text = vm.SalaryDisplay;
         ApplySalaryState(vm);
         ApplySavedState(vm);
+        ApplyViewedState(vm);
 
         CompanyLabel.Text = vm.Company;
         UpdateMetaRow(vm);
+
+        DatesLabel.IsVisible = vm.HasDatesDisplay;
+        DatesLabel.Text = vm.DatesDisplay;
 
         ArchivedBadge.IsVisible = !vm.IsActive;
         if (!vm.IsActive)
@@ -308,12 +325,19 @@ public partial class VacancyCard : ContentView
 
     private void ResetUnboundState()
     {
+        this.AbortAnimation(DismissCollapseAnimName);
+        HeightRequest = -1;
+        CardBorder.CancelAnimations();
+        CardBorder.IsVisible = true;
+        CardBorder.TranslationX = 0;
         CardBorder.Opacity = 1.0;
         TitleLabel.Text = string.Empty;
         SalaryLabel.Text = string.Empty;
         CompanyLabel.Text = string.Empty;
         MetaLabel.FormattedText = null;
         MetaLabel.Text = string.Empty;
+        DatesLabel.IsVisible = false;
+        DatesLabel.Text = string.Empty;
         ArchivedBadge.IsVisible = false;
         AddressRow.IsVisible = false;
         MapToggleLabel.IsVisible = false;
@@ -326,10 +350,15 @@ public partial class VacancyCard : ContentView
         SourceLabel.Text = string.Empty;
         SourceExternalIcon.IsVisible = false;
         SourceRow.GestureRecognizers.Remove(_sourceTapRecognizer);
+        this.AbortAnimation(ViewedTransitionAnimName);
         HeartPath.CancelAnimations();
         HeartPath.Scale = 1.0;
         HeartPath.Fill = Brush.Transparent;
         HeartPath.Stroke = s_heartMutedBrush;
+        ViewedBorder.BackgroundColor = Colors.Transparent;
+        ViewedIconLabel.Text = Icons.Eye;
+        ViewedIconLabel.TextColor = s_palette.TextMuted;
+        CardBorder.BackgroundColor = s_palette.BgSurface;
         ReleaseMapHost();
         DetailsHost.Content = null;
         DetailsHost.IsVisible = false;
@@ -367,6 +396,89 @@ public partial class VacancyCard : ContentView
 
         SemanticProperties.SetDescription(HeartBorder, vm.SaveButtonText);
     }
+
+    private void ApplyViewedState(VacancyItemViewModel vm, bool animate = false)
+    {
+        this.AbortAnimation(ViewedTransitionAnimName);
+        CardPalette p = s_palette;
+        CardBorder.Opacity = vm.IsActive ? 1.0 : 0.74;
+        ViewedBorder.IsVisible = vm.CanMarkViewed;
+
+        bool isViewed = vm.CanMarkViewed && vm.IsViewed;
+
+        Color targetBg = isViewed ? p.TonalSurface : p.BgSurface;
+        Color targetTitle = isViewed ? p.TextSecondary : p.TextPrimary;
+        Color targetSalary = isViewed ? p.TextSecondary : (vm.HasSalary ? p.TextPrimary : p.TextMuted);
+        Color targetCompany = isViewed ? p.TextMuted : p.TextSecondary;
+        Color targetDesc = isViewed ? p.TextMuted : p.TextSecondary;
+
+        if (isViewed)
+        {
+            ViewedBorder.BackgroundColor = p.BgSurface;
+            ViewedIconLabel.Text = Icons.EyeOff;
+            ViewedIconLabel.TextColor = p.TextSecondary;
+        }
+        else
+        {
+            ViewedBorder.BackgroundColor = Colors.Transparent;
+            ViewedIconLabel.Text = Icons.Eye;
+            ViewedIconLabel.TextColor = p.TextMuted;
+        }
+
+        SemanticProperties.SetDescription(ViewedBorder, vm.ViewedButtonText);
+
+        if (!animate)
+        {
+            CardBorder.BackgroundColor = targetBg;
+            TitleLabel.TextColor = targetTitle;
+            if (!isViewed)
+            {
+                ApplySalaryState(vm);
+            }
+            else
+            {
+                SalaryLabel.TextColor = targetSalary;
+            }
+
+            CompanyLabel.TextColor = targetCompany;
+            DescriptionLabel.TextColor = targetDesc;
+            return;
+        }
+
+        Color startBg = CardBorder.BackgroundColor ?? (isViewed ? p.BgSurface : p.TonalSurface);
+        Color startTitle = TitleLabel.TextColor ?? (isViewed ? p.TextPrimary : p.TextSecondary);
+        Color startSalary = SalaryLabel.TextColor ?? (isViewed ? p.TextPrimary : p.TextSecondary);
+        Color startCompany = CompanyLabel.TextColor ?? (isViewed ? p.TextSecondary : p.TextMuted);
+        Color startDesc = DescriptionLabel.TextColor ?? (isViewed ? p.TextSecondary : p.TextMuted);
+
+        if (!isViewed)
+        {
+            ApplySalaryState(vm);
+        }
+
+        Animation transition = new(
+            v =>
+            {
+                float t = (float)v;
+                CardBorder.BackgroundColor = LerpColor(startBg, targetBg, t);
+                TitleLabel.TextColor = LerpColor(startTitle, targetTitle, t);
+                SalaryLabel.TextColor = LerpColor(startSalary, targetSalary, t);
+                CompanyLabel.TextColor = LerpColor(startCompany, targetCompany, t);
+                DescriptionLabel.TextColor = LerpColor(startDesc, targetDesc, t);
+            },
+            0.0,
+            1.0,
+            Easing.CubicOut);
+
+        transition.Commit(this, ViewedTransitionAnimName, rate: 16, length: 220);
+    }
+
+    private static Color LerpColor(Color from, Color to, float t) =>
+        new(
+            from.Red + (to.Red - from.Red) * t,
+            from.Green + (to.Green - from.Green) * t,
+            from.Blue + (to.Blue - from.Blue) * t,
+            from.Alpha + (to.Alpha - from.Alpha) * t);
 
     private void UpdateMetaRow(VacancyItemViewModel vm)
     {
@@ -498,6 +610,38 @@ public partial class VacancyCard : ContentView
             case nameof(VacancyItemViewModel.IsSaved):
                 ApplySavedState(_currentViewModel);
                 break;
+            case nameof(VacancyItemViewModel.CanMarkViewed):
+                ApplyViewedState(_currentViewModel);
+                if (_currentViewModel.IsDetailsExpanded)
+                {
+                    UpdateDetailsPanel();
+                }
+
+                break;
+            case nameof(VacancyItemViewModel.IsViewed):
+                ApplyViewedState(_currentViewModel, animate: true);
+                if (_currentViewModel.IsDetailsExpanded)
+                {
+                    UpdateDetailsPanel();
+                }
+
+                break;
+            case nameof(VacancyItemViewModel.IsDismissing):
+                if (_currentViewModel.IsDismissing)
+                {
+                    _ = AnimateSlideDismissAsync();
+                }
+                else
+                {
+                    this.AbortAnimation(DismissCollapseAnimName);
+                    HeightRequest = -1;
+                    CardBorder.CancelAnimations();
+                    CardBorder.IsVisible = true;
+                    CardBorder.TranslationX = 0;
+                    CardBorder.Opacity = _currentViewModel.IsActive ? 1.0 : 0.74;
+                }
+
+                break;
             case nameof(VacancyItemViewModel.DistanceText):
             case nameof(VacancyItemViewModel.HasDistanceText):
                 UpdateMetaRow(_currentViewModel);
@@ -511,6 +655,7 @@ public partial class VacancyCard : ContentView
                 UpdateMapSection();
                 break;
             case nameof(VacancyItemViewModel.IsDetailsExpanded):
+                ApplyViewedState(_currentViewModel);
                 UpdateDetailsToggle(_currentViewModel);
                 UpdateDetailsPanel();
                 break;
@@ -816,11 +961,13 @@ public partial class VacancyCard : ContentView
             BackgroundColor = Colors.Transparent
         });
 
+        bool isViewed = _currentViewModel.IsViewed;
         Border panel = new()
         {
             StrokeShape = new RoundRectangle { CornerRadius = 10 },
-            StrokeThickness = 0,
-            BackgroundColor = p.TonalSurface,
+            StrokeThickness = isViewed ? 1 : 0,
+            Stroke = isViewed ? s_cardBorderBrush : Brush.Transparent,
+            BackgroundColor = isViewed ? p.BgSurface : p.TonalSurface,
             Padding = new Thickness(12, 10),
             Margin = new Thickness(0, 2, 0, 0),
             Content = stack
@@ -842,6 +989,42 @@ public partial class VacancyCard : ContentView
     private void OnToggleDetailsTapped(object? sender, TappedEventArgs e)
     {
         if (_currentViewModel is { ToggleDetailsCommand: { } cmd } && cmd.CanExecute(null))
+        {
+            cmd.Execute(null);
+        }
+    }
+
+    private async Task AnimateSlideDismissAsync()
+    {
+        this.AbortAnimation(ViewedTransitionAnimName);
+        this.AbortAnimation(DismissCollapseAnimName);
+        CardBorder.CancelAnimations();
+
+        double startHeight = Height > 0 ? Height : (CardBorder.Height > 0 ? CardBorder.Height + 10 : 0);
+
+        await Task.WhenAll(
+            CardBorder.TranslateToAsync(56, 0, 150, Easing.CubicIn),
+            CardBorder.FadeToAsync(0, 150, Easing.CubicIn));
+
+        if (_currentViewModel is not { IsDismissing: true } || startHeight <= 0)
+        {
+            return;
+        }
+
+        CardBorder.IsVisible = false;
+        HeightRequest = startHeight;
+
+        Animation collapse = new(
+            v => HeightRequest = v,
+            startHeight,
+            0,
+            Easing.CubicOut);
+        collapse.Commit(this, DismissCollapseAnimName, rate: 16, length: 140);
+    }
+
+    private void OnToggleViewedTapped(object? sender, TappedEventArgs e)
+    {
+        if (_currentViewModel is { ToggleViewedCommand: { } cmd } && cmd.CanExecute(null))
         {
             cmd.Execute(null);
         }

@@ -145,7 +145,8 @@ public sealed class ThemeService
                 success: "#2F7D63",
                 successSurface: "#E3F2EC",
                 danger: "#C94444",
-                dangerSurface: "#FAE8E8");
+                dangerSurface: "#FAE8E8",
+                scrim: "#281D1B18");
         }
         else if (isAmoled)
         {
@@ -171,7 +172,8 @@ public sealed class ThemeService
                 success: "#5FA38A",
                 successSurface: "#13221D",
                 danger: "#D66565",
-                dangerSurface: "#261414");
+                dangerSurface: "#261414",
+                scrim: "#7A0A0908");
         }
         else
         {
@@ -197,7 +199,8 @@ public sealed class ThemeService
                 success: "#6FB59B",
                 successSurface: "#1B2E27",
                 danger: "#E06C6C",
-                dangerSurface: "#331D1D");
+                dangerSurface: "#331D1D",
+                scrim: "#7A0A0908");
         }
 
         ApplyPlatformChrome(isDark, isAmoled);
@@ -236,7 +239,8 @@ public sealed class ThemeService
         string success,
         string successSurface,
         string danger,
-        string dangerSurface)
+        string dangerSurface,
+        string scrim)
     {
         Color cBgCanvas = Color.FromArgb(bgCanvas);
         Color cBgRail = Color.FromArgb(bgRail);
@@ -269,6 +273,7 @@ public sealed class ThemeService
         res["Secondary"] = cBorder;
         res["CardBorder"] = cCardBorder;
         res["DividerColor"] = cDivider;
+        res["Scrim"] = Color.FromArgb(scrim);
 
         res["White"] = cTextPrimary;
         res["Text_Light"] = cTextPrimary;
@@ -299,6 +304,7 @@ public sealed class ThemeService
 
         // Brush tokens for Shape/Path/Border.Stroke controls (Brush properties require Brush, not Color)
         res["PrimaryBrush"] = new SolidColorBrush(cPrimary);
+        res["SecondaryBrush"] = new SolidColorBrush(cBorder);
         res["TextMutedBrush"] = new SolidColorBrush(cTextMuted);
         res["CardBorderBrush"] = new SolidColorBrush(cCardBorder);
     }

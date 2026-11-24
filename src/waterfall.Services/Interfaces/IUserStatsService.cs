@@ -31,6 +31,12 @@ public interface IUserStatsService
     Task<UserStatsRecordResult> RecordVacancyViewAsync(Guid userId, Guid vacancyId, CancellationToken ct = default);
 
     /// <summary>
+    /// Зняти позначку «переглянуто» для вакансії користувача.
+    /// Повертає Forbidden, якщо роль не JobSeeker.
+    /// </summary>
+    Task<UserStatsRecordResult> UnmarkVacancyViewAsync(Guid userId, Guid vacancyId, CancellationToken ct = default);
+
+    /// <summary>
     /// Очистити історію пошукових запитів користувача. Повертає true, якщо видалено хоча б один запис.
     /// </summary>
     Task<bool> ClearSearchHistoryAsync(Guid userId, CancellationToken ct = default);

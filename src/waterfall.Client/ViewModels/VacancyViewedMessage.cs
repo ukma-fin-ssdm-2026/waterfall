@@ -3,7 +3,8 @@
 namespace Waterfall.Client.ViewModels;
 
 /// <summary>
-/// Користувач розгорнув подробиці вакансії або відкрив її на сайті (надсилає картка через IMessenger).
-/// Каталог запам'ятовує це, щоб фільтр «Приховати переглянуті» враховував і перегляди цього сеансу.
+/// Користувач позначив вакансію як переглянуту (або зняв позначку), розгорнув подробиці чи відкрив її на сайті.
+/// <paramref name="Explicit"/> = true лише для ручного натискання кнопки «Переглянуто» (одразу приховує при активному фільтрі);
+/// при розгортанні картки чи відкритті посилання вакансія лишається на екрані, щоб її можна було дочитати.
 /// </summary>
-public sealed record VacancyViewedMessage(Guid VacancyId);
+public sealed record VacancyViewedMessage(Guid VacancyId, bool IsViewed = true, bool Explicit = false);

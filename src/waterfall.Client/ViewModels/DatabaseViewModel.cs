@@ -36,6 +36,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     private readonly ILocalVacancyStore? _localStore;
     private readonly IVacancySyncService? _syncService;
     private readonly IFileDialogService? _fileDialog;
+    private readonly IAuthTokenStore? _tokenStore;
 
     private readonly List<VacancyDto> _allVacancies = [];
     private readonly HashSet<Guid> _viewedIds = [];
@@ -55,7 +56,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         IDistanceCalculatorService? distanceService = null,
         ILocalVacancyStore? localStore = null,
         IVacancySyncService? syncService = null,
-        IFileDialogService? fileDialog = null)
+        IFileDialogService? fileDialog = null,
+        IAuthTokenStore? tokenStore = null)
     {
         _gateway = gateway;
         _messenger = messenger;
@@ -65,6 +67,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         _localStore = localStore;
         _syncService = syncService;
         _fileDialog = fileDialog;
+        _tokenStore = tokenStore;
+        CanTrackViews = tokenStore is null;
 
         CategoryGroupOptions = ["Усі групи", .. VacancyCategoryMap.All];
         AvailableCategories.Add("Усі категорії");
@@ -93,7 +97,32 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
         messenger.Register<DatabaseViewModel, VacancyViewedMessage>(this, static (vm, message) =>
         {
-            vm._viewedIds.Add(message.VacancyId);
+            if (message.IsViewed)
+            {
+                vm._viewedIds.Add(message.VacancyId);
+            }
+            else
+            {
+                vm._viewedIds.Remove(message.VacancyId);
+            }
+
+            for (int i = 0; i < vm._allVacancies.Count; i++)
+            {
+                if (vm._allVacancies[i].Id == message.VacancyId)
+                {
+                    vm._allVacancies[i] = vm._allVacancies[i] with { IsViewed = message.IsViewed };
+                }
+            }
+
+            foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
+            {
+                item.IsViewed = message.IsViewed;
+            }
+
+            if (vm.HideViewed && message.IsViewed && message.Explicit)
+            {
+                _ = vm.DismissViewedItemAsync(message.VacancyId);
+            }
         });
 
         messenger.Register<DatabaseViewModel, VacanciesUpdatedMessage>(this, static (vm, message) =>
@@ -122,6 +151,69 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 _ = vm.ApplyFiltersWithDistanceAsync();
             }
         });
+
+        messenger.Register<DatabaseViewModel, UserAuthStateChangedMessage>(this, static (vm, message) =>
+        {
+            if (!message.IsLoggedIn)
+            {
+                vm.ApplyCanTrackViews(false);
+            }
+            else if (vm._tokenStore is not null)
+            {
+                _ = vm.RefreshAuthStatusAsync(CancellationToken.None);
+            }
+        });
+    }
+
+    /// <summary>
+    /// Чи дозволено відстежувати та фільтрувати переглянуті вакансії (лише JobSeeker за data-model.md §6).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanTrackViews { get; set; } = true;
+
+    public async Task RefreshAuthStatusAsync(CancellationToken ct = default)
+    {
+        if (_tokenStore is null)
+        {
+            return;
+        }
+
+        try
+        {
+            string? token = await _tokenStore.GetTokenAsync(ct);
+            Waterfall.Client.Models.Auth.AuthSession? session = token is null
+                ? null
+                : Waterfall.Client.Models.Auth.AuthSession.FromToken(token);
+            bool isJobSeeker = session is { Role: Waterfall.Client.Models.Auth.UserRole.JobSeeker }
+                && !session.IsExpired(_time.GetUtcNow());
+            ApplyCanTrackViews(isJobSeeker);
+        }
+        catch
+        {
+            ApplyCanTrackViews(false);
+        }
+    }
+
+    private void ApplyCanTrackViews(bool canTrack)
+    {
+        CanTrackViews = canTrack;
+        if (!canTrack)
+        {
+            _viewedIds.Clear();
+            if (HideViewed)
+            {
+                HideViewed = false;
+            }
+        }
+
+        foreach (VacancyItemViewModel item in Vacancies)
+        {
+            item.CanMarkViewed = canTrack;
+            if (!canTrack)
+            {
+                item.IsViewed = false;
+            }
+        }
     }
 
     private readonly BulkObservableCollection<VacancyItemViewModel> _vacancies = new();
@@ -324,22 +416,38 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
     [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
+    [NotifyPropertyChangedFor(nameof(SelectedSourcesCount))]
+    [NotifyPropertyChangedFor(nameof(SourcesChipText))]
     public partial bool IncludeDou { get; set; } = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
     [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
+    [NotifyPropertyChangedFor(nameof(SelectedSourcesCount))]
+    [NotifyPropertyChangedFor(nameof(SourcesChipText))]
     public partial bool IncludeWorkUa { get; set; } = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
     [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
+    [NotifyPropertyChangedFor(nameof(SelectedSourcesCount))]
+    [NotifyPropertyChangedFor(nameof(SourcesChipText))]
     public partial bool IncludeDjinni { get; set; } = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
     [NotifyPropertyChangedFor(nameof(IsFilterHighlightActive))]
+    [NotifyPropertyChangedFor(nameof(SelectedSourcesCount))]
+    [NotifyPropertyChangedFor(nameof(SourcesChipText))]
     public partial bool IncludeRobotaUa { get; set; } = true;
+
+    public int SelectedSourcesCount =>
+        (IncludeDou ? 1 : 0)
+        + (IncludeWorkUa ? 1 : 0)
+        + (IncludeDjinni ? 1 : 0)
+        + (IncludeRobotaUa ? 1 : 0);
+
+    public string SourcesChipText => $"Сайти ({SelectedSourcesCount})";
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasActiveFilters))]
@@ -533,6 +641,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     [RelayCommand]
     public async Task EnsureLoadedAsync()
     {
+        await RefreshAuthStatusAsync();
         if (_hasLoadedOnce && _allVacancies.Count > 0)
         {
             return;
@@ -1216,7 +1325,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             _urlLauncher,
             _distanceService,
             onDistanceCalculated: (id, dist) => _distanceCache[id] = dist,
-            initialDistanceKm: cachedKm);
+            initialDistanceKm: cachedKm,
+            canMarkViewed: CanTrackViews);
     }
 
     private bool MatchesAllFilters(VacancyDto v, FilterSnapshot f)
@@ -1471,6 +1581,27 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         foreach (string value in values)
         {
             target.Add(value);
+        }
+    }
+
+    private async Task DismissViewedItemAsync(Guid vacancyId)
+    {
+        VacancyItemViewModel? item = Vacancies.FirstOrDefault(v => v.Id == vacancyId);
+        if (item is null)
+        {
+            return;
+        }
+
+        item.IsDismissing = true;
+        await Task.Delay(300);
+
+        if (HideViewed && item.IsViewed && Vacancies.Remove(item))
+        {
+            FilteredCount = Math.Max(0, FilteredCount - 1);
+        }
+        else
+        {
+            item.IsDismissing = false;
         }
     }
 
