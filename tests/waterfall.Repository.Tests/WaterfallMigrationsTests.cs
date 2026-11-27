@@ -11,6 +11,7 @@ public sealed class WaterfallMigrationsTests
 {
     private const string InitialMigrationId = "20261127000001_InitialSchema";
     private const string SavedIntegrityMigrationId = "20261127215638_RestoreSavedVacanciesIntegrity";
+    private const string IndexVacanciesMigrationId = "20261127220606_IndexVacanciesForSyncUpsert";
 
     [Fact]
     public async Task MigrateAsync_OnEmptySqliteDatabase_CreatesSchemaAndRecordsInitialMigrationHistory()
@@ -30,7 +31,7 @@ public sealed class WaterfallMigrationsTests
         // Assert
         List<string> applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
         List<string> pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
-        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId], applied);
+        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId], applied);
         Assert.Empty(pending);
         Assert.Equal(0, await db.Vacancies.CountAsync());
         Assert.Equal(0, await db.SiteSearchCache.CountAsync());
@@ -180,7 +181,7 @@ public sealed class WaterfallMigrationsTests
         Assert.Equal(WorkFormat.None, preserved.WorkFormat);
         Assert.Equal(0, await db.SiteSearchCache.CountAsync());
         Assert.Equal(0, await db.ChatSessions.CountAsync());
-        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId], await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId], await db.Database.GetAppliedMigrationsAsync());
     }
 
     [Fact]
@@ -231,6 +232,63 @@ public sealed class WaterfallMigrationsTests
             Assert.Equal(vacancyId, rows[0].VacancyId);
             Assert.Equal("newest note", rows[0].Notes);
             Assert.Equal(0, await migratedDb.UserPersonalData.CountAsync());
+        }
+    }
+
+    [Fact]
+    public async Task MigrateAsync_FromSavedIntegrity_DeduplicatesVacanciesAndCreatesUniqueExternalIdIndex()
+    {
+        // Arrange
+        await using SqliteConnection connection = new("DataSource=:memory:");
+        await connection.OpenAsync();
+        DbContextOptions<WaterfallDbContext> options = new DbContextOptionsBuilder<WaterfallDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using (WaterfallDbContext beforeDb = new(options))
+        {
+            await beforeDb.GetService<IMigrator>().MigrateAsync(SavedIntegrityMigrationId);
+            Microsoft.EntityFrameworkCore.Storage.ValueConversion.DateTimeOffsetToBinaryConverter converter = new();
+            long older = (long)converter.ConvertToProvider(new DateTimeOffset(2026, 11, 20, 0, 0, 0, TimeSpan.Zero))!;
+            long newer = (long)converter.ConvertToProvider(new DateTimeOffset(2026, 11, 27, 0, 0, 0, TimeSpan.Zero))!;
+            string longUrl = "https://djinni.co/jobs/" + new string('a', 500);
+
+            await beforeDb.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO "Vacancies" ("Id", "Title", "Company", "Description", "Category", "Location", "WorkFormat", "Currency", "Source", "SourceUrl", "SkillsJson", "SearchText", "PublishedAt", "FirstSeenAt", "LastSeenAt", "ExternalId", "IsActive")
+                VALUES
+                    ('33330001-0000-0000-0000-000000000001', 'Older Dup', 'Co', 'Desc', '.NET', 'Київ', 0, 'USD', 'Djinni', {longUrl}, '[]', 'older', {older}, {older}, {older}, 'dup-1', 1),
+                    ('33330002-0000-0000-0000-000000000002', 'Newest Dup', 'Co', 'Desc', '.NET', 'Київ', 0, 'USD', 'Djinni', {longUrl}, '[]', 'newest', {older}, {older}, {newer}, 'dup-1', 1),
+                    ('33330003-0000-0000-0000-000000000003', 'Null Ext A', 'Co', 'Desc', '.NET', 'Київ', 0, 'USD', 'Djinni', 'https://djinni.co/a', '[]', 'null a', {older}, {older}, {older}, NULL, 1),
+                    ('33330004-0000-0000-0000-000000000004', 'Null Ext B', 'Co', 'Desc', '.NET', 'Київ', 0, 'USD', 'Djinni', 'https://djinni.co/b', '[]', 'null b', {older}, {older}, {older}, NULL, 1);
+                """);
+        }
+
+        // Act
+        await using (WaterfallDbContext migratedDb = new(options))
+        {
+            await migratedDb.Database.MigrateAsync();
+
+            // Assert
+            VacancyDB survivor = await migratedDb.Vacancies.AsNoTracking().SingleAsync(v => v.ExternalId == "dup-1");
+            Assert.Equal("Newest Dup", survivor.Title);
+            Assert.Equal(450, survivor.SourceUrl.Length);
+            Assert.Equal(3, await migratedDb.Vacancies.CountAsync());
+
+            migratedDb.Vacancies.Add(new VacancyDB
+            {
+                Id = Guid.NewGuid(),
+                Title = "Conflicting Insert",
+                Company = "Co",
+                Description = "Desc",
+                Category = ".NET",
+                Location = "Київ",
+                Currency = "USD",
+                Source = "Djinni",
+                SourceUrl = "https://djinni.co/conflict",
+                ExternalId = "dup-1"
+            });
+            await Assert.ThrowsAsync<DbUpdateException>(() => migratedDb.SaveChangesAsync());
         }
     }
 }

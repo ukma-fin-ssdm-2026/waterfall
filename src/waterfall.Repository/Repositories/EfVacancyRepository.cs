@@ -171,29 +171,50 @@ public class EfVacancyRepository : IVacancyRepository
             return [];
         }
 
-        return await _context.Vacancies
-            .AsNoTracking()
-            .Where(v => v.Source == source && v.ExternalId != null && externalIds.Contains(v.ExternalId))
-            .ToListAsync(ct);
+        if (externalIds.Count <= VacancyCandidateLookup.CandidateChunkSize)
+        {
+            return await _context.Vacancies
+                .AsNoTracking()
+                .Where(v => v.Source == source && v.ExternalId != null && externalIds.Contains(v.ExternalId))
+                .ToListAsync(ct);
+        }
+
+        List<VacancyDB> results = [];
+        foreach (string[] chunk in externalIds.Distinct(StringComparer.Ordinal).Chunk(VacancyCandidateLookup.CandidateChunkSize))
+        {
+            List<VacancyDB> rows = await _context.Vacancies
+                .AsNoTracking()
+                .Where(v => v.Source == source && v.ExternalId != null && chunk.Contains(v.ExternalId))
+                .ToListAsync(ct);
+            results.AddRange(rows);
+        }
+
+        return results;
     }
 
     public async Task<(int Created, int Updated)> BulkUpsertAsync(IReadOnlyList<VacancyDB> vacancies, CancellationToken ct = default)
     {
-        // Уже збережені вакансії шукаємо одним запитом, а не по одній
-        List<string?> externalIds = vacancies.Select(v => v.ExternalId).ToList();
-        List<VacancyDB> existing = await _context.Vacancies
-            .Where(v => externalIds.Contains(v.ExternalId))
-            .ToListAsync(ct);
+        if (vacancies.Count == 0)
+        {
+            return (0, 0);
+        }
+
+        // Уже збережені вакансії шукаємо чанкованими індексними запитами лише за (Source, ExternalId)
+        List<VacancyDB> candidates = await VacancyCandidateLookup.LoadByExternalKeysAsync(
+            _context.Vacancies,
+            vacancies.Where(v => !string.IsNullOrWhiteSpace(v.ExternalId)).Select(v => (v.Source, v.ExternalId!)),
+            ct);
+        VacancyMatchIndex<VacancyDB> index = new(candidates);
 
         int created = 0;
         int updated = 0;
         foreach (VacancyDB vacancy in vacancies)
         {
-            VacancyDB? current = existing.FirstOrDefault(v => v.Source == vacancy.Source && v.ExternalId == vacancy.ExternalId);
+            VacancyDB? current = index.FindByExternalId(vacancy.Source, vacancy.ExternalId);
             if (current == null)
             {
                 _context.Vacancies.Add(vacancy);
-                existing.Add(vacancy);
+                index.Add(vacancy);
                 created++;
                 continue;
             }
@@ -298,24 +319,14 @@ public class EfVacancyRepository : IVacancyRepository
             return new VacancySyncMergeResult(0, 0, []);
         }
 
-        List<Guid> incomingIds = vacancies.Where(v => v.Id != Guid.Empty).Select(v => v.Id).Distinct().ToList();
-        List<string> incomingExternalIds = vacancies
-            .Where(v => !string.IsNullOrWhiteSpace(v.ExternalId))
-            .Select(v => v.ExternalId!)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-        List<string> incomingUrls = vacancies
-            .Where(v => !string.IsNullOrWhiteSpace(v.SourceUrl))
-            .Select(v => v.SourceUrl)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        List<VacancyDB> candidates = await VacancyCandidateLookup.LoadAsync(
+            _context.Vacancies,
+            vacancies.Select(v => v.Id),
+            vacancies.Where(v => !string.IsNullOrWhiteSpace(v.ExternalId)).Select(v => (v.Source, v.ExternalId!)),
+            vacancies.Select(v => v.SourceUrl),
+            ct);
 
-        List<VacancyDB> existing = await _context.Vacancies
-            .Where(v =>
-                incomingIds.Contains(v.Id)
-                || (v.ExternalId != null && incomingExternalIds.Contains(v.ExternalId))
-                || incomingUrls.Contains(v.SourceUrl))
-            .ToListAsync(ct);
+        VacancyMatchIndex<VacancyDB> index = new(candidates);
 
         int created = 0;
         int updated = 0;
@@ -323,7 +334,7 @@ public class EfVacancyRepository : IVacancyRepository
 
         foreach (VacancyDB incoming in vacancies)
         {
-            VacancyDB? current = FindMatchingVacancy(existing, incoming);
+            VacancyDB? current = index.FindMatch(incoming.Id, incoming.Source, incoming.ExternalId, incoming.SourceUrl);
             if (current is null)
             {
                 if (incoming.Id == Guid.Empty)
@@ -332,15 +343,21 @@ public class EfVacancyRepository : IVacancyRepository
                 }
 
                 _context.Vacancies.Add(incoming);
-                existing.Add(incoming);
+                index.Add(incoming);
                 canonicalIds.Add(incoming.Id);
                 created++;
                 continue;
             }
 
             canonicalIds.Add(current.Id);
+            string? previousExternalId = current.ExternalId;
             if (MergeIntoExisting(current, incoming))
             {
+                if (string.IsNullOrWhiteSpace(previousExternalId) && !string.IsNullOrWhiteSpace(current.ExternalId))
+                {
+                    index.IndexExternalId(current);
+                }
+
                 updated++;
             }
         }
@@ -351,41 +368,6 @@ public class EfVacancyRepository : IVacancyRepository
         }
 
         return new VacancySyncMergeResult(created, updated, canonicalIds.ToList());
-    }
-
-    private static VacancyDB? FindMatchingVacancy(List<VacancyDB> existing, VacancyDB incoming)
-    {
-        if (!string.IsNullOrWhiteSpace(incoming.ExternalId))
-        {
-            VacancyDB? byExternal = existing.FirstOrDefault(v =>
-                string.Equals(v.Source, incoming.Source, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(v.ExternalId, incoming.ExternalId, StringComparison.Ordinal));
-            if (byExternal is not null)
-            {
-                return byExternal;
-            }
-        }
-
-        if (incoming.Id != Guid.Empty)
-        {
-            VacancyDB? byId = existing.FirstOrDefault(v => v.Id == incoming.Id);
-            if (byId is not null)
-            {
-                return byId;
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(incoming.SourceUrl))
-        {
-            return existing.FirstOrDefault(v =>
-                string.Equals(v.SourceUrl, incoming.SourceUrl, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(v.Source, incoming.Source, StringComparison.OrdinalIgnoreCase)
-                && (string.IsNullOrWhiteSpace(incoming.ExternalId)
-                    || string.IsNullOrWhiteSpace(v.ExternalId)
-                    || string.Equals(v.ExternalId, incoming.ExternalId, StringComparison.Ordinal)));
-        }
-
-        return null;
     }
 
     private static bool MergeIntoExisting(VacancyDB current, VacancyDB incoming)

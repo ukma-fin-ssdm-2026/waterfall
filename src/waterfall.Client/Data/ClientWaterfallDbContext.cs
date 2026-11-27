@@ -72,6 +72,14 @@ public class ClientWaterfallDbContext : DbContext
             entity.Property(e => e.LastSummary).HasMaxLength(500);
         });
 
+        modelBuilder.Entity<ClientVacancyDB>()
+            .HasIndex(v => new { v.Source, v.ExternalId })
+            .IsUnique()
+            .HasFilter("\"ExternalId\" IS NOT NULL");
+
+        modelBuilder.Entity<ClientVacancyDB>()
+            .HasIndex(v => v.SourceUrl);
+
         // SQLite не має нативного типу DateTimeOffset, тому зберігаємо бінарно (як у серверному WaterfallDbContext)
         foreach (IMutableEntityType entityType in modelBuilder.Model.GetEntityTypes())
         {

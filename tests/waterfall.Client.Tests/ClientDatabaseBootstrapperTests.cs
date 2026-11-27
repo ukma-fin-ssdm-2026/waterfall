@@ -57,7 +57,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         LocalVacancyStats stats = await store.GetStatsAsync();
 
         // Assert
-        Assert.Equal(2, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(3, await ReadUserVersionAsync(dbPath));
         Assert.Equal(0, stats.TotalCount);
         Assert.Equal(0, stats.UnsyncedCount);
         Assert.Null(stats.LastSyncedAt);
@@ -123,7 +123,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         await store.SetLastSyncedAtAsync(syncedAt, "OK");
 
         // Assert
-        Assert.Equal(2, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(3, await ReadUserVersionAsync(dbPath));
         IReadOnlyList<VacancyDto> all = await store.GetAllAsync();
         Assert.Equal(2, all.Count);
         Assert.Contains(all, v => v.Id == existingId && v.Title == "Legacy .NET Dev");
@@ -163,7 +163,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         }
 
         // Assert
-        Assert.Equal(2, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(3, await ReadUserVersionAsync(dbPath));
         EfLocalVacancyStore store = new(dbPath);
         await store.SaveVacanciesAsync(
         [
@@ -195,8 +195,8 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         await secondGeo.SaveCoordinatesAsync("Київ, Хрещатик, 1", 50.45, 30.52, isSynced: false);
 
         // Assert
-        Assert.Equal(2, await ReadUserVersionAsync(firstDbPath));
-        Assert.Equal(2, await ReadUserVersionAsync(secondDbPath));
+        Assert.Equal(3, await ReadUserVersionAsync(firstDbPath));
+        Assert.Equal(3, await ReadUserVersionAsync(secondDbPath));
         (double Latitude, double Longitude)? coords = await secondGeo.GetCoordinatesAsync("Київ, Хрещатик, 1");
         Assert.NotNull(coords);
         Assert.Equal(50.45, coords.Value.Latitude);
@@ -269,7 +269,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         IReadOnlyList<VacancyDto> vacancies = await store.GetAllAsync();
 
         // Assert
-        Assert.Equal(2, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(3, await ReadUserVersionAsync(dbPath));
         Assert.Single(vacancies);
         Assert.Equal("Preserved Job", vacancies[0].Title);
 
@@ -279,5 +279,75 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         tableCmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('SavedVacancies', 'Users', 'UserPersonalData');";
         long unusedTables = Convert.ToInt64(await tableCmd.ExecuteScalarAsync());
         Assert.Equal(0, unusedTables);
+    }
+
+    [Fact]
+    public async Task VersionTwoDatabase_UpgradesToVersionThreeDeduplicatesAndCreatesSyncIndexes()
+    {
+        // Arrange
+        string dbPath = CreateTempDbPath("v2-to-v3");
+        Microsoft.EntityFrameworkCore.Storage.ValueConversion.DateTimeOffsetToBinaryConverter converter = new();
+        long older = (long)converter.ConvertToProvider(new DateTimeOffset(2026, 11, 20, 0, 0, 0, TimeSpan.Zero))!;
+        long newer = (long)converter.ConvertToProvider(new DateTimeOffset(2026, 11, 27, 0, 0, 0, TimeSpan.Zero))!;
+
+        await using (SqliteConnection connection = new($"Data Source={dbPath}"))
+        {
+            await connection.OpenAsync();
+            await using SqliteCommand cmd = connection.CreateCommand();
+            cmd.CommandText = $"""
+                CREATE TABLE "Vacancies" (
+                    "Id" TEXT NOT NULL PRIMARY KEY,
+                    "Title" TEXT NOT NULL,
+                    "Company" TEXT NOT NULL,
+                    "Description" TEXT NOT NULL,
+                    "Category" TEXT NOT NULL,
+                    "CategoryGroup" TEXT NULL,
+                    "Location" TEXT NOT NULL,
+                    "FullAddress" TEXT NULL,
+                    "Schedule" TEXT NULL,
+                    "Experience" TEXT NULL,
+                    "ExperienceMonths" INTEGER NULL,
+                    "WorkFormat" INTEGER NOT NULL DEFAULT 0,
+                    "SalaryMin" TEXT NULL,
+                    "SalaryMax" TEXT NULL,
+                    "Currency" TEXT NOT NULL,
+                    "Source" TEXT NOT NULL,
+                    "SourceUrl" TEXT NOT NULL,
+                    "SkillsJson" TEXT NOT NULL,
+                    "SearchText" TEXT NOT NULL DEFAULT '',
+                    "PublishedAt" INTEGER NOT NULL,
+                    "FirstSeenAt" INTEGER NOT NULL,
+                    "LastSeenAt" INTEGER NOT NULL,
+                    "ExternalId" TEXT NULL,
+                    "IsActive" INTEGER NOT NULL,
+                    "IsSynced" INTEGER NOT NULL DEFAULT 1,
+                    "LocalUpdatedAt" INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE "SyncState" ("Key" TEXT NOT NULL PRIMARY KEY, "LastSyncedAt" INTEGER NULL, "LastSummary" TEXT NULL);
+                CREATE TABLE "GeoLocationCache" ("Id" TEXT NOT NULL PRIMARY KEY, "NormalizedAddress" TEXT NOT NULL, "Latitude" REAL NOT NULL, "Longitude" REAL NOT NULL, "CreatedAt" INTEGER NOT NULL, "IsSynced" INTEGER NOT NULL DEFAULT 1);
+                INSERT INTO "Vacancies" ("Id","Title","Company","Description","Category","Location","Currency","Source","SourceUrl","SkillsJson","SearchText","PublishedAt","FirstSeenAt","LastSeenAt","ExternalId","IsActive")
+                VALUES
+                    ('44440001-0000-0000-0000-000000000001','Old Local','Co','Desc','.NET','Київ','USD','Djinni','https://djinni.co/old','[]','old',{older},{older},{older},'ext-99',1),
+                    ('44440002-0000-0000-0000-000000000002','New Local','Co','Desc','.NET','Київ','USD','Djinni','https://djinni.co/new','[]','new',{older},{older},{newer},'ext-99',1);
+                PRAGMA user_version = 2;
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        EfLocalVacancyStore store = new(dbPath);
+
+        // Act
+        IReadOnlyList<VacancyDto> vacancies = await store.GetAllAsync();
+
+        // Assert
+        Assert.Equal(3, await ReadUserVersionAsync(dbPath));
+        VacancyDto survivor = Assert.Single(vacancies);
+        Assert.Equal("New Local", survivor.Title);
+
+        await using SqliteConnection verifyConn = new($"Data Source={dbPath}");
+        await verifyConn.OpenAsync();
+        await using SqliteCommand idxCmd = verifyConn.CreateCommand();
+        idxCmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name IN ('IX_Vacancies_Source_ExternalId', 'IX_Vacancies_SourceUrl');";
+        Assert.Equal(2, Convert.ToInt64(await idxCmd.ExecuteScalarAsync()));
     }
 }

@@ -396,7 +396,7 @@ public class VacancyIngestionService : IVacancyIngestionService
         }
 
         bool fromSource = uri.Host == sourceHost || uri.Host.EndsWith("." + sourceHost, StringComparison.Ordinal);
-        return fromSource ? Cut(uri.GetLeftPart(UriPartial.Path), 1000) : null;
+        return fromSource ? Cut(uri.GetLeftPart(UriPartial.Path), 450) : null;
     }
 
     private static List<string> ParseSkills(string? tags) =>

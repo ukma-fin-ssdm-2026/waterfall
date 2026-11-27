@@ -12,7 +12,7 @@ namespace Waterfall.Client.Data;
 /// </summary>
 public static class ClientDatabaseBootstrapper
 {
-    public const int CurrentSchemaVersion = 2;
+    public const int CurrentSchemaVersion = 3;
 
     private static readonly ConcurrentDictionary<string, byte> s_initializedDatabases =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -168,6 +168,9 @@ public static class ClientDatabaseBootstrapper
             case 2:
                 await context.Database.ExecuteSqlRawAsync("PRAGMA user_version = 2;", ct).ConfigureAwait(false);
                 break;
+            case 3:
+                await context.Database.ExecuteSqlRawAsync("PRAGMA user_version = 3;", ct).ConfigureAwait(false);
+                break;
             default:
                 throw new NotSupportedException($"Непідтримувана версія схеми клієнта: {version}.");
         }
@@ -189,6 +192,30 @@ public static class ClientDatabaseBootstrapper
                     DROP TABLE IF EXISTS "UserPersonalData";
                     """, ct).ConfigureAwait(false);
                 return 2;
+            case 2:
+                await context.Database.ExecuteSqlRawAsync(
+                    """
+                    UPDATE "Vacancies"
+                    SET "SourceUrl" = SUBSTR("SourceUrl", 1, 450)
+                    WHERE LENGTH("SourceUrl") > 450;
+
+                    DELETE FROM "Vacancies"
+                    WHERE "ExternalId" IS NOT NULL
+                      AND EXISTS (
+                          SELECT 1 FROM "Vacancies" newer
+                          WHERE newer."Source" = "Vacancies"."Source"
+                            AND newer."ExternalId" = "Vacancies"."ExternalId"
+                            AND (newer."LastSeenAt" > "Vacancies"."LastSeenAt"
+                                 OR (newer."LastSeenAt" = "Vacancies"."LastSeenAt" AND newer.rowid > "Vacancies".rowid))
+                      );
+
+                    CREATE UNIQUE INDEX IF NOT EXISTS "IX_Vacancies_Source_ExternalId"
+                        ON "Vacancies" ("Source", "ExternalId")
+                        WHERE "ExternalId" IS NOT NULL;
+                    CREATE INDEX IF NOT EXISTS "IX_Vacancies_SourceUrl"
+                        ON "Vacancies" ("SourceUrl");
+                    """, ct).ConfigureAwait(false);
+                return 3;
             default:
                 throw new NotSupportedException($"Непідтримуваний перехід схеми клієнта з версії {currentVersion}.");
         }
