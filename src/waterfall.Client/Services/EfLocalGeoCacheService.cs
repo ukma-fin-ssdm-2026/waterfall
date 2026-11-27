@@ -17,7 +17,6 @@ public class EfLocalGeoCacheService : ILocalGeoCacheService
 {
     private readonly IDbContextFactory<ClientWaterfallDbContext>? _contextFactory;
     private readonly DbContextOptions<ClientWaterfallDbContext>? _options;
-    private volatile bool _isInitialized;
 
     public EfLocalGeoCacheService(IDbContextFactory<ClientWaterfallDbContext> contextFactory)
     {
@@ -64,27 +63,8 @@ public class EfLocalGeoCacheService : ILocalGeoCacheService
 
     private async Task EnsureInitializedAsync(CancellationToken ct = default)
     {
-        if (_isInitialized)
-        {
-            return;
-        }
-
-        await ClientWaterfallDbContext.SharedInitLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (_isInitialized)
-            {
-                return;
-            }
-
-            await using ClientWaterfallDbContext context = CreateContext();
-            await context.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
-            _isInitialized = true;
-        }
-        finally
-        {
-            ClientWaterfallDbContext.SharedInitLock.Release();
-        }
+        await using ClientWaterfallDbContext context = CreateContext();
+        await ClientDatabaseBootstrapper.EnsureInitializedAsync(context, ct).ConfigureAwait(false);
     }
 
     public Task<(double Latitude, double Longitude)?> GetCoordinatesAsync(string address, CancellationToken ct = default)

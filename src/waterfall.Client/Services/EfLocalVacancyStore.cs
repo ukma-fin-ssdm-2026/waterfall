@@ -1,6 +1,5 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
-using System.Data.Common;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Client.Data;
@@ -21,7 +20,6 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
 
     private readonly IDbContextFactory<ClientWaterfallDbContext>? _contextFactory;
     private readonly DbContextOptions<ClientWaterfallDbContext>? _options;
-    private volatile bool _isInitialized;
 
     public EfLocalVacancyStore(IDbContextFactory<ClientWaterfallDbContext> contextFactory)
     {
@@ -68,97 +66,8 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
 
     private async Task EnsureInitializedAsync(CancellationToken ct = default)
     {
-        if (_isInitialized)
-        {
-            return;
-        }
-
-        await ClientWaterfallDbContext.SharedInitLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            if (_isInitialized)
-            {
-                return;
-            }
-
-            await using ClientWaterfallDbContext context = CreateContext();
-            await context.Database.EnsureCreatedAsync(ct).ConfigureAwait(false);
-            await EnsureSchemaUpgradedAsync(context, ct).ConfigureAwait(false);
-            _isInitialized = true;
-        }
-        finally
-        {
-            ClientWaterfallDbContext.SharedInitLock.Release();
-        }
-    }
-
-    /// <summary>
-    /// Ідемпотентно оновлює схему вже існуючого локального файлу waterfall_local.db,
-    /// якщо він був створений попередньою версією клієнта без колонок IsSynced/LocalUpdatedAt або таблиці SyncState.
-    /// </summary>
-    private static async Task EnsureSchemaUpgradedAsync(ClientWaterfallDbContext context, CancellationToken ct)
-    {
-        DbConnection connection = context.Database.GetDbConnection();
-        bool shouldClose = connection.State != System.Data.ConnectionState.Open;
-        if (shouldClose)
-        {
-            await connection.OpenAsync(ct).ConfigureAwait(false);
-        }
-
-        try
-        {
-            HashSet<string> existingColumns = new(StringComparer.OrdinalIgnoreCase);
-            await using (DbCommand pragma = connection.CreateCommand())
-            {
-                pragma.CommandText = "PRAGMA table_info('Vacancies');";
-                await using DbDataReader reader = await pragma.ExecuteReaderAsync(ct).ConfigureAwait(false);
-                while (await reader.ReadAsync(ct).ConfigureAwait(false))
-                {
-                    existingColumns.Add(reader.GetString(1));
-                }
-            }
-
-            if (existingColumns.Count > 0)
-            {
-                (string Column, string Sql)[] requiredColumns =
-                [
-                    ("CategoryGroup", "ALTER TABLE Vacancies ADD COLUMN CategoryGroup TEXT NULL;"),
-                    ("FullAddress", "ALTER TABLE Vacancies ADD COLUMN FullAddress TEXT NULL;"),
-                    ("Schedule", "ALTER TABLE Vacancies ADD COLUMN Schedule TEXT NULL;"),
-                    ("Experience", "ALTER TABLE Vacancies ADD COLUMN Experience TEXT NULL;"),
-                    ("ExperienceMonths", "ALTER TABLE Vacancies ADD COLUMN ExperienceMonths INTEGER NULL;"),
-                    ("WorkFormat", "ALTER TABLE Vacancies ADD COLUMN WorkFormat INTEGER NOT NULL DEFAULT 0;"),
-                    ("SearchText", "ALTER TABLE Vacancies ADD COLUMN SearchText TEXT NOT NULL DEFAULT '';"),
-                    ("ExternalId", "ALTER TABLE Vacancies ADD COLUMN ExternalId TEXT NULL;"),
-                    ("IsSynced", "ALTER TABLE Vacancies ADD COLUMN IsSynced INTEGER NOT NULL DEFAULT 1;"),
-                    ("LocalUpdatedAt", "ALTER TABLE Vacancies ADD COLUMN LocalUpdatedAt INTEGER NOT NULL DEFAULT 0;")
-                ];
-
-                foreach ((string column, string sql) in requiredColumns)
-                {
-                    if (!existingColumns.Contains(column))
-                    {
-                        await context.Database.ExecuteSqlRawAsync(sql, ct).ConfigureAwait(false);
-                    }
-                }
-            }
-
-            await context.Database.ExecuteSqlRawAsync(
-                """
-                CREATE TABLE IF NOT EXISTS SyncState (
-                    Key TEXT NOT NULL CONSTRAINT PK_SyncState PRIMARY KEY,
-                    LastSyncedAt INTEGER NULL,
-                    LastSummary TEXT NULL
-                );
-                """, ct).ConfigureAwait(false);
-        }
-        finally
-        {
-            if (shouldClose)
-            {
-                await connection.CloseAsync().ConfigureAwait(false);
-            }
-        }
+        await using ClientWaterfallDbContext context = CreateContext();
+        await ClientDatabaseBootstrapper.EnsureInitializedAsync(context, ct).ConfigureAwait(false);
     }
 
     public Task<IReadOnlyList<VacancyDto>> GetAllAsync(CancellationToken ct = default) =>
