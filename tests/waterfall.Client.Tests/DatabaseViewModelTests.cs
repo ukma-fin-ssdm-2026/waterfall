@@ -262,6 +262,35 @@ public sealed class DatabaseViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Load_WhenServerRefusesClientVacancies_ShowsRefreshOnlyAndKeepsChangesOnDevice()
+    {
+        VacancyDto localOffline = SampleFourSiteVacancies()[0] with { Title = "Offline Local Vacancy" };
+        await _localStore.SaveVacanciesAsync([localOffline], isSynced: false);
+
+        _gateway.VacanciesAcceptedByServer = false;
+        SetupPagedServer(SampleFourSiteVacancies());
+        VacancySyncService syncService = new(_gateway, _localStore, _messenger);
+        DatabaseViewModel vm = new(_gateway, _messenger, _time, localStore: _localStore, syncService: syncService);
+
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+
+        // Відмову сервера видно вже після завантаження: кнопка обіцяє лише оновлення каталогу
+        Assert.False(vm.CanUploadLocalChanges);
+        Assert.False(vm.HasUnsyncedChanges);
+        Assert.Equal("Оновити каталог", vm.SyncButtonText);
+        Assert.Contains("Лише на пристрої: 1", vm.SyncBadgeText);
+        Assert.Equal(1, vm.UnsyncedCount);
+        Assert.Single(await _localStore.GetUnsyncedAsync());
+
+        // Ручна синхронізація не вигадує «надіслано» і не позначає локальні зміни синхронізованими
+        await vm.SyncDatabaseCommand.ExecuteAsync(null);
+
+        Assert.DoesNotContain("надіслано", vm.StatusBannerText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Каталог оновлено", vm.StatusBannerText);
+        Assert.Single(await _localStore.GetUnsyncedAsync());
+    }
+
+    [Fact]
     public async Task OfflineFallback_LoadsLocalDatabase_AndManualSyncExchangesData()
     {
         // Попередньо наповнюємо локальну БД офлайн-вакансією

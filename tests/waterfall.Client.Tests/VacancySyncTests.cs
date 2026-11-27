@@ -120,6 +120,112 @@ public sealed class VacancySyncTests : IDisposable
     }
 
     [Fact]
+    public async Task Sync_WhenServerRefusesClientVacancies_LeavesLocalChangesUnsyncedAndReportsRefusal()
+    {
+        EfLocalVacancyStore store = new(_tempDbPath);
+        FakeGateway gateway = new() { VacanciesAcceptedByServer = false };
+        VacancySyncService syncService = new(gateway, store);
+
+        await store.SaveVacanciesAsync(
+        [
+            new VacancyDto { Id = Guid.NewGuid(), Title = "Offline Python", Company = "Local", Description = "d", Category = "Python", Location = "Київ", Currency = "USD", Source = JobSource.Dou, SourceUrl = "https://jobs.dou.ua/vacancies/o1/" },
+            new VacancyDto { Id = Guid.NewGuid(), Title = "Offline QA", Company = "Local", Description = "d", Category = "QA", Location = "Львів", Currency = "UAH", Source = JobSource.WorkUa, SourceUrl = "https://www.work.ua/jobs/o2/" }
+        ], isSynced: false);
+
+        VacancySyncResult result = await syncService.SyncWithServerAsync();
+
+        Assert.True(result.Succeeded);
+        Assert.False(result.ClientVacanciesAccepted);
+        Assert.False(syncService.ClientVacanciesAccepted);
+        Assert.Equal(0, result.UploadedToServer);
+
+        // Відмова сервера не робить локальні зміни «синхронізованими»: інакше вони б загубилися назавжди
+        Assert.Equal(2, (await store.GetUnsyncedAsync()).Count);
+        Assert.Equal(2, (await store.GetStatsAsync()).UnsyncedCount);
+
+        // Вивантаження половини не скасовує завантаження: мітка часу оновлена
+        Assert.NotNull(await store.GetLastSyncedAtAsync());
+    }
+
+    [Fact]
+    public async Task Sync_AfterRefusal_StopsUploadingLocalChangesButStillDownloadsServerVacancies()
+    {
+        EfLocalVacancyStore store = new(_tempDbPath);
+        FakeGateway gateway = new() { VacanciesAcceptedByServer = false };
+        VacancySyncService syncService = new(gateway, store);
+        DateTimeOffset serverNow = new(2026, 12, 1, 10, 30, 0, TimeSpan.Zero);
+
+        await store.SaveVacanciesAsync(
+        [
+            new VacancyDto { Id = Guid.NewGuid(), Title = "Offline DevOps", Company = "Local", Description = "d", Category = "DevOps", Location = "Київ", Currency = "USD", Source = JobSource.Djinni, SourceUrl = "https://djinni.co/jobs/o3/" }
+        ], isSynced: false);
+
+        // Перша синхронізація: дізнаємось про відмову сервера
+        await syncService.SyncWithServerAsync();
+        Assert.False(syncService.ClientVacanciesAccepted);
+        Assert.Single(gateway.VacancySyncRequests[^1].ClientVacancies);
+
+        // Друга синхронізація: тіло запиту вже без клієнтських вакансій, але серверні все одно забираємо
+        gateway.VacancySyncHandler = req => new VacancySyncResponseDto
+        {
+            ClientVacanciesAccepted = false,
+            ServerTime = serverNow,
+            TotalServerVacancies = 1,
+            ServerVacancies =
+            [
+                new VacancySyncItemDto
+                {
+                    Id = Guid.NewGuid(),
+                    ExternalId = "s-refused",
+                    Title = "Server Collected Analyst",
+                    Company = "CloudServer",
+                    Description = "Collected on server",
+                    Category = "Analytics",
+                    Location = "Віддалено",
+                    Currency = "USD",
+                    Source = JobSource.Djinni,
+                    SourceUrl = "https://djinni.co/jobs/s-refused/",
+                    LastSeenAt = serverNow
+                }
+            ]
+        };
+
+        VacancySyncResult second = await syncService.SyncWithServerAsync();
+
+        Assert.Empty(gateway.VacancySyncRequests[^1].ClientVacancies);
+        Assert.Equal(1, second.DownloadedFromServer);
+        Assert.Equal(1, second.AddedLocally);
+        Assert.Equal(2, (await store.GetAllAsync()).Count);
+        Assert.Single(await store.GetUnsyncedAsync());
+    }
+
+    [Fact]
+    public async Task Sync_WhenServerOmitsAcceptanceField_KeepsPreviousBehaviourAndMarksLocalChangesSynced()
+    {
+        EfLocalVacancyStore store = new(_tempDbPath);
+        FakeGateway gateway = new()
+        {
+            // Старіший сервер без поля clientVacanciesAccepted
+            VacancySyncHandler = req => new VacancySyncResponseDto
+            {
+                ReceivedFromClient = req.ClientVacancies.Count,
+                ServerTime = DateTimeOffset.UtcNow
+            }
+        };
+        VacancySyncService syncService = new(gateway, store);
+
+        await store.SaveVacanciesAsync(
+        [
+            new VacancyDto { Id = Guid.NewGuid(), Title = "Offline Legacy", Company = "Local", Description = "d", Category = "QA", Location = "Київ", Currency = "UAH", Source = JobSource.Dou, SourceUrl = "https://jobs.dou.ua/vacancies/legacy/" }
+        ], isSynced: false);
+
+        VacancySyncResult result = await syncService.SyncWithServerAsync();
+
+        Assert.True(result.ClientVacanciesAccepted);
+        Assert.Empty(await store.GetUnsyncedAsync());
+    }
+
+    [Fact]
     public async Task LocalStore_UpgradesLegacySqliteSchemaWithoutSyncColumns()
     {
         // Створюємо стару таблицю Vacancies без IsSynced та LocalUpdatedAt

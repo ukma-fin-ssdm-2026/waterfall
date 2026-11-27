@@ -549,6 +549,39 @@ public class HttpGatewayServiceTests
         Assert.Equal(1, sync.CreatedOnServer);
     }
 
+    [Fact]
+    public async Task SyncVacancies_ReadsClientVacanciesRefusalFromServer()
+    {
+        _server.Respond(HttpStatusCode.OK, """
+            { "serverVacancies": [], "receivedFromClient": 0, "clientVacanciesAccepted": false, "totalServerVacancies": 1 }
+            """);
+
+        VacancySyncResponseDto sync = await _gateway.SyncVacanciesAsync(new VacancySyncRequestDto
+        {
+            ClientVacancies = [new VacancySyncItemDto { Title = "Offline", Source = JobSource.Dou }]
+        });
+
+        // Поле мусить доходити до клієнта: інакше клієнт вважає локальні вакансії вивантаженими
+        Assert.False(sync.ClientVacanciesAccepted);
+        Assert.Equal(0, sync.ReceivedFromClient);
+    }
+
+    [Fact]
+    public async Task SyncVacancies_WhenServerOmitsAcceptanceField_TreatsClientVacanciesAsAccepted()
+    {
+        // Старіший сервер поля не надсилає: поведінка має лишитися попередньою
+        _server.Respond(HttpStatusCode.OK, """
+            { "serverVacancies": [], "receivedFromClient": 1, "totalServerVacancies": 1 }
+            """);
+
+        VacancySyncResponseDto sync = await _gateway.SyncVacanciesAsync(new VacancySyncRequestDto
+        {
+            ClientVacancies = [new VacancySyncItemDto { Title = "Offline", Source = JobSource.Dou }]
+        });
+
+        Assert.Null(sync.ClientVacanciesAccepted);
+    }
+
     /// <summary>
     /// Мережевий обробник-заглушка: записує запити й повертає заздалегідь задану відповідь.
     /// </summary>

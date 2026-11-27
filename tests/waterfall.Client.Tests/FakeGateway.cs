@@ -113,6 +113,9 @@ internal sealed class FakeGateway : IHttpGatewayService
     public Func<VacancySyncRequestDto, VacancySyncResponseDto>? VacancySyncHandler { get; set; }
     public Exception? VacancySyncError { get; set; }
 
+    /// <summary>Чи «сервер» приймає вакансії клієнта (VacancySync:AcceptClientVacancies) у типовій відповіді.</summary>
+    public bool VacanciesAcceptedByServer { get; set; } = true;
+
     public Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default)
     {
         VacancySyncRequests.Add(request);
@@ -125,7 +128,8 @@ internal sealed class FakeGateway : IHttpGatewayService
             ? VacancySyncHandler(request)
             : new VacancySyncResponseDto
             {
-                ReceivedFromClient = request.ClientVacancies.Count,
+                ReceivedFromClient = VacanciesAcceptedByServer ? request.ClientVacancies.Count : 0,
+                ClientVacanciesAccepted = VacanciesAcceptedByServer,
                 ServerTime = DateTimeOffset.UtcNow
             });
     }
