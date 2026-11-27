@@ -20,8 +20,8 @@ public sealed class VacancyPrefetchDistancesTests
     {
         RecordingDistanceService distance = new("Київ, вул. Лесі Українки 1");
         VacancyItemViewModel card = MakeCard(
-            "Київ, не вказано точну адресу",
-            fullAddress: "Київ, не вказано точну адресу",
+            "Київ",
+            fullAddress: null,
             distance);
 
         await VacancyFilterEngine.PrefetchDistancesAsync(

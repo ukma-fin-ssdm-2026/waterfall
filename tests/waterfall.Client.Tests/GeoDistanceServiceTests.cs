@@ -15,6 +15,17 @@ public class GeoDistanceServiceTests
     }
 
     [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task CalculateDistanceKmAsync_ReturnsNull_WhenDestinationAddressMissing(string? destinationAddress)
+    {
+        GeoDistanceService service = new() { UserAddress = "Київ, вул. Хрещатик, 22" };
+        double? result = await service.CalculateDistanceKmAsync(destinationAddress!);
+        Assert.Null(result);
+    }
+
+    [Theory]
     [InlineData("Remote")]
     [InlineData("Віддалено (Україна)")]
     [InlineData("remote / hybrid")]

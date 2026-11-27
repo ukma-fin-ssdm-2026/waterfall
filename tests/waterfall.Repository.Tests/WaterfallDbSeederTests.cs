@@ -144,6 +144,47 @@ public class WaterfallDbSeederTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task SeedAsync_LeavesNullFullAddressAsNull_OnExistingVacancies()
+    {
+        using (WaterfallDbContext db = new(_options))
+        {
+            await WaterfallDbSeeder.SeedAsync(db, includeDemoData: false);
+            db.Vacancies.Add(new Waterfall.Repository.Entities.VacancyDB
+            {
+                Id = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
+                Title = "Backend Engineer",
+                Company = "Acme",
+                Description = "ASP.NET Core",
+                Category = ".NET",
+                Location = "Київ",
+                FullAddress = null,
+                Currency = "USD",
+                Source = "Djinni",
+                SourceUrl = "https://djinni.co/jobs/acme-1/",
+                SkillsJson = "[]",
+                PublishedAt = DateTimeOffset.UtcNow,
+                FirstSeenAt = DateTimeOffset.UtcNow,
+                LastSeenAt = DateTimeOffset.UtcNow,
+                IsActive = true
+            });
+            await db.SaveChangesAsync();
+        }
+
+        using (WaterfallDbContext db = new(_options))
+        {
+            await WaterfallDbSeeder.SeedAsync(db, includeDemoData: false);
+        }
+
+        using (WaterfallDbContext db = new(_options))
+        {
+            Waterfall.Repository.Entities.VacancyDB? existing = await db.Vacancies
+                .SingleOrDefaultAsync(v => v.Id == Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"));
+            Assert.NotNull(existing);
+            Assert.Null(existing.FullAddress);
+        }
+    }
+
     public void Dispose()
     {
         _connection.Dispose();

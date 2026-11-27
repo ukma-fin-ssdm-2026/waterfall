@@ -184,23 +184,6 @@ public static class WaterfallDbSeeder
 
     private static async Task RepairExistingVacanciesAsync(WaterfallDbContext context)
     {
-        List<VacancyDB> missingAddresses = await context.Vacancies.Where(v => v.FullAddress == null || v.FullAddress == "" || v.FullAddress.Contains("(Головний офіс)")).ToListAsync();
-        if (missingAddresses.Count > 0)
-        {
-            foreach (VacancyDB v in missingAddresses)
-            {
-                string loc = (v.Location ?? string.Empty).ToLowerInvariant();
-                string city = loc.Contains("lviv") || loc.Contains("львів") ? "Львів"
-                    : (loc.Contains("dnipro") || loc.Contains("дніпро") ? "Дніпро"
-                    : (loc.Contains("odesa") || loc.Contains("одеса") ? "Одеса"
-                    : (loc.Contains("kharkiv") || loc.Contains("харків") ? "Харків"
-                    : (loc.Contains("kyiv") || loc.Contains("київ") ? "Київ"
-                    : (loc.Contains("remote") || loc.Contains("віддалено") ? "Віддалено" : "Локація")))));
-                v.FullAddress = $"{city}, не вказано точну адресу";
-            }
-            await context.SaveChangesAsync();
-        }
-
         // Якщо БД оновлено зі старішої схеми, дозаповнюємо нормалізовані поля (CategoryGroup, WorkFormat, SearchText, ExperienceMonths)
         List<VacancyDB> unnormalized = await context.Vacancies
             .Where(v => v.CategoryGroup == null || v.CategoryGroup == "" || v.SearchText == "")

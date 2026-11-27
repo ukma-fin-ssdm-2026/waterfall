@@ -215,7 +215,25 @@ public class VacancyItemViewModelTests
         }, _gateway, _messenger, _errors.Add);
 
         Assert.Equal("Дніпро, не вказано точну адресу", item.AddressDisplay);
+        Assert.False(item.HasFullAddress);
         Assert.True(item.HasAddress);
+    }
+
+    [Fact]
+    public void AddressDisplay_ShowsGenericFallback_WhenLocationAndFullAddressEmpty()
+    {
+        VacancyItemViewModel item = new(new VacancyDto
+        {
+            Id = Guid.NewGuid(),
+            Title = "Backend Dev",
+            Description = "Desc",
+            Location = "",
+            FullAddress = null
+        }, _gateway, _messenger, _errors.Add);
+
+        Assert.Equal("Не вказано точну адресу", item.AddressDisplay);
+        Assert.False(item.HasFullAddress);
+        Assert.False(item.HasAddress);
     }
 
     [Theory]
@@ -472,7 +490,8 @@ public class VacancyItemViewModelTests
     [Theory]
     [InlineData("Remote", "Вакансія віддалена (Remote), фізичний офіс відсутній.")]
     [InlineData("Віддалено", "Вакансія віддалена (Remote), фізичний офіс відсутній.")]
-    [InlineData("не вказано точну адресу", "Точну адресу офісу не вказано.")]
+    [InlineData("", "Точну адресу офісу не вказано.")]
+    [InlineData("Київ", "Точну адресу офісу не вказано.")]
     public async Task ToggleMap_ShowsError_WhenOfficeAddressNotApplicable(string location, string expectedError)
     {
         VacancyItemViewModel item = new(new VacancyDto
@@ -504,15 +523,13 @@ public class VacancyItemViewModelTests
     [InlineData("Київ, Львів", null, false)]
     [InlineData("Україна", null, false)]
     [InlineData("Київ", "Київ", false)]
-    [InlineData("не вказано точну адресу", null, false)]
-    [InlineData("Київ, не вказано точну адресу", null, false)]
+    [InlineData("Київ", "   ", false)]
     [InlineData("Remote", null, false)]
     [InlineData("remote", null, false)]
     [InlineData("Віддалено", null, false)]
     [InlineData("Дистанційно", null, false)]
     [InlineData("Віддалена робота", null, false)]
     [InlineData("За кордоном", null, false)]
-    [InlineData("Київ", "не вказано точну адресу", false)]
     [InlineData("Київ", "Віддалено", false)]
     [InlineData("Київ, вул. Хрещатик 1", null, true)]
     [InlineData("Remote", "Київ, вул. Хрещатик 1", true)]
@@ -610,7 +627,8 @@ public class VacancyItemViewModelTests
 
     [Theory]
     [InlineData("Київ", null)]
-    [InlineData("не вказано точну адресу", null)]
+    [InlineData("Київ", "   ")]
+    [InlineData("", null)]
     [InlineData("Remote", "Віддалено")]
     public async Task Distance_IsSilent_WithoutExactOfficeAddress(string location, string? fullAddress)
     {

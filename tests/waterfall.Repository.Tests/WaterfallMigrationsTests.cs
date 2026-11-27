@@ -12,6 +12,7 @@ public sealed class WaterfallMigrationsTests
     private const string InitialMigrationId = "20261127000001_InitialSchema";
     private const string SavedIntegrityMigrationId = "20261127215638_RestoreSavedVacanciesIntegrity";
     private const string IndexVacanciesMigrationId = "20261127220606_IndexVacanciesForSyncUpsert";
+    private const string ClearAddressSentinelMigrationId = "20261127221129_ClearFullAddressSentinel";
 
     [Fact]
     public async Task MigrateAsync_OnEmptySqliteDatabase_CreatesSchemaAndRecordsInitialMigrationHistory()
@@ -31,7 +32,7 @@ public sealed class WaterfallMigrationsTests
         // Assert
         List<string> applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
         List<string> pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
-        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId], applied);
+        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId, ClearAddressSentinelMigrationId], applied);
         Assert.Empty(pending);
         Assert.Equal(0, await db.Vacancies.CountAsync());
         Assert.Equal(0, await db.SiteSearchCache.CountAsync());
@@ -181,7 +182,7 @@ public sealed class WaterfallMigrationsTests
         Assert.Equal(WorkFormat.None, preserved.WorkFormat);
         Assert.Equal(0, await db.SiteSearchCache.CountAsync());
         Assert.Equal(0, await db.ChatSessions.CountAsync());
-        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId], await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId, ClearAddressSentinelMigrationId], await db.Database.GetAppliedMigrationsAsync());
     }
 
     [Fact]
@@ -289,6 +290,47 @@ public sealed class WaterfallMigrationsTests
                 ExternalId = "dup-1"
             });
             await Assert.ThrowsAsync<DbUpdateException>(() => migratedDb.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
+    public async Task MigrateAsync_FromIndexVacancies_ClearsFullAddressSentinelsAndPreservesRealAddresses()
+    {
+        // Arrange
+        await using SqliteConnection connection = new("DataSource=:memory:");
+        await connection.OpenAsync();
+        DbContextOptions<WaterfallDbContext> options = new DbContextOptionsBuilder<WaterfallDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using (WaterfallDbContext beforeDb = new(options))
+        {
+            await beforeDb.GetService<IMigrator>().MigrateAsync(IndexVacanciesMigrationId);
+            Microsoft.EntityFrameworkCore.Storage.ValueConversion.DateTimeOffsetToBinaryConverter converter = new();
+            long ts = (long)converter.ConvertToProvider(new DateTimeOffset(2026, 11, 20, 0, 0, 0, TimeSpan.Zero))!;
+
+            await beforeDb.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO "Vacancies" ("Id", "Title", "Company", "Description", "Category", "Location", "FullAddress", "WorkFormat", "Currency", "Source", "SourceUrl", "SkillsJson", "SearchText", "PublishedAt", "FirstSeenAt", "LastSeenAt", "ExternalId", "IsActive")
+                VALUES
+                    ('55550001-0000-0000-0000-000000000001', 'Sentinel Job', 'Co', 'Desc', '.NET', 'Київ', 'Київ, не вказано точну адресу', 0, 'USD', 'Djinni', 'https://djinni.co/s1', '[]', 's1', {ts}, {ts}, {ts}, 's1', 1),
+                    ('55550002-0000-0000-0000-000000000002', 'HQ Job', 'Co', 'Desc', '.NET', 'Київ', 'Київ (Головний офіс)', 0, 'USD', 'Djinni', 'https://djinni.co/s2', '[]', 's2', {ts}, {ts}, {ts}, 's2', 1),
+                    ('55550003-0000-0000-0000-000000000003', 'Street Job', 'Co', 'Desc', '.NET', 'Київ', 'Київ, вул. Мечникова, 2', 0, 'USD', 'Djinni', 'https://djinni.co/s3', '[]', 's3', {ts}, {ts}, {ts}, 's3', 1);
+                """);
+        }
+
+        // Act
+        await using (WaterfallDbContext migratedDb = new(options))
+        {
+            await migratedDb.Database.MigrateAsync();
+
+            // Assert
+            VacancyDB sentinel = await migratedDb.Vacancies.AsNoTracking().SingleAsync(v => v.ExternalId == "s1");
+            VacancyDB hq = await migratedDb.Vacancies.AsNoTracking().SingleAsync(v => v.ExternalId == "s2");
+            VacancyDB street = await migratedDb.Vacancies.AsNoTracking().SingleAsync(v => v.ExternalId == "s3");
+            Assert.Null(sentinel.FullAddress);
+            Assert.Null(hq.FullAddress);
+            Assert.Equal("Київ, вул. Мечникова, 2", street.FullAddress);
         }
     }
 }
