@@ -1172,10 +1172,10 @@ paths:
       tags:
         - Vacancies
       summary: Двостороння синхронізація бази вакансій між локальною БД клієнта та сервером.
-      description: "Клієнт надсилає вакансії, зібрані або змінені в офлайні; сервер об'єднує їх зі своєю базою\r\n(дедуплікація за Source+ExternalId / Id / SourceUrl, Last-Write-Wins за LastSeenAt) та повертає\r\nвсі актуальні вакансії сервера (або зміни з моменту LastSyncedAt).\r\nВакансії клієнта зберігаються лише з VacancySync:AcceptClientVacancies = true; за замовчуванням (false) сервер їх ігнорує й лише віддає свої."
+      description: "Клієнт надсилає до 500 вакансій за один запит (Waterfall.Services.Models.Vacancies.VacancySyncRequestDto.MaxClientVacanciesPerRequest),\r\nзібраних або змінених в офлайні; запити з понад 500 вакансіями відхиляються зі статусом 400 Bad Request.\r\nСервер об'єднує їх зі своєю базою (дедуплікація за Source+ExternalId / Id / SourceUrl, Last-Write-Wins за LastSeenAt)\r\nта повертає всі актуальні вакансії сервера (або зміни з моменту LastSyncedAt).\r\nВакансії клієнта зберігаються лише з VacancySync:AcceptClientVacancies = true; за замовчуванням (false) сервер їх ігнорує й лише віддає свої."
       operationId: SyncVacancies
       requestBody:
-        description: Несинхронізовані локальні вакансії клієнта та мітка часу останньої синхронізації.
+        description: Несинхронізовані локальні вакансії клієнта (до 500 записів) та мітка часу останньої синхронізації.
         content:
           application/json:
             schema:
@@ -1194,7 +1194,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/VacancySyncResponseDto'
         '400':
-          description: Порожній або невалідний запит синхронізації.
+          description: 'Порожній, невалідний запит синхронізації або перевищено ліміт у 500 вакансій за запит.'
           content:
             application/json:
               schema:
@@ -2156,10 +2156,11 @@ components:
       type: object
       properties:
         clientVacancies:
+          maxItems: 500
           type: array
           items:
             $ref: '#/components/schemas/VacancySyncItemDto'
-          description: 'Вакансії, зібрані або змінені клієнтом локально (офлайн).'
+          description: 'Вакансії, зібрані або змінені клієнтом локально (офлайн). До 500 записів за один запит.'
           nullable: true
         lastSyncedAt:
           type: string

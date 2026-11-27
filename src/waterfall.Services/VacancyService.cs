@@ -164,6 +164,14 @@ public class VacancyService : IVacancyService
     public async Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
+        if (request.ClientVacancies is { Count: > VacancySyncRequestDto.MaxClientVacanciesPerRequest })
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(request),
+                request.ClientVacancies.Count,
+                $"За один запит синхронізації дозволено не більше {VacancySyncRequestDto.MaxClientVacanciesPerRequest} вакансій.");
+        }
+
         DateTimeOffset serverTime = DateTimeOffset.UtcNow;
 
         List<VacancyDB> sanitized = [];
@@ -176,8 +184,8 @@ public class VacancyService : IVacancyService
         }
         else if (request.ClientVacancies is { Count: > 0 })
         {
-            // Обмежуємо один пакет до 1000 записів (клієнт нарізає більші обсяги на батчі)
-            foreach (VacancySyncItemDto item in request.ClientVacancies.Take(1000))
+            // Клієнт нарізає більші обсяги на пакети до VacancySyncRequestDto.MaxClientVacanciesPerRequest (500) записів
+            foreach (VacancySyncItemDto item in request.ClientVacancies)
             {
                 VacancyDB? entity = MapFromSyncItem(item, serverTime);
                 if (entity is not null)

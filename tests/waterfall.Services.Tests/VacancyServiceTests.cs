@@ -453,4 +453,55 @@ public sealed class VacancyServiceTests
         Assert.Single(_vacancyRepo.Vacancies);
         Assert.Equal(0, _cacheService.InvalidateCatalogCallCount);
     }
+
+    [Fact]
+    public async Task SyncVacanciesAsync_With500ClientVacancies_ProcessesAll500WithoutTruncation()
+    {
+        VacancyService acceptingService = new(_vacancyRepo, _savedRepo, _cacheService, _logger,
+            syncOptions: Options.Create(new VacancySyncOptions { AcceptClientVacancies = true }));
+        List<VacancySyncItemDto> items = Enumerable.Range(1, 500)
+            .Select(i => new VacancySyncItemDto
+            {
+                Id = Guid.NewGuid(),
+                ExternalId = $"ext-{i}",
+                Title = $"Developer {i}",
+                Company = "TechCo",
+                Source = JobSource.Dou,
+                SourceUrl = $"https://jobs.dou.ua/vacancies/{i}/"
+            })
+            .ToList();
+        VacancySyncRequestDto request = new() { ClientVacancies = items, FullSync = true };
+
+        VacancySyncResponseDto response = await acceptingService.SyncVacanciesAsync(request, CancellationToken.None);
+
+        Assert.Equal(500, response.ReceivedFromClient);
+        Assert.Equal(500, response.CreatedOnServer);
+        Assert.Equal(500, response.TotalServerVacancies);
+        Assert.Equal(500, _vacancyRepo.Vacancies.Count);
+    }
+
+    [Fact]
+    public async Task SyncVacanciesAsync_With501ClientVacancies_ThrowsArgumentOutOfRangeWithoutTruncating()
+    {
+        VacancyService acceptingService = new(_vacancyRepo, _savedRepo, _cacheService, _logger,
+            syncOptions: Options.Create(new VacancySyncOptions { AcceptClientVacancies = true }));
+        List<VacancySyncItemDto> items = Enumerable.Range(1, 501)
+            .Select(i => new VacancySyncItemDto
+            {
+                Id = Guid.NewGuid(),
+                ExternalId = $"ext-{i}",
+                Title = $"Developer {i}",
+                Company = "TechCo",
+                Source = JobSource.Dou,
+                SourceUrl = $"https://jobs.dou.ua/vacancies/{i}/"
+            })
+            .ToList();
+        VacancySyncRequestDto request = new() { ClientVacancies = items, FullSync = true };
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
+            () => acceptingService.SyncVacanciesAsync(request, CancellationToken.None));
+
+        Assert.Empty(_vacancyRepo.Vacancies);
+        Assert.Equal(0, _cacheService.InvalidateCatalogCallCount);
+    }
 }

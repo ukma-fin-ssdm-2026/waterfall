@@ -358,6 +358,104 @@ public sealed class VacancySyncTests : IDisposable
         Assert.Contains("Синхронізовано", vm.StatusMessage, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Sync_WithMoreThan500UnsyncedVacancies_BatchesInto500ItemRequestsAndMarksAllSynced()
+    {
+        EfLocalVacancyStore store = new(_tempDbPath);
+        FakeGateway gateway = new();
+        VacancySyncService syncService = new(gateway, store);
+        List<VacancyDto> unsynced = Enumerable.Range(1, 501)
+            .Select(i => new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                ExternalId = $"offline-{i}",
+                Title = $"Offline Job {i}",
+                Company = "LocalCo",
+                Description = "Offline batch test",
+                Category = ".NET",
+                Location = "Київ",
+                Currency = "USD",
+                Source = JobSource.Dou,
+                SourceUrl = $"https://jobs.dou.ua/vacancies/offline-{i}/"
+            })
+            .ToList();
+        await store.SaveVacanciesAsync(unsynced, isSynced: false, CancellationToken.None);
+
+        VacancySyncResult result = await syncService.SyncWithServerAsync(fullSync: false, CancellationToken.None);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal(501, result.UploadedToServer);
+        Assert.Equal(501, result.TotalLocalVacancies);
+        Assert.Equal(2, gateway.VacancySyncRequests.Count);
+        Assert.Equal(500, gateway.VacancySyncRequests[0].ClientVacancies.Count);
+        Assert.Single(gateway.VacancySyncRequests[1].ClientVacancies);
+        Assert.Empty(await store.GetUnsyncedAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Sync_WhenServerReturns401_ReturnsUnauthorizedGracefullyWithoutMarkingSynced()
+    {
+        EfLocalVacancyStore store = new(_tempDbPath);
+        await store.SaveVacanciesAsync(
+        [
+            new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                ExternalId = "guest-1",
+                Title = "Guest Offline Job",
+                Company = "LocalCo",
+                Source = JobSource.Dou,
+                SourceUrl = "https://jobs.dou.ua/vacancies/guest-1/"
+            }
+        ], isSynced: false, CancellationToken.None);
+
+        FakeGateway gateway = new()
+        {
+            VacancySyncError = new ApiException(
+                HttpStatusCode.Unauthorized,
+                null,
+                "Потрібно увійти в обліковий запис.")
+        };
+        VacancySyncService syncService = new(gateway, store);
+
+        VacancySyncResult result = await syncService.SyncWithServerAsync(fullSync: false, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.True(result.IsUnauthorized);
+        Assert.Equal(1, result.TotalLocalVacancies);
+        Assert.Null(syncService.ClientVacanciesAccepted);
+        Assert.Single(await store.GetUnsyncedAsync(CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Sync_WhenTokenStoreIsEmpty_SkipsServerCallAndReturnsUnauthorized()
+    {
+        EfLocalVacancyStore store = new(_tempDbPath);
+        await store.SaveVacanciesAsync(
+        [
+            new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                ExternalId = "guest-2",
+                Title = "Guest Local Job",
+                Company = "LocalCo",
+                Source = JobSource.Djinni,
+                SourceUrl = "https://djinni.co/jobs/guest-2/"
+            }
+        ], isSynced: false, CancellationToken.None);
+
+        FakeGateway gateway = new();
+        InMemoryTokenStore tokenStore = new();
+        VacancySyncService syncService = new(gateway, store, tokenStore: tokenStore);
+
+        VacancySyncResult result = await syncService.SyncWithServerAsync(fullSync: false, CancellationToken.None);
+
+        Assert.False(result.Succeeded);
+        Assert.True(result.IsUnauthorized);
+        Assert.Empty(gateway.VacancySyncRequests);
+        Assert.Single(await store.GetUnsyncedAsync(CancellationToken.None));
+    }
+
     private sealed class StubHttpHandler(Func<string, string> responder) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>

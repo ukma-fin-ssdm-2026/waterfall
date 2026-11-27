@@ -84,6 +84,7 @@ public sealed record VacancyQueryOptions
 public sealed record VacancySyncResult
 {
     public bool Succeeded { get; init; }
+    public bool IsUnauthorized { get; init; }
     public int UploadedToServer { get; init; }
     public int CreatedOnServer { get; init; }
     public int UpdatedOnServer { get; init; }

@@ -125,21 +125,22 @@ public class VacanciesController : ApiControllerBase
     /// Двостороння синхронізація бази вакансій між локальною БД клієнта та сервером.
     /// </summary>
     /// <remarks>
-    /// Клієнт надсилає вакансії, зібрані або змінені в офлайні; сервер об'єднує їх зі своєю базою
-    /// (дедуплікація за Source+ExternalId / Id / SourceUrl, Last-Write-Wins за LastSeenAt) та повертає
-    /// всі актуальні вакансії сервера (або зміни з моменту LastSyncedAt).
+    /// Клієнт надсилає до 500 вакансій за один запит (<see cref="VacancySyncRequestDto.MaxClientVacanciesPerRequest"/>),
+    /// зібраних або змінених в офлайні; запити з понад 500 вакансіями відхиляються зі статусом 400 Bad Request.
+    /// Сервер об'єднує їх зі своєю базою (дедуплікація за Source+ExternalId / Id / SourceUrl, Last-Write-Wins за LastSeenAt)
+    /// та повертає всі актуальні вакансії сервера (або зміни з моменту LastSyncedAt).
     /// Вакансії клієнта зберігаються лише з VacancySync:AcceptClientVacancies = true; за замовчуванням (false) сервер їх ігнорує й лише віддає свої.
     /// </remarks>
-    /// <param name="request">Несинхронізовані локальні вакансії клієнта та мітка часу останньої синхронізації.</param>
+    /// <param name="request">Несинхронізовані локальні вакансії клієнта (до 500 записів) та мітка часу останньої синхронізації.</param>
     /// <param name="ct">Токен скасування операції.</param>
     /// <response code="200">Синхронізація успішна.</response>
-    /// <response code="400">Порожній або невалідний запит синхронізації.</response>
+    /// <response code="400">Порожній, невалідний запит синхронізації або перевищено ліміт у 500 вакансій за запит.</response>
     /// <response code="401">Потрібно увійти: сервер віддає базу лише користувачам застосунку.</response>
     [HttpPost("sync")]
     [Authorize]
     [SwaggerOperation(
         Summary = "Синхронізувати базу вакансій",
-        Description = "Двосторонній обмін вакансіями між локальною БД клієнта (офлайн-збір і правки) та серверною БД. Вакансії від клієнта сервер зберігає лише з VacancySync:AcceptClientVacancies = true (за замовчуванням false: clientVacancies ігноруються, клієнт лише отримує вакансії сервера).",
+        Description = "Двосторонній обмін вакансіями між локальною БД клієнта (офлайн-збір і правки, до 500 записів у clientVacancies; перевищення ліміту відхиляється з 400 Bad Request) та серверною БД. Вакансії від клієнта сервер зберігає лише з VacancySync:AcceptClientVacancies = true (за замовчуванням false: clientVacancies ігноруються, клієнт лише отримує вакансії сервера).",
         OperationId = "SyncVacancies",
         Tags = ["Vacancies"])]
     [ProducesResponseType(typeof(VacancySyncResponseDto), StatusCodes.Status200OK)]
@@ -152,6 +153,12 @@ public class VacanciesController : ApiControllerBase
         if (request is null || !ModelState.IsValid)
         {
             return ErrorBadRequest("Тіло запиту синхронізації вакансій не може бути порожнім або невалідним.");
+        }
+
+        if (request.ClientVacancies is { Count: > VacancySyncRequestDto.MaxClientVacanciesPerRequest })
+        {
+            return ErrorBadRequest(
+                $"За один запит синхронізації дозволено не більше {VacancySyncRequestDto.MaxClientVacanciesPerRequest} вакансій.");
         }
 
         VacancySyncResponseDto response = await _vacancyService.SyncVacanciesAsync(request, ct);
