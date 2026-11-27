@@ -123,8 +123,10 @@ namespace waterfall.Repository.Migrations
 
             modelBuilder.Entity("Waterfall.Repository.Entities.SavedVacancyDB", b =>
                 {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uniqueidentifier");
+
+                    b.Property<Guid>("VacancyId")
                         .HasColumnType("uniqueidentifier");
 
                     b.Property<string>("Notes")
@@ -134,13 +136,7 @@ namespace waterfall.Repository.Migrations
                     b.Property<DateTimeOffset>("SavedAt")
                         .HasColumnType("datetimeoffset");
 
-                    b.Property<Guid?>("UserId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("VacancyId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
+                    b.HasKey("UserId", "VacancyId");
 
                     b.HasIndex("VacancyId");
 
@@ -434,16 +430,35 @@ namespace waterfall.Repository.Migrations
 
             modelBuilder.Entity("Waterfall.Repository.Entities.SavedVacancyDB", b =>
                 {
+                    b.HasOne("Waterfall.Repository.Entities.UserDB", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
                     b.HasOne("Waterfall.Repository.Entities.VacancyDB", "Vacancy")
                         .WithMany()
                         .HasForeignKey("VacancyId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.Navigation("User");
+
                     b.Navigation("Vacancy");
                 });
 
             modelBuilder.Entity("Waterfall.Repository.Entities.SearchQueryDB", b =>
+                {
+                    b.HasOne("Waterfall.Repository.Entities.UserDB", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("Waterfall.Repository.Entities.UserPersonalDataDB", b =>
                 {
                     b.HasOne("Waterfall.Repository.Entities.UserDB", "User")
                         .WithMany()

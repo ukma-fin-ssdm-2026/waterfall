@@ -106,11 +106,11 @@ public class WaterfallDbSeederTests : IDisposable
                     "IsActive" INTEGER NOT NULL
                 );
                 CREATE TABLE "SavedVacancies" (
-                    "Id" TEXT NOT NULL PRIMARY KEY,
+                    "UserId" TEXT NOT NULL,
                     "VacancyId" TEXT NOT NULL,
-                    "UserId" TEXT NULL,
                     "Notes" TEXT NULL,
-                    "SavedAt" INTEGER NOT NULL
+                    "SavedAt" INTEGER NOT NULL,
+                    PRIMARY KEY ("UserId", "VacancyId")
                 );
                 CREATE TABLE "Users" (
                     "Id" TEXT NOT NULL PRIMARY KEY,

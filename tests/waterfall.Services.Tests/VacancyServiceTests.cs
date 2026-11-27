@@ -129,7 +129,6 @@ public sealed class VacancyServiceTests
         // User has saved vac1
         _savedRepo.SavedVacancies.Add(new SavedVacancyDB
         {
-            Id = Guid.NewGuid(),
             UserId = userId,
             VacancyId = vac1.Id
         });
@@ -247,7 +246,6 @@ public sealed class VacancyServiceTests
 
         _savedRepo.SavedVacancies.Add(new SavedVacancyDB
         {
-            Id = Guid.NewGuid(),
             UserId = userId,
             VacancyId = id
         });

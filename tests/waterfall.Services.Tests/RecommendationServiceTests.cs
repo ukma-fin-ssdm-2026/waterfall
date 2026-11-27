@@ -79,7 +79,6 @@ public sealed class RecommendationServiceTests
         {
             await savedRepo.SaveAsync(new SavedVacancyDB
             {
-                Id = Guid.NewGuid(),
                 UserId = userId,
                 VacancyId = v.Id,
                 Vacancy = v,
@@ -119,7 +118,6 @@ public sealed class RecommendationServiceTests
 
         await savedRepo.SaveAsync(new SavedVacancyDB
         {
-            Id = Guid.NewGuid(),
             UserId = userId,
             VacancyId = pythonSaved.Id,
             Vacancy = pythonSaved,
@@ -136,7 +134,6 @@ public sealed class RecommendationServiceTests
         {
             await savedRepo.SaveAsync(new SavedVacancyDB
             {
-                Id = Guid.NewGuid(),
                 UserId = userId,
                 VacancyId = javaVacancy.Id,
                 Vacancy = javaVacancy,
@@ -170,7 +167,6 @@ public sealed class RecommendationServiceTests
 
         await savedRepo.SaveAsync(new SavedVacancyDB
         {
-            Id = Guid.NewGuid(),
             UserId = userId,
             VacancyId = savedPython.Id,
             Vacancy = savedPython,
@@ -219,7 +215,6 @@ public sealed class RecommendationServiceTests
 
         await savedRepo.SaveAsync(new SavedVacancyDB
         {
-            Id = Guid.NewGuid(),
             UserId = userId,
             VacancyId = savedPython.Id,
             Vacancy = savedPython,

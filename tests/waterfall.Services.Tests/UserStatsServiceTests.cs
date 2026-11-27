@@ -80,9 +80,9 @@ public sealed class UserStatsServiceTests
         VacancyDB pythonView = CreateVacancy("Backend #3", "Backend", "[\"Python\"]");
 
         _savedRepository.SavedVacancies.AddRange(
-            new SavedVacancyDB { Id = Guid.NewGuid(), UserId = userId, Vacancy = pythonDjango },
-            new SavedVacancyDB { Id = Guid.NewGuid(), UserId = userId, Vacancy = pythonSql },
-            new SavedVacancyDB { Id = Guid.NewGuid(), UserId = userId, Vacancy = csharp });
+            new SavedVacancyDB { UserId = userId, VacancyId = pythonDjango.Id, Vacancy = pythonDjango },
+            new SavedVacancyDB { UserId = userId, VacancyId = pythonSql.Id, Vacancy = pythonSql },
+            new SavedVacancyDB { UserId = userId, VacancyId = csharp.Id, Vacancy = csharp });
         _viewRepository.Views.Add(
             new VacancyViewDB { Id = Guid.NewGuid(), UserId = userId, Vacancy = pythonView });
 
@@ -133,14 +133,15 @@ public sealed class UserStatsServiceTests
     {
         // Arrange
         Guid userId = SeedUser("JobSeeker");
-        VacancyDB vacancy = CreateVacancy("Backend", "Backend", "[\"Python\"]");
+        VacancyDB vacancy1 = CreateVacancy("Backend", "Backend", "[\"Python\"]");
+        VacancyDB vacancy2 = CreateVacancy("Backend 2", "Backend", "[\"Python\"]");
         _savedRepository.SavedVacancies.Add(
-            new SavedVacancyDB { Id = Guid.NewGuid(), UserId = userId, Vacancy = vacancy });
+            new SavedVacancyDB { UserId = userId, VacancyId = vacancy1.Id, Vacancy = vacancy1 });
 
         // Act
         UserStatsDto beforeNewSave = await _service.GetStatsAsync(userId);
         _savedRepository.SavedVacancies.Add(
-            new SavedVacancyDB { Id = Guid.NewGuid(), UserId = userId, Vacancy = vacancy });
+            new SavedVacancyDB { UserId = userId, VacancyId = vacancy2.Id, Vacancy = vacancy2 });
         UserStatsDto afterFreshSave = await _service.GetStatsAsync(userId);
 
         // Assert

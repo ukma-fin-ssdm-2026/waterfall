@@ -1,8 +1,10 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Interfaces;
+using Waterfall.Services.Exceptions;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.SavedVacancies;
 
@@ -55,14 +57,21 @@ public class SavedVacancyService : ISavedVacancyService
 
         SavedVacancyDB entity = new SavedVacancyDB
         {
-            Id = Guid.NewGuid(),
             VacancyId = request.VacancyId,
             UserId = userId,
             Notes = request.Notes?.Trim(),
             SavedAt = DateTimeOffset.UtcNow
         };
 
-        SavedVacancyDB saved = await _savedVacancyRepository.SaveAsync(entity, ct);
+        SavedVacancyDB saved;
+        try
+        {
+            saved = await _savedVacancyRepository.SaveAsync(entity, ct);
+        }
+        catch (DbUpdateException ex) when (IsDuplicateKeyViolation(ex))
+        {
+            throw new DuplicateSavedVacancyException(request.VacancyId, ex);
+        }
 
         await _cacheService.InvalidateVacancyAsync(request.VacancyId, ct);
 
@@ -81,14 +90,13 @@ public class SavedVacancyService : ISavedVacancyService
             throw new ArgumentException("Ідентифікатор користувача не може бути порожнім.", nameof(userId));
         }
 
-        SavedVacancyDB? existing = await _savedVacancyRepository.GetByIdAsync(id, userId, ct);
         bool deleted = await _savedVacancyRepository.DeleteAsync(id, userId, ct);
 
-        if (deleted && existing != null)
+        if (deleted)
         {
-            await _cacheService.InvalidateVacancyAsync(existing.VacancyId, ct);
+            await _cacheService.InvalidateVacancyAsync(id, ct);
 
-            _logger.LogInformation("Закладку для вакансії {VacancyId} видалено", existing.VacancyId);
+            _logger.LogInformation("Закладку для вакансії {VacancyId} видалено", id);
         }
 
         return deleted;
@@ -98,11 +106,58 @@ public class SavedVacancyService : ISavedVacancyService
     {
         return new SavedVacancyDto
         {
-            Id = entity.Id,
+            Id = entity.VacancyId,
             VacancyId = entity.VacancyId,
             Vacancy = entity.Vacancy != null ? VacancyService.MapToDto(entity.Vacancy, isSaved: true) : null,
             Notes = entity.Notes,
             SavedAt = entity.SavedAt
         };
     }
+
+    private static bool IsDuplicateKeyViolation(DbUpdateException ex)
+    {
+        for (Exception? current = ex.InnerException; current is not null; current = current.InnerException)
+        {
+            if (IsProviderDuplicateKey(current) || HasDuplicateKeyMessage(current.Message))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsProviderDuplicateKey(Exception exception)
+    {
+        string typeName = exception.GetType().Name;
+        if (string.Equals(typeName, "SqliteException", StringComparison.Ordinal))
+        {
+            int? extendedCode = GetIntProperty(exception, "SqliteExtendedErrorCode");
+            if (extendedCode is 1555 or 2067)
+            {
+                return true;
+            }
+
+            int? errorCode = GetIntProperty(exception, "SqliteErrorCode");
+            return errorCode == 19
+                && exception.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (string.Equals(typeName, "SqlException", StringComparison.Ordinal))
+        {
+            int? number = GetIntProperty(exception, "Number");
+            return number is 2601 or 2627;
+        }
+
+        return false;
+    }
+
+    private static bool HasDuplicateKeyMessage(string message) =>
+        message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("Violation of PRIMARY KEY constraint", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("Violation of UNIQUE KEY constraint", StringComparison.OrdinalIgnoreCase)
+        || message.Contains("Cannot insert duplicate key", StringComparison.OrdinalIgnoreCase);
+
+    private static int? GetIntProperty(Exception exception, string propertyName) =>
+        exception.GetType().GetProperty(propertyName)?.GetValue(exception) as int?;
 }

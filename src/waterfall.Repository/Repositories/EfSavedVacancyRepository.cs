@@ -53,40 +53,38 @@ public class EfSavedVacancyRepository : ISavedVacancyRepository
         return await _context.SavedVacancies
             .AsNoTracking()
             .Include(s => s.Vacancy)
-            .FirstOrDefaultAsync(s => (s.Id == id || s.VacancyId == id) && s.UserId == userId, ct);
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.VacancyId == id, ct);
     }
 
     public async Task<SavedVacancyDB> SaveAsync(SavedVacancyDB entity, CancellationToken ct = default)
     {
-        if (entity.Id == Guid.Empty)
-        {
-            entity.Id = Guid.NewGuid();
-        }
-
         if (entity.SavedAt == default)
         {
             entity.SavedAt = DateTimeOffset.UtcNow;
         }
 
         _context.SavedVacancies.Add(entity);
+        await _context.SaveChangesAsync(ct);
 
+        // Завантажуємо вакансію вже після SaveChanges і від'єднуємо сутність,
+        // щоб уникнути конфліктів відстеження (tracking conflicts) при роботі в одному контексті.
+        _context.Entry(entity).State = EntityState.Detached;
         VacancyDB? vacancy = await _context.Vacancies
             .AsNoTracking()
             .FirstOrDefaultAsync(v => v.Id == entity.VacancyId, ct);
 
-        if (vacancy != null)
+        if (vacancy is not null)
         {
             entity.Vacancy = vacancy;
         }
 
-        await _context.SaveChangesAsync(ct);
         return entity;
     }
 
     public async Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         SavedVacancyDB? entity = await _context.SavedVacancies
-            .FirstOrDefaultAsync(s => (s.Id == id || s.VacancyId == id) && s.UserId == userId, ct);
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.VacancyId == id, ct);
 
         if (entity is null)
         {

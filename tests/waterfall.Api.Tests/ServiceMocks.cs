@@ -5,6 +5,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Waterfall.Services.Exceptions;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.Common;
 using Waterfall.Services.Models.Profile;
@@ -98,16 +99,21 @@ public sealed class FakeSavedVacancyService : ISavedVacancyService
     public Task<SavedVacancyDto?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         GetByIdCalls.Add((id, userId));
-        SavedVacancyDto? match = SavedVacancies.FirstOrDefault(s => s.Id == id || s.VacancyId == id);
+        SavedVacancyDto? match = SavedVacancies.FirstOrDefault(s => s.VacancyId == id || s.Id == id);
         return Task.FromResult(match);
     }
 
     public Task<SavedVacancyDto> SaveAsync(SaveVacancyRequest request, Guid userId, CancellationToken ct = default)
     {
         SaveCalls.Add((request, userId));
+        if (SavedVacancies.Any(s => s.VacancyId == request.VacancyId))
+        {
+            throw new DuplicateSavedVacancyException(request.VacancyId);
+        }
+
         SavedVacancyDto saved = new()
         {
-            Id = Guid.NewGuid(),
+            Id = request.VacancyId,
             VacancyId = request.VacancyId,
             Notes = request.Notes,
             SavedAt = DateTimeOffset.UtcNow
@@ -119,7 +125,7 @@ public sealed class FakeSavedVacancyService : ISavedVacancyService
     public Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         DeleteCalls.Add((id, userId));
-        int removed = SavedVacancies.RemoveAll(s => s.Id == id || s.VacancyId == id);
+        int removed = SavedVacancies.RemoveAll(s => s.VacancyId == id || s.Id == id);
         return Task.FromResult(removed > 0);
     }
 }

@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Swashbuckle.AspNetCore.Annotations;
 using Waterfall.Api.Models.Common;
+using Waterfall.Services.Exceptions;
 using Waterfall.Services.Interfaces;
 using Waterfall.Services.Models.SavedVacancies;
 using Waterfall.Services.Models.Vacancies;
@@ -116,17 +117,19 @@ public class SavedVacanciesController : ApiControllerBase
             return ErrorNotFound($"Неможливо зберегти вакансію: вакансію з ID '{request.VacancyId}' не знайдено.");
         }
 
-        if (vacancy.IsSaved)
+        try
+        {
+            SavedVacancyDto saved = await _savedVacancyService.SaveAsync(request, CurrentUserId!.Value, ct);
+
+            return CreatedAtAction(
+                nameof(GetById),
+                new { id = saved.Id },
+                saved);
+        }
+        catch (DuplicateSavedVacancyException)
         {
             return ErrorConflict($"Вакансію з ID '{request.VacancyId}' уже було додано до списку збережених раніше.");
         }
-
-        SavedVacancyDto saved = await _savedVacancyService.SaveAsync(request, CurrentUserId!.Value, ct);
-
-        return CreatedAtAction(
-            nameof(GetById),
-            new { id = saved.Id },
-            saved);
     }
 
     /// <summary>

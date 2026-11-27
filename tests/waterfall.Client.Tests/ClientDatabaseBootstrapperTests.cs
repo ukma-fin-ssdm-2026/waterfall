@@ -57,7 +57,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         LocalVacancyStats stats = await store.GetStatsAsync();
 
         // Assert
-        Assert.Equal(1, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(2, await ReadUserVersionAsync(dbPath));
         Assert.Equal(0, stats.TotalCount);
         Assert.Equal(0, stats.UnsyncedCount);
         Assert.Null(stats.LastSyncedAt);
@@ -123,7 +123,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         await store.SetLastSyncedAtAsync(syncedAt, "OK");
 
         // Assert
-        Assert.Equal(1, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(2, await ReadUserVersionAsync(dbPath));
         IReadOnlyList<VacancyDto> all = await store.GetAllAsync();
         Assert.Equal(2, all.Count);
         Assert.Contains(all, v => v.Id == existingId && v.Title == "Legacy .NET Dev");
@@ -163,7 +163,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         }
 
         // Assert
-        Assert.Equal(1, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(2, await ReadUserVersionAsync(dbPath));
         EfLocalVacancyStore store = new(dbPath);
         await store.SaveVacanciesAsync(
         [
@@ -195,10 +195,89 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         await secondGeo.SaveCoordinatesAsync("Київ, Хрещатик, 1", 50.45, 30.52, isSynced: false);
 
         // Assert
-        Assert.Equal(1, await ReadUserVersionAsync(firstDbPath));
-        Assert.Equal(1, await ReadUserVersionAsync(secondDbPath));
+        Assert.Equal(2, await ReadUserVersionAsync(firstDbPath));
+        Assert.Equal(2, await ReadUserVersionAsync(secondDbPath));
         (double Latitude, double Longitude)? coords = await secondGeo.GetCoordinatesAsync("Київ, Хрещатик, 1");
         Assert.NotNull(coords);
         Assert.Equal(50.45, coords.Value.Latitude);
+    }
+
+    [Fact]
+    public async Task VersionOneDatabase_UpgradesToVersionTwoAndDropsUnusedUserTables()
+    {
+        // Arrange
+        string dbPath = CreateTempDbPath("v1-to-v2");
+        await using (SqliteConnection connection = new($"Data Source={dbPath}"))
+        {
+            await connection.OpenAsync();
+            await using SqliteCommand cmd = connection.CreateCommand();
+            cmd.CommandText = """
+                CREATE TABLE "Vacancies" (
+                    "Id" TEXT NOT NULL PRIMARY KEY,
+                    "Title" TEXT NOT NULL,
+                    "Company" TEXT NOT NULL,
+                    "Description" TEXT NOT NULL,
+                    "Category" TEXT NOT NULL,
+                    "CategoryGroup" TEXT NULL,
+                    "Location" TEXT NOT NULL,
+                    "FullAddress" TEXT NULL,
+                    "Schedule" TEXT NULL,
+                    "Experience" TEXT NULL,
+                    "ExperienceMonths" INTEGER NULL,
+                    "WorkFormat" INTEGER NOT NULL DEFAULT 0,
+                    "SalaryMin" TEXT NULL,
+                    "SalaryMax" TEXT NULL,
+                    "Currency" TEXT NOT NULL,
+                    "Source" TEXT NOT NULL,
+                    "SourceUrl" TEXT NOT NULL,
+                    "SkillsJson" TEXT NOT NULL,
+                    "SearchText" TEXT NOT NULL DEFAULT '',
+                    "PublishedAt" INTEGER NOT NULL,
+                    "FirstSeenAt" INTEGER NOT NULL,
+                    "LastSeenAt" INTEGER NOT NULL,
+                    "ExternalId" TEXT NULL,
+                    "IsActive" INTEGER NOT NULL,
+                    "IsSynced" INTEGER NOT NULL DEFAULT 1,
+                    "LocalUpdatedAt" INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE TABLE "SyncState" (
+                    "Key" TEXT NOT NULL PRIMARY KEY,
+                    "LastSyncedAt" INTEGER NULL,
+                    "LastSummary" TEXT NULL
+                );
+                CREATE TABLE "GeoLocationCache" (
+                    "Id" TEXT NOT NULL PRIMARY KEY,
+                    "NormalizedAddress" TEXT NOT NULL,
+                    "Latitude" REAL NOT NULL,
+                    "Longitude" REAL NOT NULL,
+                    "CreatedAt" INTEGER NOT NULL,
+                    "IsSynced" INTEGER NOT NULL DEFAULT 1
+                );
+                CREATE TABLE "SavedVacancies" ("Id" TEXT NOT NULL PRIMARY KEY, "VacancyId" TEXT NOT NULL, "UserId" TEXT NULL, "Notes" TEXT NULL, "SavedAt" INTEGER NOT NULL);
+                CREATE TABLE "Users" ("Id" TEXT NOT NULL PRIMARY KEY, "Email" TEXT NOT NULL, "PasswordHash" TEXT NOT NULL, "Role" TEXT NOT NULL, "CreatedAt" INTEGER NOT NULL);
+                CREATE TABLE "UserPersonalData" ("Id" TEXT NOT NULL PRIMARY KEY, "UserId" TEXT NOT NULL, "Address" TEXT NULL, "UpdatedAt" INTEGER NOT NULL);
+                INSERT INTO "Vacancies" ("Id","Title","Company","Description","Category","Location","Currency","Source","SourceUrl","SkillsJson","SearchText","PublishedAt","FirstSeenAt","LastSeenAt","IsActive")
+                VALUES ('22222222-2222-2222-2222-222222222222','Preserved Job','KeepCo','Desc','.NET','Київ','USD','Djinni','https://djinni.co/jobs/keep-1/','[]','preserved job',0,0,0,1);
+                PRAGMA user_version = 1;
+                """;
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        EfLocalVacancyStore store = new(dbPath);
+
+        // Act
+        IReadOnlyList<VacancyDto> vacancies = await store.GetAllAsync();
+
+        // Assert
+        Assert.Equal(2, await ReadUserVersionAsync(dbPath));
+        Assert.Single(vacancies);
+        Assert.Equal("Preserved Job", vacancies[0].Title);
+
+        await using SqliteConnection verifyConn = new($"Data Source={dbPath}");
+        await verifyConn.OpenAsync();
+        await using SqliteCommand tableCmd = verifyConn.CreateCommand();
+        tableCmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('SavedVacancies', 'Users', 'UserPersonalData');";
+        long unusedTables = Convert.ToInt64(await tableCmd.ExecuteScalarAsync());
+        Assert.Equal(0, unusedTables);
     }
 }
