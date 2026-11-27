@@ -6,6 +6,7 @@ using System.Globalization;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
 using Waterfall.Client.ViewModels;
+using Waterfall.Repository.Helpers;
 using Waterfall.Repository.Normalization;
 
 namespace Waterfall.Client.Services;
@@ -102,21 +103,21 @@ public static class VacancyFilterEngine
     public static bool ContainsWord(VacancyDto v, string word, bool titleOnly, bool includeLocationFields = false)
     {
         if (string.IsNullOrWhiteSpace(word)) return true;
-        if (v.Title.Contains(word, StringComparison.OrdinalIgnoreCase)) return true;
+        if (VacancyWordMatcher.ContainsWord(v.Title, word)) return true;
         if (titleOnly) return false;
 
-        if (v.Skills.Any(s => s.Contains(word, StringComparison.OrdinalIgnoreCase))
-            || v.Company.Contains(word, StringComparison.OrdinalIgnoreCase)
-            || v.Category.Contains(word, StringComparison.OrdinalIgnoreCase)
-            || v.Description.Contains(word, StringComparison.OrdinalIgnoreCase))
+        if (v.Skills.Any(s => VacancyWordMatcher.MatchesSkillTag(s, word))
+            || VacancyWordMatcher.ContainsWord(v.Company, word)
+            || VacancyWordMatcher.ContainsWord(v.Category, word)
+            || VacancyWordMatcher.ContainsWord(v.Description, word))
         {
             return true;
         }
 
         return includeLocationFields
-            && ((v.CategoryGroup?.Contains(word, StringComparison.OrdinalIgnoreCase) ?? false)
-                || v.Location.Contains(word, StringComparison.OrdinalIgnoreCase)
-                || (v.FullAddress?.Contains(word, StringComparison.OrdinalIgnoreCase) ?? false));
+            && (VacancyWordMatcher.ContainsWord(v.CategoryGroup, word)
+                || VacancyWordMatcher.ContainsWord(v.Location, word)
+                || VacancyWordMatcher.ContainsWord(v.FullAddress, word));
     }
 
     public static IEnumerable<VacancyDto> SortVacancies(

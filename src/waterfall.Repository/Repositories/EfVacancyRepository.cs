@@ -6,6 +6,7 @@
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Data;
 using Waterfall.Repository.Entities;
+using Waterfall.Repository.Helpers;
 using Waterfall.Repository.Interfaces;
 
 namespace Waterfall.Repository.Repositories;
@@ -95,12 +96,16 @@ public class EfVacancyRepository : IVacancyRepository
             query = query.Where(v => v.CategoryGroup == group);
         }
 
-        if (skills is { Count: > 0 })
+        List<string> skillTerms = skills is { Count: > 0 }
+            ? skills.Where(skill => !string.IsNullOrWhiteSpace(skill)).Select(skill => skill.Trim()).ToList()
+            : [];
+
+        if (skillTerms.Count > 0)
         {
-            // Кожен термін має знайтися в тегах (SkillsJson) або в основних текстових полях вакансії; терміни — через AND
-            foreach (string skill in skills.Where(skill => !string.IsNullOrWhiteSpace(skill)))
+            // Попередній SQL-фільтр звужує вибірку, а точні межі слів і теги перевіряються нижче через VacancyWordMatcher
+            foreach (string skill in skillTerms)
             {
-                string term = skill.Trim().ToLowerInvariant();
+                string term = skill.ToLowerInvariant();
                 query = query.Where(v => v.SkillsJson.ToLower().Contains(term) || v.Title.ToLower().Contains(term) || v.Company.ToLower().Contains(term) || v.Description.ToLower().Contains(term));
             }
         }
@@ -135,8 +140,6 @@ public class EfVacancyRepository : IVacancyRepository
             query = activeQuery.Concat(archiveQuery);
         }
 
-        int totalCount = await query.CountAsync(ct);
-
         bool desc = !string.Equals(sortOrder, "asc", StringComparison.OrdinalIgnoreCase);
         query = (sortBy?.ToLower()) switch
         {
@@ -148,6 +151,17 @@ public class EfVacancyRepository : IVacancyRepository
         };
 
         int offset = (page - 1) * pageSize;
+        if (skillTerms.Count > 0)
+        {
+            List<VacancyDB> candidates = await query.ToListAsync(ct);
+            List<VacancyDB> matched = candidates
+                .Where(v => skillTerms.All(term =>
+                    VacancyWordMatcher.MatchesVacancySkill(v.SkillsJson, v.Title, v.Company, v.Description, term)))
+                .ToList();
+            return (matched.Skip(offset).Take(pageSize).ToList(), matched.Count);
+        }
+
+        int totalCount = await query.CountAsync(ct);
         List<VacancyDB> items = await query
             .Skip(offset)
             .Take(pageSize)
