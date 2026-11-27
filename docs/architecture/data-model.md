@@ -88,7 +88,7 @@
 У фактичній реалізації Entity Framework Core окрім базових логічних сутностей моделі використовуються також допоміжні таблиці та клієнтське локальне сховище:
 
 - **Серверна БД (`WaterfallDbContext`):**
-  - `Vacancies` (`VacancyDB`) — PK `Guid Id`, поля `ExternalId`, `Source`, `SourceUrl`, `Title`, `Company`, `Description`, `Category`, `CategoryGroup`, `Location`, `FullAddress`, `Schedule`, `Experience`, `ExperienceMonths`, `WorkFormat`, `SalaryMin`, `SalaryMax`, `Currency`, `SkillsJson`, `SearchText`, `PublishedAt`, `FirstSeenAt`, `LastSeenAt`, `IsActive`. Усі похідні поля нормалізації автоматично перераховуються в `SaveChanges`/`SaveChangesAsync` (`VacancyNormalizer.Apply`).
+  - `Vacancies` (`VacancyDB`) — PK `Guid Id`, поля `ExternalId`, `Source`, `SourceUrl`, `Title`, `Company`, `Description`, `Category`, `CategoryGroup`, `Location`, `FullAddress`, `Schedule`, `Experience`, `ExperienceMonths`, `WorkFormat`, `SalaryMin`, `SalaryMax`, `Currency`, `SkillsJson`, `PublishedAt`, `FirstSeenAt`, `LastSeenAt`, `IsActive`. Усі похідні поля нормалізації автоматично перераховуються в `SaveChanges`/`SaveChangesAsync` (`VacancyNormalizer.Apply`).
   - `SavedVacancies` (`SavedVacancyDB`), `Users` (`UserDB`), `UserPersonalData` (`UserPersonalDataDB`, 1:1 адреса профілю користувача), `SearchQueries` (`SearchQueryDB`), `VacancyViews` (`VacancyViewDB`), `ChatSessions` (`ChatSessionDB`), `ChatMessages` (`ChatMessageDB`), `ChatMessageVacancies` (`ChatMessageVacancyDB`).
   - `GeoLocationCache` (`GeoLocationCacheDB`) — постійний кеш геокодування адрес (`NormalizedAddress`, `Latitude`, `Longitude`, `CreatedAt`).
   - `SiteSearchCache` (`SiteSearchCacheDB`) — кеш результатів пошуку на сайтах (`CacheKey`, `ExternalIdsJson`, `CachedAt`, TTL 3 години).

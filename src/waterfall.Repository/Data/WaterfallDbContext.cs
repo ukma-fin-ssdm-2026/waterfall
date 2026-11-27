@@ -33,7 +33,7 @@ public class WaterfallDbContext : DbContext
     public DbSet<ChatMessageDB> ChatMessages => Set<ChatMessageDB>();
     public DbSet<ChatMessageVacancyDB> ChatMessageVacancies => Set<ChatMessageVacancyDB>();
 
-    // AI: похідні поля вакансії (SearchText, WorkFormat, CategoryGroup) обчислюються на кожному записі; перевірено: тести репозиторію та нормалізатора
+    // AI: похідні поля вакансії (WorkFormat, CategoryGroup) обчислюються на кожному записі; перевірено: тести репозиторію та нормалізатора
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         NormalizeVacancies();
@@ -58,7 +58,7 @@ public class WaterfallDbContext : DbContext
     }
 
     /// <summary>
-    /// Перераховує похідні атрибути вакансій перед записом: пошук, формат роботи й широку категорію.
+    /// Перераховує похідні атрибути вакансій перед записом: формат роботи й широку категорію.
     /// Так парсери, POST/PUT каталогу та сідування дають однакові дані без окремих викликів у кожному місці.
     /// </summary>
     private void NormalizeVacancies()

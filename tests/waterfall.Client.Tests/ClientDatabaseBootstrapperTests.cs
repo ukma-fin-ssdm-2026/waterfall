@@ -57,7 +57,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         LocalVacancyStats stats = await store.GetStatsAsync();
 
         // Assert
-        Assert.Equal(4, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(5, await ReadUserVersionAsync(dbPath));
         Assert.Equal(0, stats.TotalCount);
         Assert.Equal(0, stats.UnsyncedCount);
         Assert.Null(stats.LastSyncedAt);
@@ -123,7 +123,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         await store.SetLastSyncedAtAsync(syncedAt, "OK");
 
         // Assert
-        Assert.Equal(4, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(5, await ReadUserVersionAsync(dbPath));
         IReadOnlyList<VacancyDto> all = await store.GetAllAsync();
         Assert.Equal(2, all.Count);
         Assert.Contains(all, v => v.Id == existingId && v.Title == "Legacy .NET Dev");
@@ -163,7 +163,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         }
 
         // Assert
-        Assert.Equal(4, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(5, await ReadUserVersionAsync(dbPath));
         EfLocalVacancyStore store = new(dbPath);
         await store.SaveVacanciesAsync(
         [
@@ -195,8 +195,8 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         await secondGeo.SaveCoordinatesAsync("Київ, Хрещатик, 1", 50.45, 30.52, isSynced: false);
 
         // Assert
-        Assert.Equal(4, await ReadUserVersionAsync(firstDbPath));
-        Assert.Equal(4, await ReadUserVersionAsync(secondDbPath));
+        Assert.Equal(5, await ReadUserVersionAsync(firstDbPath));
+        Assert.Equal(5, await ReadUserVersionAsync(secondDbPath));
         (double Latitude, double Longitude)? coords = await secondGeo.GetCoordinatesAsync("Київ, Хрещатик, 1");
         Assert.NotNull(coords);
         Assert.Equal(50.45, coords.Value.Latitude);
@@ -269,7 +269,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         IReadOnlyList<VacancyDto> vacancies = await store.GetAllAsync();
 
         // Assert
-        Assert.Equal(4, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(5, await ReadUserVersionAsync(dbPath));
         Assert.Single(vacancies);
         Assert.Equal("Preserved Job", vacancies[0].Title);
 
@@ -340,7 +340,7 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         IReadOnlyList<VacancyDto> vacancies = await store.GetAllAsync();
 
         // Assert
-        Assert.Equal(4, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(5, await ReadUserVersionAsync(dbPath));
         VacancyDto survivor = Assert.Single(vacancies);
         Assert.Equal("New Local", survivor.Title);
 
@@ -410,9 +410,22 @@ public sealed class ClientDatabaseBootstrapperTests : IDisposable
         IReadOnlyList<VacancyDto> vacancies = await store.GetAllAsync();
 
         // Assert
-        Assert.Equal(4, await ReadUserVersionAsync(dbPath));
+        Assert.Equal(5, await ReadUserVersionAsync(dbPath));
         Assert.Null(vacancies.Single(v => v.ExternalId == "c1").FullAddress);
         Assert.Null(vacancies.Single(v => v.ExternalId == "c2").FullAddress);
         Assert.Equal("Київ, вул. Садова, 2а", vacancies.Single(v => v.ExternalId == "c3").FullAddress);
+
+        await using SqliteConnection verifyConn = new($"Data Source={dbPath}");
+        await verifyConn.OpenAsync();
+        await using SqliteCommand pragma = verifyConn.CreateCommand();
+        pragma.CommandText = "PRAGMA table_info('Vacancies');";
+        await using System.Data.Common.DbDataReader reader = await pragma.ExecuteReaderAsync();
+        List<string> columns = [];
+        while (await reader.ReadAsync())
+        {
+            columns.Add(reader.GetString(1));
+        }
+
+        Assert.DoesNotContain("SearchText", columns, StringComparer.OrdinalIgnoreCase);
     }
 }

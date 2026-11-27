@@ -8,7 +8,7 @@ using Waterfall.Repository.Normalization;
 namespace Waterfall.Repository.Tests;
 
 /// <summary>
-/// Тести нормалізатора вакансії: похідні поля (пошуковий текст, формат роботи, широка категорія)
+/// Тести нормалізатора вакансії: похідні поля (формат роботи, широка категорія)
 /// та їх перерахунок на кожному шляху запису через DbContext.
 /// </summary>
 public sealed class VacancyNormalizerTests : IDisposable
@@ -54,36 +54,6 @@ public sealed class VacancyNormalizerTests : IDisposable
     public void ResolveWorkFormat_DerivesFlagsFromLocationAndSchedule(string? location, string? schedule, WorkFormat expected)
     {
         Assert.Equal(expected, VacancyNormalizer.ResolveWorkFormat(location, schedule));
-    }
-
-    [Fact]
-    public void BuildSearchText_LowercasesCyrillicAndIncludesTags()
-    {
-        VacancyDB vacancy = Vacancy();
-        vacancy.Title = "Senior Бухгалтер";
-        vacancy.Company = "Фінансова Група";
-        vacancy.Description = "Облік та Звітність";
-        vacancy.SkillsJson = "[\"1С\", \"Excel\"]";
-
-        string searchText = VacancyNormalizer.BuildSearchText(vacancy);
-
-        Assert.Contains("senior бухгалтер", searchText, StringComparison.Ordinal);
-        Assert.Contains("фінансова група", searchText, StringComparison.Ordinal);
-        Assert.Contains("облік та звітність", searchText, StringComparison.Ordinal);
-        Assert.Contains("1с", searchText, StringComparison.Ordinal);
-        Assert.Contains("excel", searchText, StringComparison.Ordinal);
-        Assert.DoesNotContain("Бухгалтер", searchText, StringComparison.Ordinal);
-    }
-
-    [Fact]
-    public void BuildSearchText_BrokenSkillsJson_StillGivesText()
-    {
-        VacancyDB vacancy = Vacancy();
-        vacancy.SkillsJson = "{ не json";
-
-        string searchText = VacancyNormalizer.BuildSearchText(vacancy);
-
-        Assert.Contains("backend developer", searchText, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -133,7 +103,6 @@ public sealed class VacancyNormalizerTests : IDisposable
         VacancyDB stored = await verify.Vacancies.SingleAsync(v => v.Id == vacancy.Id);
         Assert.Equal(WorkFormat.Remote, stored.WorkFormat);
         Assert.Equal("QA", stored.CategoryGroup);
-        Assert.Contains("бухгалтер", stored.SearchText, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -153,6 +122,5 @@ public sealed class VacancyNormalizerTests : IDisposable
         VacancyDB stored = await verify.Vacancies.SingleAsync(v => v.Id == vacancy.Id);
         Assert.Equal(WorkFormat.Remote, stored.WorkFormat);
         Assert.Equal("Legal", stored.CategoryGroup);
-        Assert.Contains("юрист", stored.SearchText, StringComparison.Ordinal);
     }
 }

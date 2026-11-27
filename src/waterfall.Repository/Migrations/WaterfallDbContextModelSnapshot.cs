@@ -315,10 +315,6 @@ namespace waterfall.Repository.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("SearchText")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
                     b.Property<string>("SkillsJson")
                         .IsRequired()
                         .HasColumnType("TEXT");

@@ -80,7 +80,7 @@ public class WaterfallDbSeederTests : IDisposable
     [Fact]
     public async Task SeedAsync_UpgradesLegacySqliteSchemaWithoutCategoryGroupAndBackfillsNormalizedFields()
     {
-        // Імітуємо старий файл waterfall.db, створений до додавання CategoryGroup/ExperienceMonths/WorkFormat/SearchText
+        // Імітуємо старий файл waterfall.db, створений до додавання CategoryGroup/ExperienceMonths/WorkFormat
         using (SqliteCommand cmd = _connection.CreateCommand())
         {
             cmd.CommandText = """
@@ -140,7 +140,6 @@ public class WaterfallDbSeederTests : IDisposable
             Assert.Equal("Software Development", upgraded.CategoryGroup);
             Assert.Equal(Waterfall.Repository.Entities.WorkFormat.Remote, upgraded.WorkFormat);
             Assert.Equal(36, upgraded.ExperienceMonths);
-            Assert.Contains("senior c# developer", upgraded.SearchText, StringComparison.Ordinal);
         }
     }
 

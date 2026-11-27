@@ -13,8 +13,9 @@ namespace Waterfall.Repository.Interfaces;
 public interface IVacancyRepository
 {
     /// <summary>
-    /// Сторінка вакансій за фільтрами каталогу. Пошук і навички працюють по <see cref="VacancyDB.SearchText"/>
-    /// (нижній регістр), <paramref name="workFormat"/> — за принципом «будь-який із вибраних форматів»,
+    /// Сторінка вакансій за фільтрами каталогу. Пошук і навички працюють по
+    /// <see cref="VacancyDB.Title"/>, <see cref="VacancyDB.Company"/>, <see cref="VacancyDB.Description"/> та
+    /// <see cref="VacancyDB.SkillsJson"/> (без урахування регістру), <paramref name="workFormat"/> — за принципом «будь-який із вибраних форматів»,
     /// а <paramref name="maxExperienceMonths"/> не відсіює вакансії з невідомим досвідом.
     /// </summary>
     Task<(IReadOnlyList<VacancyDB> Items, int TotalCount)> GetAllAsync(

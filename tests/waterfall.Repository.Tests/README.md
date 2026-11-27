@@ -17,7 +17,7 @@
 | Клас тесту | Кількість випадків | Що перевіряє |
 | :--- | :---: | :--- |
 | [`EfVacancyRepositoryTests`](EfVacancyRepositoryTests.cs) | 39 | `GetAllAsync` (сортування, пошук кирилицею, усі фільтри: `CategoryGroup`, `WorkFormat`, `ExperienceMonths`, `Location`, `Skills`, зарплати, джерела, пагінація), `BulkUpsertAsync`, `SyncMergeAsync` (дедуплікація та Last-Write-Wins), `GetAllForSyncAsync` (повна та дельта-вибірка), архівація застарілих |
-| [`VacancyNormalizerTests`](VacancyNormalizerTests.cs) | 34 | обчислення `CategoryGroup`, `WorkFormat`, `ExperienceMonths`, `SearchText` |
+| [`VacancyNormalizerTests`](VacancyNormalizerTests.cs) | 32 | обчислення `CategoryGroup`, `WorkFormat`, `ExperienceMonths` |
 | [`VacancyExperienceParserTests`](VacancyExperienceParserTests.cs) | 27 | розбір досвіду роботи з текстів українською й англійською у місяці |
 | [`EfChatSessionRepositoryTests`](EfChatSessionRepositoryTests.cs) | 13 | діалоги ШІ, вікно історії, FK-захист від вигаданих вакансій (FUNC-001) |
 | [`EfSavedVacancyRepositoryTests`](EfSavedVacancyRepositoryTests.cs) | 9 | закладки, ізоляція користувачів, перевірки існування та пакетне `GetSavedVacancyIdsAsync` |
