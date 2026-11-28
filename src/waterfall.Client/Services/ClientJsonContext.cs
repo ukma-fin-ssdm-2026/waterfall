@@ -20,7 +20,7 @@ namespace Waterfall.Client.Services;
 /// тож кожен новий тип запиту/відповіді треба додати сюди атрибутом.
 /// Сервер віддає перелічення назвою ("Djinni", не 3), тож читаємо/пишемо їх рядками.
 /// </summary>
-[JsonSourceGenerationOptions(JsonSerializerDefaults.Web, Converters = [typeof(JsonStringEnumConverter)])]
+[JsonSourceGenerationOptions(JsonSerializerDefaults.Web, UseStringEnumConverter = true)]
 [JsonSerializable(typeof(PagedResult<VacancyDto>))]
 [JsonSerializable(typeof(List<VacancyDto>))]
 [JsonSerializable(typeof(List<string>))]

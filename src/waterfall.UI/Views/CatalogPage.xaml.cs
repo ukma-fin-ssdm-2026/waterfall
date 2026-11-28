@@ -133,6 +133,12 @@ public partial class CatalogPage : ContentPage, IHostedPage
             return true;
         }
 
+        if (_viewModel.Selection.IsSelectionMode)
+        {
+            _viewModel.Selection.CancelSelectionModeCommand.Execute(null);
+            return true;
+        }
+
         return base.OnBackButtonPressed();
     }
 
@@ -183,6 +189,15 @@ public partial class CatalogPage : ContentPage, IHostedPage
         if (_viewModel.ImportVacanciesCommand.CanExecute(null))
         {
             await _viewModel.ImportVacanciesCommand.ExecuteAsync(null);
+        }
+    }
+
+    private void OnToggleSelectionModeTapped(object? sender, TappedEventArgs e)
+    {
+        OverflowMenuLayer.IsVisible = false;
+        if (_viewModel.ToggleSelectionModeCommand.CanExecute(null))
+        {
+            _viewModel.ToggleSelectionModeCommand.Execute(null);
         }
     }
 

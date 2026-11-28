@@ -76,6 +76,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         CanTrackViews = tokenStore is null;
         Pager = new VacancyPager(ShowCurrentPage);
         Pager.PropertyChanged += OnPagerPropertyChanged;
+        Selection = new VacancySelectionCoordinator(messenger, () => CanTrackViews, () => _vacancies);
 
         CategoryGroupOptions = ["Усі групи", .. VacancyCategoryMap.All];
         AvailableCategories.Add("Усі категорії");
@@ -200,26 +201,34 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 HideViewed = false;
             }
 
+            Selection.Reset();
+
             for (int i = 0; i < _allVacancies.Count; i++)
             {
-                _allVacancies[i] = _allVacancies[i] with { IsViewed = false };
+                _allVacancies[i] = _allVacancies[i] with { IsViewed = false, IsSaved = false };
             }
 
             for (int i = 0; i < _filteredDtos.Count; i++)
             {
-                _filteredDtos[i] = _filteredDtos[i] with { IsViewed = false };
+                _filteredDtos[i] = _filteredDtos[i] with { IsViewed = false, IsSaved = false };
             }
         }
 
         foreach (VacancyItemViewModel item in Vacancies)
         {
             item.CanMarkViewed = canTrack;
+            item.CanSave = canTrack;
+            item.CanUseAi = canTrack;
+            item.IsSelectionModeActive = Selection.IsSelectionMode;
             if (!canTrack)
             {
                 item.IsViewed = false;
+                item.IsSaved = false;
             }
         }
     }
+
+    public VacancySelectionCoordinator Selection { get; }
 
     public VacancyPager Pager { get; }
 
@@ -1595,7 +1604,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     private VacancyItemViewModel CreateCard(VacancyDto dto)
     {
         double? cachedKm = _distanceCache.TryGetValue(dto.Id, out double? km) ? km : null;
-        return new VacancyItemViewModel(
+        VacancyItemViewModel item = new(
             dto,
             _gateway,
             _messenger,
@@ -1604,7 +1613,12 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             _distanceService,
             onDistanceCalculated: (id, dist) => _distanceCache[id] = dist,
             initialDistanceKm: cachedKm,
-            canMarkViewed: CanTrackViews);
+            canMarkViewed: CanTrackViews,
+            canSave: CanTrackViews,
+            canUseAi: CanTrackViews,
+            selectionState: Selection.State);
+        Selection.ApplyToCard(item);
+        return item;
     }
 
     private bool MatchesAllFilters(VacancyDto v, FilterSnapshot f)
@@ -1889,6 +1903,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         Pager.PropertyChanged -= OnPagerPropertyChanged;
+        Selection.Dispose();
         foreach (VacancyItemViewModel item in _vacancies)
         {
             item.Detach();

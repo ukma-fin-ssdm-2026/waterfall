@@ -196,6 +196,7 @@ public partial class VacancyCard : ContentView
         AddressLabel.TextColor = p.TextSecondary;
         MapToggleLabel.TextColor = p.Primary;
         DescriptionLabel.TextColor = p.TextSecondary;
+        NotesLabel.TextColor = p.TextMuted;
 
         SkillChip0.BackgroundColor = p.TonalSurface;
         SkillLabel0.TextColor = p.TextSecondary;
@@ -218,6 +219,7 @@ public partial class VacancyCard : ContentView
             ApplySalaryState(_currentViewModel);
             ApplySavedState(_currentViewModel);
             ApplyViewedState(_currentViewModel);
+            ApplySelectionState(_currentViewModel);
             UpdateMetaRow(_currentViewModel);
             UpdateDetailsToggle(_currentViewModel);
             if (_currentViewModel.IsMapExpanded)
@@ -240,6 +242,12 @@ public partial class VacancyCard : ContentView
             ViewedIconLabel.Text = Icons.Eye;
             ViewedIconLabel.TextColor = p.TextMuted;
             DetailsChevronLabel.TextColor = p.TextMuted;
+            SelectBorder.IsVisible = false;
+            SelectBorder.Stroke = s_heartMutedBrush;
+            SelectBorder.BackgroundColor = Colors.Transparent;
+            SelectBorder.Opacity = 1.0;
+            SelectIconLabel.IsVisible = false;
+            AiTextLabel.Text = "ШІ-аналіз";
         }
     }
 
@@ -254,6 +262,7 @@ public partial class VacancyCard : ContentView
         if (_currentViewModel is not null)
         {
             _currentViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _currentViewModel.SelectionLimitReached -= OnSelectionLimitReached;
         }
 
         _currentViewModel = next;
@@ -261,6 +270,7 @@ public partial class VacancyCard : ContentView
         if (_currentViewModel is not null)
         {
             _currentViewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _currentViewModel.SelectionLimitReached += OnSelectionLimitReached;
             BindToViewModel(_currentViewModel);
             _ = _currentViewModel.EnsureDistanceLoadedAsync();
         }
@@ -290,6 +300,8 @@ public partial class VacancyCard : ContentView
         ApplySalaryState(vm);
         ApplySavedState(vm);
         ApplyViewedState(vm);
+        ApplySelectionState(vm);
+        AiButtonBorder.IsVisible = vm.CanUseAi;
 
         CompanyLabel.Text = vm.Company;
         UpdateMetaRow(vm);
@@ -316,6 +328,8 @@ public partial class VacancyCard : ContentView
         }
 
         DescriptionLabel.Text = vm.Description;
+        NotesLabel.Text = vm.NotesDisplay ?? string.Empty;
+        NotesLabel.IsVisible = vm.HasNotes;
         UpdateSkillChips(vm);
         UpdateSourceRow(vm);
         UpdateDetailsToggle(vm);
@@ -342,6 +356,14 @@ public partial class VacancyCard : ContentView
         AddressRow.IsVisible = false;
         MapToggleLabel.IsVisible = false;
         DescriptionLabel.Text = string.Empty;
+        NotesLabel.Text = string.Empty;
+        NotesLabel.IsVisible = false;
+        SelectBorder.IsVisible = false;
+        SelectBorder.Stroke = s_heartMutedBrush;
+        SelectBorder.BackgroundColor = Colors.Transparent;
+        SelectBorder.Opacity = 1.0;
+        SelectIconLabel.IsVisible = false;
+        AiTextLabel.Text = "ШІ-аналіз";
         SkillsRow.IsVisible = false;
         SkillChip0.IsVisible = false;
         SkillChip1.IsVisible = false;
@@ -381,8 +403,22 @@ public partial class VacancyCard : ContentView
         }
     }
 
+    private void ApplySelectionState(VacancyItemViewModel vm)
+    {
+        CardPalette p = s_palette;
+        bool selected = vm.IsSelected;
+        SelectBorder.IsVisible = vm.IsSelectionModeActive;
+        SelectBorder.Stroke = selected ? s_heartPrimaryBrush : s_heartMutedBrush;
+        SelectBorder.BackgroundColor = selected ? p.PrimarySurface : Colors.Transparent;
+        SelectBorder.Opacity = vm.IsSelectionLocked ? 0.4 : 1.0;
+        SelectIconLabel.IsVisible = selected;
+        AiTextLabel.Text = vm.SelectionBadgeText;
+        SemanticProperties.SetDescription(SelectBorder, vm.SelectionHintText);
+    }
+
     private void ApplySavedState(VacancyItemViewModel vm)
     {
+        HeartBorder.IsVisible = vm.CanSave;
         if (vm.IsSaved)
         {
             HeartPath.Fill = s_heartPrimaryBrush;
@@ -609,6 +645,22 @@ public partial class VacancyCard : ContentView
         {
             case nameof(VacancyItemViewModel.IsSaved):
                 ApplySavedState(_currentViewModel);
+                break;
+            case nameof(VacancyItemViewModel.CanSave):
+                ApplySavedState(_currentViewModel);
+                break;
+            case nameof(VacancyItemViewModel.IsSelected):
+            case nameof(VacancyItemViewModel.IsSelectionLocked):
+            case nameof(VacancyItemViewModel.SelectionBadgeText):
+            case nameof(VacancyItemViewModel.IsSelectionModeActive):
+                ApplySelectionState(_currentViewModel);
+                break;
+            case nameof(VacancyItemViewModel.CanUseAi):
+                AiButtonBorder.IsVisible = _currentViewModel.CanUseAi;
+                break;
+            case nameof(VacancyItemViewModel.Notes):
+                NotesLabel.Text = _currentViewModel.NotesDisplay ?? string.Empty;
+                NotesLabel.IsVisible = _currentViewModel.HasNotes;
                 break;
             case nameof(VacancyItemViewModel.CanMarkViewed):
                 ApplyViewedState(_currentViewModel);
@@ -1030,6 +1082,14 @@ public partial class VacancyCard : ContentView
         }
     }
 
+    private void OnToggleSelectionTapped(object? sender, TappedEventArgs e)
+    {
+        if (_currentViewModel is { ToggleSelectionCommand: { } cmd } && cmd.CanExecute(null))
+        {
+            cmd.Execute(null);
+        }
+    }
+
     private void OnToggleSaveTapped(object? sender, TappedEventArgs e)
     {
         if (_currentViewModel is { ToggleSaveCommand: { } cmd } && cmd.CanExecute(null))
@@ -1072,5 +1132,28 @@ public partial class VacancyCard : ContentView
         {
             cmd.Execute(null);
         }
+    }
+
+    private void OnSelectionLimitReached(object? sender, EventArgs e)
+    {
+        if (!MainThread.IsMainThread)
+        {
+            MainThread.BeginInvokeOnMainThread(() => _ = ShakeSelectionAsync());
+            return;
+        }
+
+        _ = ShakeSelectionAsync();
+    }
+
+    private async Task ShakeSelectionAsync()
+    {
+        SelectBorder.CancelAnimations();
+        for (int i = 0; i < 2; i++)
+        {
+            await SelectBorder.TranslateToAsync(-4, 0, 60, Easing.Linear);
+            await SelectBorder.TranslateToAsync(4, 0, 60, Easing.Linear);
+        }
+
+        await SelectBorder.TranslateToAsync(0, 0, 60, Easing.Linear);
     }
 }

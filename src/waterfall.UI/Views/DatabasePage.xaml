@@ -103,7 +103,7 @@
     <Grid>
 
         <!-- ==================== ШАР 0: БАЗА ВАКАНСІЙ ==================== -->
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto">
 
             <!-- Рядок 0: Пошук + Сортування + Фільтри + (на Desktop: [Офлайн], Синхронізувати, ⋮) -->
             <controls:VacancySearchToolbar Grid.Row="0"
@@ -173,6 +173,7 @@
                     <controls:FilterChipControl Text="З ЗП" Command="{Binding ToggleOnlyWithSalaryCommand}" IsActive="{Binding OnlyWithSalary}" />
                     <controls:FilterChipControl Text="Обрані" Command="{Binding ToggleOnlySavedCommand}" IsActive="{Binding OnlySaved}" />
                     <controls:FilterChipControl Text="Без переглянутих" Command="{Binding ToggleHideViewedCommand}" IsActive="{Binding HideViewed}" IsVisible="{Binding CanTrackViews}" />
+                    <controls:FilterChipControl Text="Обрати для ШІ" Command="{Binding Selection.ToggleSelectionModeCommand}" IsActive="{Binding Selection.IsSelectionMode}" IsVisible="{Binding CanTrackViews}" IsAccentText="True" />
                     <controls:FilterChipControl Text="Скинути" Command="{Binding ResetFiltersCommand}" IsAccentText="True" />
                 </HorizontalStackLayout>
             </ScrollView>
@@ -241,6 +242,9 @@
                     <controls:VacancyPagerBar Pager="{Binding Pager}" SummaryText="{Binding PagerSummaryText}" />
                 </controls:VacancyListView.FooterContent>
             </controls:VacancyListView>
+
+            <!-- Рядок 6: Панель вибору для групового ШІ-аналізу (FR-010), лише поки активний режим вибору -->
+            <controls:VacancySelectionTray Grid.Row="6" Coordinator="{Binding Selection}" />
         </Grid>
 
         <!-- ==================== ШАР 1: ЛІНИВИЙ OVERLAY SHEET — ФІЛЬТРИ БД ==================== -->
@@ -275,6 +279,20 @@
                     <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
                         <Label Text="{x:Static res:Icons.Download}" FontFamily="Lucide" FontSize="14" TextColor="{DynamicResource TextSecondary}" VerticalOptions="Center" />
                         <Label Text="Експорт у JSON" FontSize="13" TextColor="{DynamicResource White}" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                </Border>
+
+                <Border StrokeShape="RoundRectangle 8"
+                        StrokeThickness="0"
+                        BackgroundColor="Transparent"
+                        Padding="10,9"
+                        IsVisible="{Binding CanTrackViews}">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnToggleSelectionModeTapped" />
+                    </Border.GestureRecognizers>
+                    <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
+                        <Label Text="{x:Static res:Icons.Sparkles}" FontFamily="Lucide" FontSize="14" TextColor="{DynamicResource Primary}" VerticalOptions="Center" />
+                        <Label Text="Обрати для ШІ" FontSize="13" TextColor="{DynamicResource White}" VerticalOptions="Center" />
                     </HorizontalStackLayout>
                 </Border>
 

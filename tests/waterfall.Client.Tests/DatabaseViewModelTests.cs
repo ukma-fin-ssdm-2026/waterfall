@@ -813,6 +813,157 @@ public sealed class DatabaseViewModelTests : IDisposable
         Assert.Equal(50, cache.Count);
     }
 
+    [Fact]
+    public async Task SelectionMode_PersistsAcrossPages_EnforcesMaxThree_AndSendsGroupMessage()
+    {
+        List<VacancyDto> items = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                Title = $"DB Job {i}",
+                PublishedAt = _time.GetUtcNow().AddMinutes(-i)
+            })
+            .ToList();
+        SetupPagedServer(items, pageSize: 25);
+
+        InMemoryTokenStore tokens = await CreateJobSeekerTokenStoreAsync();
+        using DatabaseViewModel vm = new(_gateway, _messenger, _time, tokenStore: tokens);
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+        Assert.Equal(20, vm.Vacancies.Count);
+
+        List<AnalyzeVacanciesRequestedMessage> received = [];
+        _messenger.Register<AnalyzeVacanciesRequestedMessage>(this, (_, m) => received.Add(m));
+
+        vm.Selection.ToggleSelectionModeCommand.Execute(null);
+        Assert.True(vm.Selection.IsSelectionMode);
+        Assert.True(vm.Vacancies[0].IsSelectionModeActive);
+
+        vm.Vacancies[0].ToggleSelectionCommand.Execute(null);
+        Assert.Equal(1, vm.Selection.SelectedCount);
+
+        vm.NextPageCommand.Execute(null);
+        Assert.True(vm.Vacancies[0].IsSelectionModeActive);
+        vm.Vacancies[0].ToggleSelectionCommand.Execute(null);
+        vm.Vacancies[1].ToggleSelectionCommand.Execute(null);
+        Assert.Equal(3, vm.Selection.SelectedCount);
+
+        bool limitReached = false;
+        vm.Vacancies[2].SelectionLimitReached += (_, _) => limitReached = true;
+        vm.Vacancies[2].ToggleSelectionCommand.Execute(null);
+        Assert.True(limitReached);
+        Assert.Equal(3, vm.Selection.SelectedCount);
+        Assert.False(vm.Vacancies[2].IsSelected);
+
+        vm.PrevPageCommand.Execute(null);
+        Assert.True(vm.Vacancies[0].IsSelectionModeActive);
+        Assert.True(vm.Vacancies[0].IsSelected);
+        Assert.Equal("Обрано 3 з 3", vm.Selection.SelectionTrayText);
+        Assert.True(vm.Selection.AnalyzeSelectionCommand.CanExecute(null));
+
+        vm.Selection.AnalyzeSelectionCommand.Execute(null);
+
+        AnalyzeVacanciesRequestedMessage msg = Assert.Single(received);
+        Assert.Equal(["DB Job 1", "DB Job 21", "DB Job 22"], msg.Vacancies.Select(v => v.Title));
+        Assert.False(vm.Selection.IsSelectionMode);
+        Assert.Equal(0, vm.Selection.SelectedCount);
+        Assert.False(vm.Vacancies[0].IsSelectionModeActive);
+    }
+
+    [Fact]
+    public async Task CardAnalyzeWithAi_DuringSelectionMode_ExitsSelectionMode()
+    {
+        List<VacancyDto> items =
+        [
+            new VacancyDto { Id = Guid.NewGuid(), Title = "Job 1", PublishedAt = _time.GetUtcNow() },
+            new VacancyDto { Id = Guid.NewGuid(), Title = "Job 2", PublishedAt = _time.GetUtcNow().AddMinutes(-1) }
+        ];
+        SetupPagedServer(items, pageSize: 20);
+
+        InMemoryTokenStore tokens = await CreateJobSeekerTokenStoreAsync();
+        using DatabaseViewModel vm = new(_gateway, _messenger, _time, tokenStore: tokens);
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+
+        List<AnalyzeVacanciesRequestedMessage> received = [];
+        _messenger.Register<AnalyzeVacanciesRequestedMessage>(this, (_, m) => received.Add(m));
+
+        vm.Selection.ToggleSelectionModeCommand.Execute(null);
+        vm.Vacancies[0].ToggleSelectionCommand.Execute(null);
+        vm.Vacancies[1].ToggleSelectionCommand.Execute(null);
+        Assert.True(vm.Selection.IsSelectionMode);
+
+        vm.Vacancies[0].AnalyzeWithAiCommand.Execute(null);
+
+        Assert.Single(received);
+        Assert.False(vm.Selection.IsSelectionMode);
+        Assert.Equal(0, vm.Selection.SelectedCount);
+        Assert.All(vm.Vacancies, v => Assert.False(v.IsSelectionModeActive));
+    }
+
+    [Fact]
+    public async Task Logout_ClearsSelectionMode_AndOffPageSavedAndViewedStates()
+    {
+        List<VacancyDto> items = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                Title = $"Job {i}",
+                IsSaved = true,
+                IsViewed = true,
+                PublishedAt = _time.GetUtcNow().AddMinutes(-i)
+            })
+            .ToList();
+        SetupPagedServer(items, pageSize: 25);
+
+        InMemoryTokenStore tokens = await CreateJobSeekerTokenStoreAsync();
+        using DatabaseViewModel vm = new(_gateway, _messenger, _time, tokenStore: tokens);
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+
+        vm.Selection.ToggleSelectionModeCommand.Execute(null);
+        vm.Vacancies[0].ToggleSelectionCommand.Execute(null);
+        Assert.True(vm.Selection.IsSelectionMode);
+        Assert.Equal(1, vm.Selection.SelectedCount);
+        Assert.True(vm.Vacancies[0].CanSave);
+        Assert.True(vm.Vacancies[0].CanUseAi);
+
+        await tokens.ClearAsync();
+        _messenger.Send(new UserAuthStateChangedMessage(false, null));
+
+        Assert.False(vm.Selection.IsSelectionMode);
+        Assert.Equal(0, vm.Selection.SelectedCount);
+        Assert.All(vm.Vacancies, item =>
+        {
+            Assert.False(item.CanSave);
+            Assert.False(item.CanUseAi);
+            Assert.False(item.IsSaved);
+            Assert.False(item.IsViewed);
+        });
+
+        vm.NextPageCommand.Execute(null);
+        Assert.All(vm.Vacancies, item =>
+        {
+            Assert.False(item.CanSave);
+            Assert.False(item.CanUseAi);
+            Assert.False(item.IsSaved);
+            Assert.False(item.IsViewed);
+        });
+    }
+
+    private async Task<InMemoryTokenStore> CreateJobSeekerTokenStoreAsync()
+    {
+        static string B64(string v) =>
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(v)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        InMemoryTokenStore tokens = new();
+        string payload = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["email"] = "seeker@test.com",
+            ["role"] = "JobSeeker",
+            ["exp"] = _time.GetUtcNow().AddHours(1).ToUnixTimeSeconds()
+        });
+        await tokens.SetTokenAsync($"{B64("""{"alg":"HS256","typ":"JWT"}""")}.{B64(payload)}.sig");
+        return tokens;
+    }
+
     private sealed class StubDistanceService : IDistanceCalculatorService
     {
         public string? UserAddress { get; set; }

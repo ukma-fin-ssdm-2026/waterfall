@@ -464,6 +464,68 @@ public class AIConsultantViewModelTests
         Assert.Equal(vacancy, received?.Vacancy);
     }
 
+    [Fact]
+    public async Task AnalyzeVacanciesRequestedMessage_NavigatesOnce_SendsGroupAndCapsAtThree()
+    {
+        StrongReferenceMessenger messenger = new();
+        CreateViewModel(messenger: messenger);
+
+        List<VacancyDto> four = Enumerable.Range(1, 4)
+            .Select(i => new VacancyDto { Id = Guid.NewGuid(), Title = $"Role {i}" })
+            .ToList();
+
+        _gateway.AiAnalyzeStream = (_, _) => AiStreams.Of(
+            new AiRelevanceEvent
+            {
+                Items =
+                [
+                    new AiRelevanceItem { VacancyId = four[0].Id, Score = 85, Matched = ["C#"], BasisCount = 2 },
+                    new AiRelevanceItem { VacancyId = four[1].Id, Score = 62, Matched = ["SQL"], BasisCount = 2 },
+                    new AiRelevanceItem { VacancyId = four[2].Id, Score = 40, Matched = [], BasisCount = 2 }
+                ]
+            },
+            new AiDeltaEvent { Text = "Порівняння готове." },
+            new AiDoneEvent());
+
+        messenger.Send(new AnalyzeVacanciesRequestedMessage(four));
+        await WaitUntilAsync(() => _gateway.AnalyzeRequests.Count == 1);
+
+        Assert.Equal(["//aiconsultant"], _navigation.Routes);
+        IReadOnlyList<Guid> sentIds = Assert.Single(_gateway.AnalyzeRequests);
+        Assert.Equal(four.Take(3).Select(v => v.Id), sentIds);
+    }
+
+    [Fact]
+    public async Task AnalyzeVacancies_RendersPerVacancyRelevanceScores()
+    {
+        VacancyDto v1 = new() { Id = Guid.NewGuid(), Title = "Backend .NET" };
+        VacancyDto v2 = new() { Id = Guid.NewGuid(), Title = "Data Engineer" };
+
+        _gateway.AiAnalyzeStream = (_, _) => AiStreams.Of(
+            new AiRelevanceEvent
+            {
+                Items =
+                [
+                    new AiRelevanceItem { VacancyId = v1.Id, Score = 90, Matched = [".NET", "PostgreSQL"], BasisCount = 4 },
+                    new AiRelevanceItem { VacancyId = v2.Id, Score = 55, Matched = ["SQL"], BasisCount = 4 }
+                ]
+            },
+            new AiDeltaEvent { Text = "Обери першу." },
+            new AiDoneEvent());
+
+        AIConsultantViewModel vm = CreateViewModel();
+
+        await vm.AnalyzeVacanciesCommand.ExecuteAsync([v1, v2]);
+
+        Assert.Equal("Аналіз вакансій (2): «Backend .NET», «Data Engineer»", vm.Messages[1].Text);
+        AIChatMessageViewModel reply = vm.Messages[2];
+        Assert.Contains("«Backend .NET» —", reply.RelevanceText);
+        Assert.Contains("90/100", reply.RelevanceText);
+        Assert.Contains("«Data Engineer» —", reply.RelevanceText);
+        Assert.Contains("55/100", reply.RelevanceText);
+        Assert.Equal("Обери першу.", reply.Text);
+    }
+
     private static async Task WaitUntilAsync(Func<bool> condition)
     {
         DateTime deadline = DateTime.UtcNow.AddSeconds(5);

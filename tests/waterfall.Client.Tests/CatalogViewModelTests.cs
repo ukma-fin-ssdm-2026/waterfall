@@ -658,6 +658,111 @@ public class CatalogViewModelTests
         Assert.Equal(20, _vm.Vacancies.Count);
     }
 
+    [Fact]
+    public async Task SelectionMode_SelectsAcrossPages_AndAnalyzeSelectionSendsGroupMessage()
+    {
+        VacancyDto[] items = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto { Id = Guid.NewGuid(), Title = $"Job {i}" })
+            .ToArray();
+        await SearchSiteAsync(_vm, items);
+
+        List<AnalyzeVacanciesRequestedMessage> received = [];
+        _messenger.Register<AnalyzeVacanciesRequestedMessage>(this, (_, m) => received.Add(m));
+
+        _vm.ToggleSelectionModeCommand.Execute(null);
+        Assert.True(_vm.IsSelectionMode);
+        Assert.True(_vm.Vacancies[0].IsSelectionModeActive);
+
+        _vm.Vacancies[0].ToggleSelectionCommand.Execute(null);
+        _vm.NextPageCommand.Execute(null);
+        Assert.True(_vm.Vacancies[0].IsSelectionModeActive);
+        _vm.Vacancies[0].ToggleSelectionCommand.Execute(null);
+
+        Assert.Equal(2, _vm.SelectedForAnalysisCount);
+        Assert.Equal("Обрано 2 з 3", _vm.SelectionTrayText);
+        Assert.True(_vm.AnalyzeSelectionCommand.CanExecute(null));
+
+        _vm.AnalyzeSelectionCommand.Execute(null);
+
+        AnalyzeVacanciesRequestedMessage msg = Assert.Single(received);
+        Assert.Equal(["Job 1", "Job 21"], msg.Vacancies.Select(v => v.Title));
+        Assert.False(_vm.IsSelectionMode);
+        Assert.Equal(0, _vm.SelectedForAnalysisCount);
+        Assert.False(_vm.Vacancies[0].IsSelectionModeActive);
+    }
+
+    [Fact]
+    public async Task CardAnalyzeWithAi_DuringSelectionMode_ExitsSelectionMode()
+    {
+        await SearchSiteAsync(_vm, "Job 1", "Job 2");
+        List<AnalyzeVacanciesRequestedMessage> received = [];
+        _messenger.Register<AnalyzeVacanciesRequestedMessage>(this, (_, m) => received.Add(m));
+
+        _vm.ToggleSelectionModeCommand.Execute(null);
+        _vm.Vacancies[0].ToggleSelectionCommand.Execute(null);
+        _vm.Vacancies[1].ToggleSelectionCommand.Execute(null);
+        Assert.True(_vm.IsSelectionMode);
+
+        _vm.Vacancies[0].AnalyzeWithAiCommand.Execute(null);
+
+        Assert.Single(received);
+        Assert.False(_vm.IsSelectionMode);
+        Assert.Equal(0, _vm.SelectedForAnalysisCount);
+        Assert.All(_vm.Vacancies, v => Assert.False(v.IsSelectionModeActive));
+    }
+
+    [Fact]
+    public async Task Logout_ClearsOffPageSavedAndViewedStates_AndExitsSelectionMode()
+    {
+        static string B64(string value) =>
+            Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(value)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
+        InMemoryTokenStore tokens = new();
+        string payload = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["email"] = "seeker@test.com",
+            ["role"] = "JobSeeker",
+            ["exp"] = _time.GetUtcNow().AddHours(1).ToUnixTimeSeconds()
+        });
+        await tokens.SetTokenAsync($"{B64("""{"alg":"HS256","typ":"JWT"}""")}.{B64(payload)}.sig");
+
+        CatalogViewModel vm = new(_gateway, _messenger, _time, tokenStore: tokens);
+        await vm.RefreshAuthStatusAsync();
+
+        VacancyDto[] items = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto { Id = Guid.NewGuid(), Title = $"Job {i}", IsSaved = true, IsViewed = true })
+            .ToArray();
+        await SearchSiteAsync(vm, items);
+
+        vm.ToggleSelectionModeCommand.Execute(null);
+        vm.Vacancies[0].ToggleSelectionCommand.Execute(null);
+        Assert.True(vm.IsSelectionMode);
+        Assert.True(vm.Vacancies[0].CanSave);
+        Assert.True(vm.Vacancies[0].CanUseAi);
+
+        await tokens.ClearAsync();
+        _messenger.Send(new UserAuthStateChangedMessage(false, null));
+
+        Assert.False(vm.IsSelectionMode);
+        Assert.Equal(0, vm.SelectedForAnalysisCount);
+        Assert.All(vm.Vacancies, item =>
+        {
+            Assert.False(item.CanSave);
+            Assert.False(item.CanUseAi);
+            Assert.False(item.IsSaved);
+            Assert.False(item.IsViewed);
+        });
+
+        vm.NextPageCommand.Execute(null);
+        Assert.All(vm.Vacancies, item =>
+        {
+            Assert.False(item.CanSave);
+            Assert.False(item.CanUseAi);
+            Assert.False(item.IsSaved);
+            Assert.False(item.IsViewed);
+        });
+    }
+
     private static VacancyDto[] Vacancies(params string[] titles) => [.. FakeGateway.Page(1, titles.Length, hasNext: false, titles).Items];
 
     private Task SearchSiteAsync(CatalogViewModel vm, params string[] titles) => SearchSiteAsync(vm, Vacancies(titles));

@@ -203,20 +203,29 @@
                 Stroke="{DynamicResource DividerColor}"
                 BackgroundColor="{DynamicResource DarkBg1}"
                 Padding="12,10">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                <Border Style="{StaticResource CompactFieldBorder}"
-                        StrokeShape="RoundRectangle 20">
-                    <Entry Style="{StaticResource CompactEntry}"
-                           Text="{Binding InputText}"
-                           Placeholder="Запитайте про вакансії..."
-                           ReturnCommand="{Binding SendMessageCommand}" />
-                </Border>
-                <Button Grid.Column="1"
-                        Text="Надіслати"
-                        Command="{Binding SendMessageCommand}"
-                        CornerRadius="20"
-                        Style="{StaticResource CardActionPrimary}" />
-            </Grid>
+            <VerticalStackLayout Spacing="7">
+                <!-- THR-06: попередження про персональні дані -->
+                <Label Text="ШІ може помилятися. Не вводьте персональні дані."
+                       Style="{StaticResource MutedLabel}"
+                       FontSize="11"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center" />
+
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                    <Border Style="{StaticResource CompactFieldBorder}"
+                            StrokeShape="RoundRectangle 20">
+                        <Entry Style="{StaticResource CompactEntry}"
+                               Text="{Binding InputText}"
+                               Placeholder="Запитайте про вакансії..."
+                               ReturnCommand="{Binding SendMessageCommand}" />
+                    </Border>
+                    <Button Grid.Column="1"
+                            Text="Надіслати"
+                            Command="{Binding SendMessageCommand}"
+                            CornerRadius="20"
+                            Style="{StaticResource CardActionPrimary}" />
+                </Grid>
+            </VerticalStackLayout>
         </Border>
 
     </Grid>

@@ -150,7 +150,9 @@ public partial class AIConsultantViewModel : ObservableObject
 
         // Подія з картки у будь-якій вкладці: спершу показуємо розділ ШІ, потім запускаємо аналіз (FR-010).
         messenger.Register<AIConsultantViewModel, AnalyzeVacancyRequestedMessage>(this, static (vm, message) =>
-            _ = vm.HandleAnalyzeRequestAsync(message.Vacancy));
+            _ = vm.HandleAnalyzeRequestAsync([message.Vacancy]));
+        messenger.Register<AIConsultantViewModel, AnalyzeVacanciesRequestedMessage>(this, static (vm, message) =>
+            _ = vm.HandleAnalyzeRequestAsync(message.Vacancies));
 
         ResetConversation();
     }
@@ -173,6 +175,7 @@ public partial class AIConsultantViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(StatusHint))]
     [NotifyCanExecuteChangedFor(nameof(SendMessageCommand))]
     [NotifyCanExecuteChangedFor(nameof(AnalyzeVacancyCommand))]
+    [NotifyCanExecuteChangedFor(nameof(AnalyzeVacanciesCommand))]
     public partial bool IsThinking { get; set; }
 
     public string StatusHint => IsThinking ? "ШІ-консультант аналізує базу вакансій..." : string.Empty;
@@ -285,12 +288,24 @@ public partial class AIConsultantViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Аналіз вакансії з картки (FR-010): оцінка релевантності до збережених вакансій і текстовий розбір.
+    /// Аналіз однієї вакансії з картки (FR-010): оцінка релевантності до збережених вакансій і текстовий розбір.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanStartRequest))]
-    private async Task AnalyzeVacancyAsync(VacancyDto vacancy)
+    private Task AnalyzeVacancyAsync(VacancyDto vacancy) => AnalyzeCoreAsync([vacancy]);
+
+    /// <summary>
+    /// Аналіз групи з 1–3 вибраних вакансій (FR-010); більше трьох сервер не приймає.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanStartRequest))]
+    private Task AnalyzeVacanciesAsync(IReadOnlyList<VacancyDto> vacancies) => AnalyzeCoreAsync(vacancies);
+
+    private async Task AnalyzeCoreAsync(IReadOnlyList<VacancyDto> vacancies)
     {
-        if (IsThinking || vacancy is null)
+        List<VacancyDto> batch = vacancies
+            .Where(v => v is not null)
+            .Take(VacancySelectionState.MaxSelected)
+            .ToList();
+        if (IsThinking || batch.Count == 0)
         {
             return;
         }
@@ -303,7 +318,7 @@ public partial class AIConsultantViewModel : ObservableObject
         }
 
         ErrorMessage = null;
-        Messages.Add(new AIChatMessageViewModel { IsUser = true, Text = $"Аналіз вакансії «{vacancy.Title}»" });
+        Messages.Add(new AIChatMessageViewModel { IsUser = true, Text = FormatAnalyzePrompt(batch) });
 
         IsThinking = true;
         CancellationTokenSource cts = StartStream();
@@ -311,13 +326,14 @@ public partial class AIConsultantViewModel : ObservableObject
 
         try
         {
-            await foreach (AiStreamEvent streamEvent in _gateway.AnalyzeVacanciesAsync([vacancy.Id], cts.Token))
+            await foreach (AiStreamEvent streamEvent in _gateway.AnalyzeVacanciesAsync(
+                batch.Select(v => v.Id).ToList(), cts.Token))
             {
                 switch (streamEvent)
                 {
                     case AiRelevanceEvent relevance:
                         reply ??= AddBotMessage();
-                        reply.RelevanceText = FormatRelevance(relevance.Items.Count > 0 ? relevance.Items[0] : null);
+                        reply.RelevanceText = FormatRelevance(relevance, batch);
                         break;
                     case AiDeltaEvent delta:
                         reply ??= AddBotMessage();
@@ -396,7 +412,7 @@ public partial class AIConsultantViewModel : ObservableObject
         }
     }
 
-    private async Task HandleAnalyzeRequestAsync(VacancyDto vacancy)
+    private async Task HandleAnalyzeRequestAsync(IReadOnlyList<VacancyDto> vacancies)
     {
         if (_navigation is not null)
         {
@@ -411,7 +427,7 @@ public partial class AIConsultantViewModel : ObservableObject
             }
         }
 
-        await AnalyzeVacancyCommand.ExecuteAsync(vacancy);
+        await AnalyzeVacanciesCommand.ExecuteAsync(vacancies);
     }
 
     /// <summary>
@@ -492,6 +508,30 @@ public partial class AIConsultantViewModel : ObservableObject
         "skills" => "навички",
         _ => key.Replace('_', ' ')
     };
+
+    private static string FormatAnalyzePrompt(IReadOnlyList<VacancyDto> vacancies) =>
+        vacancies.Count == 1
+            ? $"Аналіз вакансії «{vacancies[0].Title}»"
+            : $"Аналіз вакансій ({vacancies.Count}): {string.Join(", ", vacancies.Select(v => $"«{v.Title}»"))}";
+
+    private static string FormatRelevance(AiRelevanceEvent relevance, IReadOnlyList<VacancyDto> vacancies)
+    {
+        if (vacancies.Count == 1)
+        {
+            return FormatRelevance(relevance.Items.Count > 0 ? relevance.Items[0] : null);
+        }
+
+        return string.Join("\n", vacancies.Select((vacancy, index) =>
+        {
+            AiRelevanceItem? item = relevance.Items.FirstOrDefault(i => i.VacancyId == vacancy.Id);
+            if (item is null && index < relevance.Items.Count)
+            {
+                item = relevance.Items[index];
+            }
+
+            return $"«{vacancy.Title}» — {FormatRelevance(item)}";
+        }));
+    }
 
     private static string FormatRelevance(AiRelevanceItem? item)
     {

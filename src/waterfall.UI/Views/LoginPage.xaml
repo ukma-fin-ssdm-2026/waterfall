@@ -327,6 +327,22 @@
                                     </BindableLayout.ItemTemplate>
                                 </FlexLayout>
 
+                                <Label Text="Частота категорій у пошуку:"
+                                       Style="{StaticResource MutedLabel}"
+                                       FontSize="13" />
+                                <FlexLayout Wrap="Wrap"
+                                            BindableLayout.ItemsSource="{Binding TopCategories}">
+                                    <BindableLayout.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <Border Style="{StaticResource SkillChip}">
+                                                <Label Text="{Binding .}"
+                                                       Style="{StaticResource BadgeLabel}"
+                                                       TextColor="{DynamicResource White}" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </BindableLayout.ItemTemplate>
+                                </FlexLayout>
+
                                 <!-- Історія пошукових запитів -->
                                 <Grid ColumnDefinitions="*,Auto" Margin="0,4,0,0">
                                     <Label Text="Останні пошукові запити:"
