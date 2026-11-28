@@ -2,8 +2,6 @@
 // AI: сід-вакансії отримують числовий досвід, решта похідних полів рахується нормалізатором; перевірено: тести WaterfallDbSeederTests
 // AI: демо-дані й тестові акаунти лише за includeDemoData (у Program.cs — лише в Development); перевірено: тести WaterfallDbSeederTests, самоперевірка автора (§8)
 
-using System.Data.Common;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Normalization;
@@ -29,8 +27,14 @@ public static class WaterfallDbSeeder
     /// </summary>
     public static async Task SeedAsync(WaterfallDbContext context, bool includeDemoData = true)
     {
-        await context.Database.EnsureCreatedAsync();
-        await EnsureTablesCreatedAsync(context);
+        if (context.Database.IsRelational())
+        {
+            await context.Database.MigrateAsync();
+        }
+        else
+        {
+            await context.Database.EnsureCreatedAsync();
+        }
 
         if (!await context.Vacancies.AnyAsync())
         {
@@ -294,76 +298,38 @@ public static class WaterfallDbSeeder
             await context.SaveChangesAsync();
         }
 
-        try
+        if (!await context.UserPersonalData.AnyAsync())
         {
-            if (!await context.UserPersonalData.AnyAsync())
+            await context.UserPersonalData.AddAsync(new UserPersonalDataDB
             {
-                await context.UserPersonalData.AddAsync(new UserPersonalDataDB
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
-                    Address = "вул. Хрещатик, 22, Київ",
-                    UpdatedAt = DateTimeOffset.UtcNow
-                });
-                await context.SaveChangesAsync();
-            }
-        }
-        catch
-        {
-            await EnsureTablesCreatedAsync(context);
-            if (!await context.UserPersonalData.AnyAsync())
-            {
-                await context.UserPersonalData.AddAsync(new UserPersonalDataDB
-                {
-                    Id = Guid.NewGuid(),
-                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
-                    Address = "вул. Хрещатик, 22, Київ",
-                    UpdatedAt = DateTimeOffset.UtcNow
-                });
-                await context.SaveChangesAsync();
-            }
+                Id = Guid.NewGuid(),
+                UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
+                Address = "вул. Хрещатик, 22, Київ",
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            await context.SaveChangesAsync();
         }
 
-        try
+        if (!await context.GeoLocationCache.AnyAsync())
         {
-            if (!await context.GeoLocationCache.AnyAsync())
-            {
-                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
-                await context.SaveChangesAsync();
-            }
-        }
-        catch
-        {
-            await EnsureTablesCreatedAsync(context);
-            if (!await context.GeoLocationCache.AnyAsync())
-            {
-                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
-                await context.SaveChangesAsync();
-            }
+            await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
+            await context.SaveChangesAsync();
         }
     }
 
     private static async Task RemoveCityOnlyGeoEntriesAsync(WaterfallDbContext context)
     {
-        try
-        {
-            // Видаляємо суто назви міст без вулиць, щоб вони не перехоплювали конкретні вулиці
-            List<GeoLocationCacheDB> cityOnlyEntries = await context.GeoLocationCache
-                .Where(c => c.NormalizedAddress == "київ" || c.NormalizedAddress == "львів" ||
-                            c.NormalizedAddress == "харків" || c.NormalizedAddress == "дніпро" ||
-                            c.NormalizedAddress == "одеса")
-                .ToListAsync();
+        // Видаляємо суто назви міст без вулиць, щоб вони не перехоплювали конкретні вулиці
+        List<GeoLocationCacheDB> cityOnlyEntries = await context.GeoLocationCache
+            .Where(c => c.NormalizedAddress == "київ" || c.NormalizedAddress == "львів" ||
+                        c.NormalizedAddress == "харків" || c.NormalizedAddress == "дніпро" ||
+                        c.NormalizedAddress == "одеса")
+            .ToListAsync();
 
-            if (cityOnlyEntries.Count > 0)
-            {
-                context.GeoLocationCache.RemoveRange(cityOnlyEntries);
-                await context.SaveChangesAsync();
-            }
-        }
-        catch
+        if (cityOnlyEntries.Count > 0)
         {
-            // Таблиці геокешу ще немає в старій базі: її створить EnsureTablesCreatedAsync
-            await EnsureTablesCreatedAsync(context);
+            context.GeoLocationCache.RemoveRange(cityOnlyEntries);
+            await context.SaveChangesAsync();
         }
     }
 
@@ -387,194 +353,4 @@ public static class WaterfallDbSeeder
         new() { Id = Guid.NewGuid(), NormalizedAddress = "дерибасівськ", Latitude = 46.4850, Longitude = 30.7420 },
         new() { Id = Guid.NewGuid(), NormalizedAddress = "сумськ", Latitude = 50.0010, Longitude = 36.2340 }
     ];
-
-    private static async Task EnsureTablesCreatedAsync(WaterfallDbContext context)
-    {
-        if (context.Database.IsSqlite())
-        {
-            await context.Database.ExecuteSqlRawAsync(@"
-                CREATE TABLE IF NOT EXISTS ""UserPersonalData"" (
-                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_UserPersonalData"" PRIMARY KEY,
-                    ""UserId"" TEXT NOT NULL,
-                    ""Address"" TEXT NULL,
-                    ""UpdatedAt"" INTEGER NOT NULL
-                );
-                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_UserPersonalData_UserId"" ON ""UserPersonalData"" (""UserId"");
-
-                CREATE TABLE IF NOT EXISTS ""GeoLocationCache"" (
-                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_GeoLocationCache"" PRIMARY KEY,
-                    ""NormalizedAddress"" TEXT NOT NULL,
-                    ""Latitude"" REAL NOT NULL,
-                    ""Longitude"" REAL NOT NULL,
-                    ""CreatedAt"" INTEGER NOT NULL
-                );
-                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_GeoLocationCache_NormalizedAddress"" ON ""GeoLocationCache"" (""NormalizedAddress"");
-
-                CREATE TABLE IF NOT EXISTS ""SiteSearchCache"" (
-                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_SiteSearchCache"" PRIMARY KEY,
-                    ""CacheKey"" TEXT NOT NULL,
-                    ""ExternalIdsJson"" TEXT NOT NULL,
-                    ""CachedAt"" INTEGER NOT NULL
-                );
-                CREATE UNIQUE INDEX IF NOT EXISTS ""IX_SiteSearchCache_CacheKey"" ON ""SiteSearchCache"" (""CacheKey"");
-
-                CREATE TABLE IF NOT EXISTS ""SearchQueries"" (
-                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_SearchQueries"" PRIMARY KEY,
-                    ""UserId"" TEXT NOT NULL,
-                    ""QueryText"" TEXT NOT NULL,
-                    ""SearchedAt"" INTEGER NOT NULL,
-                    CONSTRAINT ""FK_SearchQueries_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS ""IX_SearchQueries_UserId_SearchedAt"" ON ""SearchQueries"" (""UserId"", ""SearchedAt"");
-
-                CREATE TABLE IF NOT EXISTS ""VacancyViews"" (
-                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_VacancyViews"" PRIMARY KEY,
-                    ""UserId"" TEXT NOT NULL,
-                    ""VacancyId"" TEXT NOT NULL,
-                    ""ViewedAt"" INTEGER NOT NULL,
-                    CONSTRAINT ""FK_VacancyViews_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE,
-                    CONSTRAINT ""FK_VacancyViews_Vacancies_VacancyId"" FOREIGN KEY (""VacancyId"") REFERENCES ""Vacancies"" (""Id"") ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS ""IX_VacancyViews_UserId_VacancyId"" ON ""VacancyViews"" (""UserId"", ""VacancyId"");
-                CREATE INDEX IF NOT EXISTS ""IX_VacancyViews_UserId_ViewedAt"" ON ""VacancyViews"" (""UserId"", ""ViewedAt"");
-
-                CREATE TABLE IF NOT EXISTS ""ChatSessions"" (
-                    ""Id"" TEXT NOT NULL CONSTRAINT ""PK_ChatSessions"" PRIMARY KEY,
-                    ""UserId"" TEXT NOT NULL,
-                    ""ContextFilterJson"" TEXT NOT NULL,
-                    ""StartedAt"" INTEGER NOT NULL,
-                    ""LastActivityAt"" INTEGER NOT NULL,
-                    CONSTRAINT ""FK_ChatSessions_Users_UserId"" FOREIGN KEY (""UserId"") REFERENCES ""Users"" (""Id"") ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS ""IX_ChatSessions_UserId"" ON ""ChatSessions"" (""UserId"");
-
-                CREATE TABLE IF NOT EXISTS ""ChatMessages"" (
-                    ""Id"" INTEGER NOT NULL CONSTRAINT ""PK_ChatMessages"" PRIMARY KEY AUTOINCREMENT,
-                    ""SessionId"" TEXT NOT NULL,
-                    ""Author"" TEXT NOT NULL,
-                    ""Content"" TEXT NOT NULL,
-                    ""CreatedAt"" INTEGER NOT NULL,
-                    CONSTRAINT ""FK_ChatMessages_ChatSessions_SessionId"" FOREIGN KEY (""SessionId"") REFERENCES ""ChatSessions"" (""Id"") ON DELETE CASCADE
-                );
-                CREATE INDEX IF NOT EXISTS ""IX_ChatMessages_SessionId"" ON ""ChatMessages"" (""SessionId"");
-
-                CREATE TABLE IF NOT EXISTS ""ChatMessageVacancy"" (
-                    ""MessageId"" INTEGER NOT NULL,
-                    ""VacancyId"" TEXT NOT NULL,
-                    CONSTRAINT ""PK_ChatMessageVacancy"" PRIMARY KEY (""MessageId"", ""VacancyId""),
-                    CONSTRAINT ""FK_ChatMessageVacancy_ChatMessages_MessageId"" FOREIGN KEY (""MessageId"") REFERENCES ""ChatMessages"" (""Id"") ON DELETE CASCADE,
-                    CONSTRAINT ""FK_ChatMessageVacancy_Vacancies_VacancyId"" FOREIGN KEY (""VacancyId"") REFERENCES ""Vacancies"" (""Id"") ON DELETE RESTRICT
-                );
-            ");
-
-            await EnsureSqliteVacancyColumnsAsync(context);
-        }
-        else if (context.Database.IsSqlServer())
-        {
-            await context.Database.ExecuteSqlRawAsync(@"
-                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='UserPersonalData' and xtype='U')
-                CREATE TABLE [UserPersonalData] (
-                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
-                    [UserId] uniqueidentifier NOT NULL,
-                    [Address] nvarchar(300) NULL,
-                    [UpdatedAt] datetimeoffset NOT NULL
-                );
-
-                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='GeoLocationCache' and xtype='U')
-                CREATE TABLE [GeoLocationCache] (
-                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
-                    [NormalizedAddress] nvarchar(300) NOT NULL,
-                    [Latitude] float NOT NULL,
-                    [Longitude] float NOT NULL,
-                    [CreatedAt] datetimeoffset NOT NULL
-                );
-                IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_GeoLocationCache_NormalizedAddress')
-                CREATE UNIQUE INDEX [IX_GeoLocationCache_NormalizedAddress] ON [GeoLocationCache] ([NormalizedAddress]);
-
-                IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='SiteSearchCache' and xtype='U')
-                CREATE TABLE [SiteSearchCache] (
-                    [Id] uniqueidentifier NOT NULL PRIMARY KEY,
-                    [CacheKey] nvarchar(500) NOT NULL,
-                    [ExternalIdsJson] nvarchar(max) NOT NULL,
-                    [CachedAt] datetimeoffset NOT NULL
-                );
-                IF NOT EXISTS (SELECT * FROM sys.indexes WHERE name = 'IX_SiteSearchCache_CacheKey')
-                CREATE UNIQUE INDEX [IX_SiteSearchCache_CacheKey] ON [SiteSearchCache] ([CacheKey]);
-
-                IF OBJECT_ID('Vacancies', 'U') IS NOT NULL
-                BEGIN
-                    IF COL_LENGTH('Vacancies', 'CategoryGroup') IS NULL ALTER TABLE [Vacancies] ADD [CategoryGroup] nvarchar(100) NULL;
-                    IF COL_LENGTH('Vacancies', 'FullAddress') IS NULL ALTER TABLE [Vacancies] ADD [FullAddress] nvarchar(300) NULL;
-                    IF COL_LENGTH('Vacancies', 'Schedule') IS NULL ALTER TABLE [Vacancies] ADD [Schedule] nvarchar(100) NULL;
-                    IF COL_LENGTH('Vacancies', 'Experience') IS NULL ALTER TABLE [Vacancies] ADD [Experience] nvarchar(100) NULL;
-                    IF COL_LENGTH('Vacancies', 'ExperienceMonths') IS NULL ALTER TABLE [Vacancies] ADD [ExperienceMonths] int NULL;
-                    IF COL_LENGTH('Vacancies', 'WorkFormat') IS NULL ALTER TABLE [Vacancies] ADD [WorkFormat] int NOT NULL CONSTRAINT [DF_Vacancies_WorkFormat] DEFAULT 0;
-                    IF COL_LENGTH('Vacancies', 'SearchText') IS NULL ALTER TABLE [Vacancies] ADD [SearchText] nvarchar(max) NOT NULL CONSTRAINT [DF_Vacancies_SearchText] DEFAULT N'';
-                    IF COL_LENGTH('Vacancies', 'ExternalId') IS NULL ALTER TABLE [Vacancies] ADD [ExternalId] nvarchar(100) NULL;
-                END
-            ");
-        }
-    }
-
-    /// <summary>
-    /// Ідемпотентно додає відсутні колонки в уже існуючу SQLite-таблицю Vacancies (міграція старих waterfall.db без видалення даних).
-    /// </summary>
-    private static async Task EnsureSqliteVacancyColumnsAsync(WaterfallDbContext context)
-    {
-        DbConnection connection = context.Database.GetDbConnection();
-        bool shouldClose = connection.State != System.Data.ConnectionState.Open;
-        if (shouldClose)
-        {
-            await connection.OpenAsync();
-        }
-
-        try
-        {
-            HashSet<string> existingColumns = new(StringComparer.OrdinalIgnoreCase);
-            await using (DbCommand pragma = connection.CreateCommand())
-            {
-                pragma.CommandText = "PRAGMA table_info('Vacancies');";
-                await using DbDataReader reader = await pragma.ExecuteReaderAsync();
-                while (await reader.ReadAsync())
-                {
-                    existingColumns.Add(reader.GetString(1));
-                }
-            }
-
-            if (existingColumns.Count == 0)
-            {
-                return;
-            }
-
-            (string Column, string Sql)[] requiredColumns =
-            [
-                ("CategoryGroup", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""CategoryGroup"" TEXT NULL;"),
-                ("FullAddress", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""FullAddress"" TEXT NULL;"),
-                ("Schedule", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""Schedule"" TEXT NULL;"),
-                ("Experience", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""Experience"" TEXT NULL;"),
-                ("ExperienceMonths", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""ExperienceMonths"" INTEGER NULL;"),
-                ("WorkFormat", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""WorkFormat"" INTEGER NOT NULL DEFAULT 0;"),
-                ("SearchText", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""SearchText"" TEXT NOT NULL DEFAULT '';"),
-                ("ExternalId", @"ALTER TABLE ""Vacancies"" ADD COLUMN ""ExternalId"" TEXT NULL;")
-            ];
-
-            foreach ((string column, string sql) in requiredColumns)
-            {
-                if (!existingColumns.Contains(column))
-                {
-                    await context.Database.ExecuteSqlRawAsync(sql);
-                }
-            }
-
-            await context.Database.ExecuteSqlRawAsync(
-                @"CREATE INDEX IF NOT EXISTS ""IX_Vacancies_CategoryGroup"" ON ""Vacancies"" (""CategoryGroup"");");
-        }
-        finally
-        {
-            if (shouldClose)
-            {
-                await connection.CloseAsync();
-            }
-        }
-    }
 }

@@ -4,6 +4,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Normalization;
 
@@ -48,6 +49,11 @@ public class WaterfallDbContext : DbContext
     {
         // У SQLite lower() без цього не працює з кирилицею, і пошук каталогу був би чутливим до регістру
         optionsBuilder.AddInterceptors(SqliteUnicodeLowerInterceptor.Instance);
+        optionsBuilder.ReplaceService<IMigrationsAssembly, WaterfallMigrationsAssembly>();
+        if (optionsBuilder.Options.Extensions.Any(e => e.GetType().Name.Contains("Sqlite", StringComparison.Ordinal)))
+        {
+            optionsBuilder.ReplaceService<IMigrationsSqlGenerator, WaterfallSqliteMigrationsSqlGenerator>();
+        }
     }
 
     /// <summary>
