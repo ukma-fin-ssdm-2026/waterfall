@@ -48,29 +48,35 @@ internal static class MountedPageHelper
 
     public static bool HandleBack(ContentPage page) => (page as IHostedPage)?.OnHostBackPressed() == true;
 
-    public static async Task<(bool IsLoggedIn, bool IsAnalyst, string RoleLabel)> ResolveRoleAsync(IAuthTokenStore? tokens)
+    public static async Task<(bool IsLoggedIn, UserRole? Role, string RoleLabel)> ResolveRoleAsync(IAuthTokenStore? tokens)
     {
         if (tokens is null)
         {
-            return (false, false, "Гостьовий режим");
+            return (false, null, "Гостьовий режим");
         }
 
         try
         {
             string? token = await tokens.GetTokenAsync(CancellationToken.None);
             AuthSession? session = token is null ? null : AuthSession.FromToken(token);
-            if (session is not null)
+            if (session is not null && !session.IsExpired(DateTimeOffset.UtcNow))
             {
-                bool isAnalyst = session.Role == UserRole.Analyst;
-                return (true, isAnalyst, isAnalyst ? "Аналітик ринку" : "Шукач роботи");
+                string roleLabel = session.Role switch
+                {
+                    UserRole.Analyst => "Аналітик ринку",
+                    UserRole.Admin => "Адміністратор",
+                    _ => "Шукач роботи"
+                };
+                return (true, session.Role, roleLabel);
             }
         }
         catch
         {
         }
 
-        return (false, false, "Гостьовий режим");
+        return (false, null, "Гостьовий режим");
     }
+
 
     public static async Task SlideSwitchAsync(View outgoing, View incoming, double hostWidth, int direction, uint durationMs = 200)
     {

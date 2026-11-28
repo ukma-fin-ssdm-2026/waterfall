@@ -96,10 +96,9 @@ public sealed class MobileSegmentedBar : ContentView
 
     private void Rebuild(bool isAnalyst)
     {
+        _ = isAnalyst;
         (string Title, string Route)[] tabs = string.Equals(Group, "Cabinet", StringComparison.OrdinalIgnoreCase)
-            ? (isAnalyst
-                ? [("Профіль", "login"), ("Налаштування", "systemsettings"), ("Підбірка", "recommendations")]
-                : [("Профіль", "login"), ("Налаштування", "systemsettings"), ("Аналітика", "analytics")])
+            ? [("Профіль", "login"), ("Налаштування", "systemsettings")]
             : [("Каталог", "catalog"), ("База вакансій", "database")];
 
         Grid grid = new()

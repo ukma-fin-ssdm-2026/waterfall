@@ -64,7 +64,18 @@ public partial class LoginPage : ContentPage, IHostedPage
     {
         base.OnAppearing();
         UpdateMapSource();
-        if (_viewModel.IsLoggedIn && _viewModel.LoadPersonalStatsCommand.CanExecute(null))
+        if (!_viewModel.IsLoggedIn)
+        {
+            // Сесія зберігається між запусками; відновлюємо її з токена, щоб профіль
+            // не показував форму входу при живій сесії.
+            if (_viewModel.RestoreSessionCommand.CanExecute(null))
+            {
+                _viewModel.RestoreSessionCommand.Execute(null);
+            }
+            return;
+        }
+
+        if (_viewModel.LoadPersonalStatsCommand.CanExecute(null))
         {
             _viewModel.LoadPersonalStatsCommand.Execute(null);
         }

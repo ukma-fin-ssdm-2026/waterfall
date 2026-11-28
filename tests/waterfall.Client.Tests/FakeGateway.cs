@@ -432,9 +432,13 @@ internal sealed class FakeGateway : IHttpGatewayService
     public List<Guid> RecordedVacancyViews { get; } = [];
     public List<Guid> UnmarkedVacancyViews { get; } = [];
     public int ClearSearchHistoryCalls { get; private set; }
+    public int PersonalStatsCalls { get; private set; }
 
-    public Task<Waterfall.Client.Models.Profile.UserStatsDto?> GetPersonalStatsAsync(CancellationToken ct = default) =>
-        Task.FromResult(PersonalStats);
+    public Task<Waterfall.Client.Models.Profile.UserStatsDto?> GetPersonalStatsAsync(CancellationToken ct = default)
+    {
+        PersonalStatsCalls++;
+        return Task.FromResult(PersonalStats);
+    }
 
     public Task<bool> RecordSearchAsync(string query, CancellationToken ct = default)
     {

@@ -532,5 +532,61 @@ public class LoginViewModelTests
         Assert.True(vm.HasNoActivity);
         Assert.Equal("Історію пошукових запитів очищено.", vm.StatusMessage);
     }
+
+    [Fact]
+    public async Task Login_AsAdmin_ShowsAdminRoleText()
+    {
+        _gateway.Auth = () => new AuthResponse
+        {
+            Token = Jwt($$"""{"sub":"u-admin","email":"admin@waterfall.local","role":"Admin","exp":{{Unix(Now.AddMinutes(15))}}}"""),
+            Email = "admin@waterfall.local",
+            Role = UserRole.Admin,
+            ExpiresAt = Now.AddMinutes(15)
+        };
+        _vm.Email = "admin@waterfall.local";
+        _vm.Password = "AdminPass12345";
+
+        await _vm.SubmitCommand.ExecuteAsync(null);
+
+        Assert.True(_vm.IsLoggedIn);
+        Assert.Equal("Адміністратор", _vm.UserRoleText);
+    }
+
+    [Fact]
+    public async Task Restore_ValidAdminToken_ShowsAdminRoleTextAndBroadcastsAuthMessage()
+    {
+        StrongReferenceMessenger messenger = new();
+        List<UserAuthStateChangedMessage> authMessages = [];
+        messenger.Register<UserAuthStateChangedMessage>(this, (_, msg) => authMessages.Add(msg));
+
+        _tokens.Token = Jwt($$"""{"sub":"u-admin","email":"admin@waterfall.local","role":"Admin","exp":{{Unix(Now.AddMinutes(10))}}}""");
+        LoginViewModel vm = new(_gateway, _tokens, _time, messenger: messenger);
+
+        await vm.RestoreSessionCommand.ExecuteAsync(null);
+
+        Assert.True(vm.IsLoggedIn);
+        Assert.Equal(UserRole.Admin, vm.Session!.Role);
+        Assert.Equal("Адміністратор", vm.UserRoleText);
+        UserAuthStateChangedMessage sent = Assert.Single(authMessages);
+        Assert.True(sent.IsLoggedIn);
+        Assert.Equal("admin@waterfall.local", sent.Email);
+    }
+
+    [Fact]
+    public async Task Restore_CalledTwice_RunsOnlyOnce()
+    {
+        StrongReferenceMessenger messenger = new();
+        int authMessageCount = 0;
+        messenger.Register<UserAuthStateChangedMessage>(this, (_, _) => authMessageCount++);
+
+        _tokens.Token = Jwt($$"""{"sub":"u1","email":"seeker@example.com","role":"JobSeeker","exp":{{Unix(Now.AddMinutes(10))}}}""");
+        LoginViewModel vm = new(_gateway, _tokens, _time, messenger: messenger);
+
+        await vm.RestoreSessionCommand.ExecuteAsync(null);
+        await vm.RestoreSessionCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, authMessageCount);
+        Assert.Equal(1, _gateway.PersonalStatsCalls);
+    }
 }
 
