@@ -16,8 +16,8 @@ namespace waterfall.UI;
 /// </summary>
 public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
 {
-    private sealed record NavEntry(string Route, string Label, string Glyph, Type PageType, bool IsFooter, bool Muted = false);
-    private sealed record RailRow(Border Container, Border Indicator, bool Muted);
+    private sealed record NavEntry(string Route, string Label, string Glyph, Type PageType, bool IsFooter);
+    private sealed record RailRow(Border Container, Border Indicator);
 
     public static DesktopHostPage? Current { get; private set; }
 
@@ -33,6 +33,7 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
     private readonly Dictionary<string, NavEntry> _entries = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RailRow> _railRows = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, MountedPage> _mounted = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _visibleRoutes = new(StringComparer.OrdinalIgnoreCase);
 
     private string _activeRoute = string.Empty;
     private string? _hoveredRoute;
@@ -190,33 +191,48 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
         _isAnalyst = isAnalyst;
         _entries.Clear();
         _railRows.Clear();
+        _visibleRoutes.Clear();
         _topNavStack.Children.Clear();
         _footerNavStack.Children.Clear();
 
-        List<NavEntry> topEntries =
+        // Усі маршрути реєструються завжди, щоб прямий перехід досягав сторінки й вона сама
+        // показувала відмову в доступі (US-006 AC-3). У рейлі — лише пункти, дозволені ролі.
+        List<NavEntry> allEntries =
         [
             new("catalog", "Каталог", Icons.Globe, typeof(CatalogPage), IsFooter: false),
-            new("database", "База вакансій", Icons.Database, typeof(DatabasePage), IsFooter: false)
+            new("database", "База вакансій", Icons.Database, typeof(DatabasePage), IsFooter: false),
+            new("analytics", "Аналітика", Icons.ChartColumn, typeof(AnalyticsPage), IsFooter: false),
+            new("aiconsultant", "ШІ-чат", Icons.MessageSquare, typeof(AIConsultantPage), IsFooter: false),
+            new("favorites", "Обране", Icons.Heart, typeof(FavoritesPage), IsFooter: false),
+            new("recommendations", "Рекомендації", Icons.Sparkles, typeof(RecommendationsPage), IsFooter: false),
+            new("login", "Профіль", Icons.User, typeof(LoginPage), IsFooter: true),
+            new("systemsettings", "Налаштування", Icons.Settings, typeof(SystemSettingsPage), IsFooter: true)
         ];
 
+        // US-006 AC-3: шукач роботи не бачить «Аналітику». «Рекомендації», «ШІ-чат» і
+        // «Обране» — розділи шукача, тому аналітику вони не показуються.
+        _visibleRoutes.Add("catalog");
+        _visibleRoutes.Add("database");
+        _visibleRoutes.Add("login");
+        _visibleRoutes.Add("systemsettings");
         if (isAnalyst)
         {
-            topEntries.Add(new("analytics", "Аналітика", Icons.ChartColumn, typeof(AnalyticsPage), IsFooter: false));
-            topEntries.Add(new("aiconsultant", "ШІ-чат", Icons.MessageSquare, typeof(AIConsultantPage), IsFooter: false));
-            topEntries.Add(new("favorites", "Обране", Icons.Heart, typeof(FavoritesPage), IsFooter: false));
-            topEntries.Add(new("recommendations", "Рекомендації", Icons.Sparkles, typeof(RecommendationsPage), IsFooter: false));
+            _visibleRoutes.Add("analytics");
         }
         else
         {
-            topEntries.Add(new("recommendations", "Рекомендації", Icons.Sparkles, typeof(RecommendationsPage), IsFooter: false));
-            topEntries.Add(new("aiconsultant", "ШІ-чат", Icons.MessageSquare, typeof(AIConsultantPage), IsFooter: false));
-            topEntries.Add(new("favorites", "Обране", Icons.Heart, typeof(FavoritesPage), IsFooter: false));
+            _visibleRoutes.Add("aiconsultant");
+            _visibleRoutes.Add("favorites");
+            _visibleRoutes.Add("recommendations");
         }
 
-        foreach (NavEntry entry in topEntries)
+        foreach (NavEntry entry in allEntries)
         {
             _entries[entry.Route] = entry;
-            _topNavStack.Children.Add(CreateRailRow(entry));
+            if (_visibleRoutes.Contains(entry.Route) && !entry.IsFooter)
+            {
+                _topNavStack.Children.Add(CreateRailRow(entry));
+            }
         }
 
         BoxView footerDivider = new()
@@ -227,19 +243,13 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
         footerDivider.SetDynamicResource(BoxView.ColorProperty, "DividerColor");
         _footerNavStack.Children.Add(footerDivider);
 
-        if (!isAnalyst)
+        foreach (NavEntry entry in allEntries)
         {
-            NavEntry lockedAnalytics = new("analytics", "Аналітика", Icons.Lock, typeof(AnalyticsPage), IsFooter: true, Muted: true);
-            _entries[lockedAnalytics.Route] = lockedAnalytics;
-            _footerNavStack.Children.Add(CreateRailRow(lockedAnalytics));
+            if (entry.IsFooter && _visibleRoutes.Contains(entry.Route))
+            {
+                _footerNavStack.Children.Add(CreateRailRow(entry));
+            }
         }
-
-        NavEntry profile = new("login", "Профіль", Icons.User, typeof(LoginPage), IsFooter: true);
-        NavEntry settings = new("systemsettings", "Налаштування", Icons.Settings, typeof(SystemSettingsPage), IsFooter: true);
-        _entries[profile.Route] = profile;
-        _entries[settings.Route] = settings;
-        _footerNavStack.Children.Add(CreateRailRow(profile));
-        _footerNavStack.Children.Add(CreateRailRow(settings));
 
         UpdateRailSelectionVisuals();
     }
@@ -266,7 +276,7 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
             HorizontalOptions = LayoutOptions.Center,
             VerticalOptions = LayoutOptions.Center
         };
-        iconLabel.SetDynamicResource(Label.TextColorProperty, entry.Muted ? "TextMuted" : "TextSecondary");
+        iconLabel.SetDynamicResource(Label.TextColorProperty, "TextSecondary");
 
         Label titleLabel = new()
         {
@@ -276,7 +286,7 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
             VerticalOptions = LayoutOptions.Center,
             LineBreakMode = LineBreakMode.TailTruncation
         };
-        titleLabel.SetDynamicResource(Label.TextColorProperty, entry.Muted ? "TextMuted" : "White");
+        titleLabel.SetDynamicResource(Label.TextColorProperty, "White");
 
         Grid grid = new()
         {
@@ -326,7 +336,7 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
         };
         container.GestureRecognizers.Add(hover);
 
-        _railRows[entry.Route] = new RailRow(container, indicator, entry.Muted);
+        _railRows[entry.Route] = new RailRow(container, indicator);
         return container;
     }
 
@@ -393,13 +403,20 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
     {
         (_, bool isAnalyst, string roleLabel) = await MountedPageHelper.ResolveRoleAsync(_tokens);
 
+        bool railRebuilt = false;
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
             _roleBadgeLabel.Text = roleLabel;
             if (isAnalyst != _isAnalyst)
             {
                 RebuildRail(isAnalyst);
+                railRebuilt = true;
             }
         });
+
+        if (railRebuilt && !_visibleRoutes.Contains(_activeRoute))
+        {
+            await NavigateToAsync("catalog");
+        }
     }
 }
