@@ -215,6 +215,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         {
             item.CanMarkViewed = canTrack;
             item.CanSave = canTrack;
+            item.CanUseAi = canTrack;
+            item.IsSelectionModeActive = false;
             if (!canTrack)
             {
                 item.IsViewed = false;
@@ -1607,7 +1609,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             onDistanceCalculated: (id, dist) => _distanceCache[id] = dist,
             initialDistanceKm: cachedKm,
             canMarkViewed: CanTrackViews,
-            canSave: CanTrackViews);
+            canSave: CanTrackViews,
+            canUseAi: CanTrackViews);
     }
 
     private bool MatchesAllFilters(VacancyDto v, FilterSnapshot f)

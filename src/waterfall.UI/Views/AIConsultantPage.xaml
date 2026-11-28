@@ -205,23 +205,11 @@
                 Padding="12,10">
             <VerticalStackLayout Spacing="7">
                 <!-- THR-06: попередження про персональні дані -->
-                <Border StrokeShape="RoundRectangle 7"
-                        StrokeThickness="0"
-                        BackgroundColor="{DynamicResource TonalSurface}"
-                        Padding="8,4"
-                        HorizontalOptions="Start">
-                    <HorizontalStackLayout Spacing="5" VerticalOptions="Center">
-                        <Label Text="{x:Static res:Icons.TriangleAlert}"
-                               FontFamily="Lucide"
-                               FontSize="11"
-                               TextColor="{DynamicResource Primary}"
-                               VerticalOptions="Center" />
-                        <Label Text="Не вводьте персональні дані"
-                               Style="{StaticResource MutedLabel}"
-                               FontSize="11"
-                               VerticalOptions="Center" />
-                    </HorizontalStackLayout>
-                </Border>
+                <Label Text="ШІ може помилятися. Не вводьте персональні дані."
+                       Style="{StaticResource MutedLabel}"
+                       FontSize="11"
+                       HorizontalOptions="Center"
+                       HorizontalTextAlignment="Center" />
 
                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                     <Border Style="{StaticResource CompactFieldBorder}"

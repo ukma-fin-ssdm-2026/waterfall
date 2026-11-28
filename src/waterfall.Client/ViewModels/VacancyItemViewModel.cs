@@ -60,7 +60,8 @@ public partial class VacancyItemViewModel : ObservableObject
         double? initialDistanceKm = null,
         bool canMarkViewed = true,
         string? notes = null,
-        bool canSave = true)
+        bool canSave = true,
+        bool canUseAi = true)
     {
         Vacancy = vacancy;
         Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
@@ -73,6 +74,7 @@ public partial class VacancyItemViewModel : ObservableObject
         IsSaved = canSave && vacancy.IsSaved;
         CanMarkViewed = canMarkViewed;
         CanSave = canSave;
+        CanUseAi = canUseAi;
         IsViewed = canMarkViewed && vacancy.IsViewed;
         VacancySelectionState.Register(this);
         Category = string.IsNullOrWhiteSpace(vacancy.Category) ? "Інше" : vacancy.Category;
@@ -610,6 +612,18 @@ public partial class VacancyItemViewModel : ObservableObject
     [ObservableProperty]
     public partial bool CanSave { get; set; } = true;
 
+    /// <summary>
+    /// Чи дозволено надсилати вакансію ШІ-консультанту (лише JobSeeker: чат закритий для інших ролей).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanUseAi { get; set; } = true;
+
+    /// <summary>
+    /// Режим вибору для групового ШІ-аналізу ввімкнено — чекбокс показується на картці.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsSelectionModeActive { get; set; }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ViewedButtonText))]
     public partial bool IsViewed { get; set; }
@@ -654,6 +668,11 @@ public partial class VacancyItemViewModel : ObservableObject
         : "Вибрати вакансію для групового ШІ-аналізу (до 3)";
 
     /// <summary>
+    /// Картка не влізла в ліміт вибору — картка показує локальний фідбек (shake), без глобального банера.
+    /// </summary>
+    public event EventHandler? SelectionLimitReached;
+
+    /// <summary>
     /// Позначає / знімає позначку вибору картки. Понад три вакансії вибрати не можна (FR-010).
     /// </summary>
     [RelayCommand]
@@ -661,7 +680,7 @@ public partial class VacancyItemViewModel : ObservableObject
     {
         if (!VacancySelectionState.Toggle(Vacancy))
         {
-            _reportError($"Для ШІ-аналізу можна вибрати не більше {VacancySelectionState.MaxSelected} вакансій.");
+            SelectionLimitReached?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -828,6 +847,9 @@ public static class VacancySelectionState
     private static readonly List<WeakReference<VacancyItemViewModel>> s_listeners = [];
     private static readonly object s_sync = new();
 
+    /// <summary>Сповіщає сторінки про зміну вибору (лічильник і панель дій).</summary>
+    public static event Action? Changed;
+
     public static int Count
     {
         get
@@ -924,6 +946,8 @@ public static class VacancySelectionState
         {
             viewModel.NotifySelectionChanged();
         }
+
+        Changed?.Invoke();
     }
 
     private static void PruneDeadListeners()

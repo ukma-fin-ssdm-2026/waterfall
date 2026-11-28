@@ -261,6 +261,7 @@ public partial class VacancyCard : ContentView
         if (_currentViewModel is not null)
         {
             _currentViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _currentViewModel.SelectionLimitReached -= OnSelectionLimitReached;
         }
 
         _currentViewModel = next;
@@ -268,6 +269,7 @@ public partial class VacancyCard : ContentView
         if (_currentViewModel is not null)
         {
             _currentViewModel.PropertyChanged += OnViewModelPropertyChanged;
+            _currentViewModel.SelectionLimitReached += OnSelectionLimitReached;
             BindToViewModel(_currentViewModel);
             _ = _currentViewModel.EnsureDistanceLoadedAsync();
         }
@@ -298,6 +300,7 @@ public partial class VacancyCard : ContentView
         ApplySavedState(vm);
         ApplyViewedState(vm);
         ApplySelectionState(vm);
+        AiButtonBorder.IsVisible = vm.CanUseAi;
 
         CompanyLabel.Text = vm.Company;
         UpdateMetaRow(vm);
@@ -402,6 +405,7 @@ public partial class VacancyCard : ContentView
     {
         CardPalette p = s_palette;
         bool selected = vm.IsSelected;
+        SelectBorder.IsVisible = vm.IsSelectionModeActive;
         SelectBorder.Stroke = selected ? s_heartPrimaryBrush : s_heartMutedBrush;
         SelectBorder.BackgroundColor = selected ? p.PrimarySurface : Colors.Transparent;
         SelectBorder.Opacity = vm.IsSelectionLocked ? 0.4 : 1.0;
@@ -646,7 +650,11 @@ public partial class VacancyCard : ContentView
             case nameof(VacancyItemViewModel.IsSelected):
             case nameof(VacancyItemViewModel.IsSelectionLocked):
             case nameof(VacancyItemViewModel.SelectionBadgeText):
+            case nameof(VacancyItemViewModel.IsSelectionModeActive):
                 ApplySelectionState(_currentViewModel);
+                break;
+            case nameof(VacancyItemViewModel.CanUseAi):
+                AiButtonBorder.IsVisible = _currentViewModel.CanUseAi;
                 break;
             case nameof(VacancyItemViewModel.Notes):
                 NotesLabel.Text = _currentViewModel.NotesDisplay ?? string.Empty;
@@ -1122,5 +1130,28 @@ public partial class VacancyCard : ContentView
         {
             cmd.Execute(null);
         }
+    }
+
+    private void OnSelectionLimitReached(object? sender, EventArgs e)
+    {
+        if (!MainThread.IsMainThread)
+        {
+            MainThread.BeginInvokeOnMainThread(() => _ = ShakeSelectionAsync());
+            return;
+        }
+
+        _ = ShakeSelectionAsync();
+    }
+
+    private async Task ShakeSelectionAsync()
+    {
+        SelectBorder.CancelAnimations();
+        for (int i = 0; i < 2; i++)
+        {
+            await SelectBorder.TranslateToAsync(-4, 0, 60, Easing.Linear);
+            await SelectBorder.TranslateToAsync(4, 0, 60, Easing.Linear);
+        }
+
+        await SelectBorder.TranslateToAsync(0, 0, 60, Easing.Linear);
     }
 }

@@ -100,6 +100,7 @@ public partial class CatalogViewModel : ObservableObject
         CanTrackViews = tokenStore is null;
         Pager = new VacancyPager(ShowCurrentPage);
         Pager.PropertyChanged += OnPagerPropertyChanged;
+        VacancySelectionState.Changed += OnVacancySelectionChanged;
 
         // Зміна «Обраного» з іншої вкладки: оновлюємо DTO та видиму картку, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
@@ -328,16 +329,104 @@ public partial class CatalogViewModel : ObservableObject
             }
         }
 
-        foreach (VacancyItemViewModel item in Vacancies)
+        if (!canTrack && IsSelectionMode)
+        {
+            ExitSelectionMode(clearSelection: true);
+        }
+
+        foreach (VacancyItemViewModel item in _allCards)
         {
             item.CanMarkViewed = canTrack;
             item.CanSave = canTrack;
+            item.CanUseAi = canTrack;
+            item.IsSelectionModeActive = IsSelectionMode;
             if (!canTrack)
             {
                 item.IsViewed = false;
                 item.IsSaved = false;
             }
         }
+    }
+
+    /// <summary>
+    /// Режим вибору 1–3 вакансій для групового ШІ-аналізу (FR-010). Чекбокси карток
+    /// з'являються лише в цьому режимі, панель дій — лише поки режим активний.
+    /// </summary>
+    [ObservableProperty]
+    public partial bool IsSelectionMode { get; set; }
+
+    public int SelectedForAnalysisCount => VacancySelectionState.Count;
+
+    public string SelectionTrayText => $"Обрано {VacancySelectionState.Count} з {VacancySelectionState.MaxSelected}";
+
+    public bool HasSelection => VacancySelectionState.Count > 0;
+
+    [RelayCommand]
+    private void ToggleSelectionMode()
+    {
+        if (!CanTrackViews)
+        {
+            return;
+        }
+
+        if (IsSelectionMode)
+        {
+            ExitSelectionMode(clearSelection: true);
+            return;
+        }
+
+        IsSelectionMode = true;
+        foreach (VacancyItemViewModel item in _allCards)
+        {
+            item.IsSelectionModeActive = true;
+        }
+
+        NotifySelectionChanged();
+    }
+
+    [RelayCommand]
+    private void CancelSelectionMode() => ExitSelectionMode(clearSelection: true);
+
+    [RelayCommand(CanExecute = nameof(CanAnalyzeSelection))]
+    private void AnalyzeSelection()
+    {
+        IReadOnlyList<VacancyDto> batch = VacancySelectionState.Snapshot();
+        if (batch.Count == 0)
+        {
+            return;
+        }
+
+        ExitSelectionMode(clearSelection: true);
+        _messenger.Send(new AnalyzeVacanciesRequestedMessage(batch));
+        _messenger.Send(new NavigateToRouteMessage("aiconsultant"));
+    }
+
+    private bool CanAnalyzeSelection() => HasSelection;
+
+    private void ExitSelectionMode(bool clearSelection)
+    {
+        if (clearSelection)
+        {
+            VacancySelectionState.Clear();
+        }
+
+        IsSelectionMode = false;
+        foreach (VacancyItemViewModel item in _allCards)
+        {
+            item.IsSelectionModeActive = false;
+        }
+
+        NotifySelectionChanged();
+    }
+
+    private void OnVacancySelectionChanged() => NotifySelectionChanged();
+
+    private void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(SelectedForAnalysisCount));
+        OnPropertyChanged(nameof(SelectionTrayText));
+        OnPropertyChanged(nameof(HasSelection));
+        AnalyzeSelectionCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
@@ -2920,7 +3009,7 @@ public partial class CatalogViewModel : ObservableObject
     private VacancyItemViewModel CreateVacancyItemViewModel(VacancyDto dto)
     {
         double? cachedKm = _distanceCache.TryGetValue(dto.Id, out double? km) ? km : null;
-        return new VacancyItemViewModel(
+        VacancyItemViewModel item = new(
             dto,
             _gateway,
             _messenger,
@@ -2930,7 +3019,10 @@ public partial class CatalogViewModel : ObservableObject
             onDistanceCalculated: (id, dist) => _distanceCache[id] = dist,
             initialDistanceKm: cachedKm,
             canMarkViewed: CanTrackViews,
-            canSave: CanTrackViews);
+            canSave: CanTrackViews,
+            canUseAi: CanTrackViews);
+        item.IsSelectionModeActive = IsSelectionMode;
+        return item;
     }
 
     private async Task ExecuteLocalFilterAndSortAsync(bool updateBanner)
