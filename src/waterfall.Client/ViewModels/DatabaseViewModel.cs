@@ -344,11 +344,25 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(LastSyncedMenuText))]
     public partial DateTimeOffset? LastSyncedAt { get; set; }
 
+    /// <summary>
+    /// Чи сервер приймає вакансії клієнта (VacancySync:AcceptClientVacancies) за останньою відповіддю.
+    /// false — кнопка синхронізації лише оновлює каталог, а локальні вакансії лишаються на пристрої.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SyncBadgeText))]
+    [NotifyPropertyChangedFor(nameof(SyncButtonText))]
+    [NotifyPropertyChangedFor(nameof(HasUnsyncedChanges))]
+    [NotifyPropertyChangedFor(nameof(CanUploadLocalChanges))]
+    public partial bool ClientUploadsAccepted { get; set; } = true;
+
     public bool HasError => !string.IsNullOrWhiteSpace(ErrorMessage);
     public bool HasStatusBanner => !string.IsNullOrWhiteSpace(StatusBannerText);
-    public bool HasUnsyncedChanges => UnsyncedCount > 0;
+    public bool CanUploadLocalChanges => ClientUploadsAccepted;
+    public bool HasUnsyncedChanges => UnsyncedCount > 0 && ClientUploadsAccepted;
     public bool IsEmpty => !IsLoading && FilteredCount == 0;
-    public string SyncButtonText => UnsyncedCount > 0 ? $"Синхронізувати ({UnsyncedCount})" : "Синхронізувати";
+    public string SyncButtonText => !ClientUploadsAccepted
+        ? "Оновити каталог"
+        : UnsyncedCount > 0 ? $"Синхронізувати ({UnsyncedCount})" : "Синхронізувати";
     public string LastSyncedMenuText => LastSyncedAt.HasValue
         ? $"Оновлено о {LastSyncedAt.Value.ToLocalTime():HH:mm}"
         : "Ще не синхронізовано";
@@ -383,7 +397,9 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     {
         get
         {
-            string pending = UnsyncedCount > 0 ? $"Офлайн-змін: {UnsyncedCount}" : "Синхронізовано";
+            string pending = !ClientUploadsAccepted && UnsyncedCount > 0
+                ? $"Лише на пристрої: {UnsyncedCount}"
+                : UnsyncedCount > 0 ? $"Офлайн-змін: {UnsyncedCount}" : "Синхронізовано";
             if (LastSyncedAt.HasValue)
             {
                 return $"{pending} · {LastSyncedAt.Value.ToLocalTime():HH:mm}";
@@ -668,16 +684,24 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
         try
         {
-            // Якщо є несинхронізовані офлайн-вакансії і сервер доступний — спочатку обмінюємося даними
+            // Якщо є несинхронізовані офлайн-вакансії і сервер доступний — спочатку обмінюємося даними.
+            // Коли сервер не приймає вакансії клієнта, вивантаження не дасть нічого, тож його пропускаємо.
             if (_syncService is not null && _localStore is not null)
             {
                 LocalVacancyStats preStats = await _localStore.GetStatsAsync(cts.Token);
-                if (preStats.UnsyncedCount > 0)
+                if (preStats.UnsyncedCount > 0 && ClientUploadsAccepted)
                 {
                     VacancySyncResult autoSync = await _syncService.SyncWithServerAsync(fullSync: false, cts.Token);
                     if (autoSync.Succeeded)
                     {
-                        StatusBannerText = $"Синхронізовано: надіслано {autoSync.UploadedToServer}, отримано {autoSync.DownloadedFromServer}";
+                        if (autoSync.ClientVacanciesAccepted is bool autoAccepted)
+                        {
+                            ClientUploadsAccepted = autoAccepted;
+                        }
+
+                        StatusBannerText = ClientUploadsAccepted
+                            ? $"Синхронізовано: надіслано {autoSync.UploadedToServer}, отримано {autoSync.DownloadedFromServer}"
+                            : $"Каталог оновлено: отримано {autoSync.DownloadedFromServer}; локальні вакансії лишилися на пристрої";
                     }
                 }
             }
@@ -788,7 +812,14 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             if (result.Succeeded)
             {
                 IsOfflineMode = false;
-                StatusBannerText = $"Синхронізація завершена: надіслано {result.UploadedToServer}, отримано {result.DownloadedFromServer} (нових: {result.AddedLocally})";
+                if (result.ClientVacanciesAccepted is bool accepted)
+                {
+                    ClientUploadsAccepted = accepted;
+                }
+
+                StatusBannerText = ClientUploadsAccepted
+                    ? $"Синхронізація завершена: надіслано {result.UploadedToServer}, отримано {result.DownloadedFromServer} (нових: {result.AddedLocally})"
+                    : $"Каталог оновлено: отримано {result.DownloadedFromServer} (нових: {result.AddedLocally}); локальні вакансії лишилися на пристрої";
                 await LoadDatabaseAsync();
             }
             else
@@ -818,6 +849,10 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             LocalVacancyStats stats = await _localStore.GetStatsAsync(ct);
             UnsyncedCount = stats.UnsyncedCount;
             LastSyncedAt = stats.LastSyncedAt;
+            if (_syncService?.ClientVacanciesAccepted is bool knownAccepted)
+            {
+                ClientUploadsAccepted = knownAccepted;
+            }
         }
         catch
         {

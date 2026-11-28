@@ -48,6 +48,14 @@ public sealed record VacancySyncResponseDto
     public List<VacancySyncItemDto> ServerVacancies { get; init; } = [];
     public DateTimeOffset ServerTime { get; init; } = DateTimeOffset.UtcNow;
     public int ReceivedFromClient { get; init; }
+
+    /// <summary>
+    /// Чи сервер зберігає вакансії, надіслані клієнтом (VacancySync:AcceptClientVacancies).
+    /// false — надіслані clientVacancies проігноровано, тож локальні зміни лишаються на пристрої;
+    /// null — сервер поля не надіслав (старіша версія), і тоді вважаємо вакансії прийнятими.
+    /// </summary>
+    public bool? ClientVacanciesAccepted { get; init; }
+
     public int CreatedOnServer { get; init; }
     public int UpdatedOnServer { get; init; }
     public int TotalServerVacancies { get; init; }
@@ -86,6 +94,11 @@ public sealed record VacancySyncResult
     public int TotalServerVacancies { get; init; }
     public DateTimeOffset? SyncedAt { get; init; }
     public string? ErrorMessage { get; init; }
+
+    /// <summary>
+    /// Чи сервер прийняв локальні вакансії у цій синхронізації; null — невідомо (синхронізація не дійшла до сервера).
+    /// </summary>
+    public bool? ClientVacanciesAccepted { get; init; }
 }
 
 /// <summary>Статистика локальної SQLite бази вакансій клієнта.</summary>

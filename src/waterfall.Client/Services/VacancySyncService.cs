@@ -22,6 +22,7 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
     private readonly IMessenger? _messenger;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private volatile bool _isSyncing;
+    private bool? _clientVacanciesAccepted;
 
     public VacancySyncService(
         IHttpGatewayService gateway,
@@ -34,6 +35,8 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
     }
 
     public bool IsSyncing => _isSyncing;
+
+    public bool? ClientVacanciesAccepted => _clientVacanciesAccepted;
 
     public async Task<VacancySyncResult> SyncWithServerAsync(bool fullSync = false, CancellationToken ct = default)
     {
@@ -55,6 +58,16 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
 
             List<VacancySyncItemDto> uploadItems = unsynced.Select(EfLocalVacancyStore.MapToSyncItem).ToList();
 
+            // Сервер може не приймати вакансії клієнта (VacancySync:AcceptClientVacancies = false): тоді
+            // не витрачаємо трафік на вивантаження й не позначаємо локальні зміни синхронізованими.
+            bool uploadsAllowed = _clientVacanciesAccepted ?? true;
+            if (!uploadsAllowed)
+            {
+                uploadItems = [];
+            }
+
+            bool? acceptedInResponse = null;
+
             // Навіть якщо локальних змін немає, виконуємо один запит синхронізації, щоб забрати нові серверні вакансії.
             int batchCount = Math.Max(1, (int)Math.Ceiling(uploadItems.Count / (double)UploadBatchSize));
             for (int batchIndex = 0; batchIndex < batchCount; batchIndex++)
@@ -74,13 +87,17 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
                 };
 
                 VacancySyncResponseDto response = await _gateway.SyncVacanciesAsync(request, ct);
+                // null у відповіді — старіший сервер без поля: поводимось як раніше, тобто вважаємо прийнятим
+                bool batchAccepted = response.ClientVacanciesAccepted ?? true;
+                acceptedInResponse = (acceptedInResponse ?? true) && batchAccepted;
                 totalUploaded += response.ReceivedFromClient;
                 totalCreatedOnServer += response.CreatedOnServer;
                 totalUpdatedOnServer += response.UpdatedOnServer;
                 totalServerVacancies = response.TotalServerVacancies;
                 serverTime = response.ServerTime;
 
-                if (chunk.Count > 0)
+                // Позначаємо вивантаженими лише ті записи, які сервер справді прийняв
+                if (chunk.Count > 0 && batchAccepted)
                 {
                     await _localStore.MarkAsSyncedAsync(chunk.Select(c => c.Id), ct);
                 }
@@ -94,8 +111,12 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
                 }
             }
 
+            _clientVacanciesAccepted = acceptedInResponse;
+
             LocalVacancyStats stats = await _localStore.GetStatsAsync(ct);
-            string summary = $"Надіслано: {totalUploaded}, отримано: {totalDownloaded} (нових локально: {totalAddedLocally})";
+            string summary = acceptedInResponse == false
+                ? $"Отримано: {totalDownloaded} (нових локально: {totalAddedLocally}); локальні вакансії лишилися на пристрої: {stats.UnsyncedCount}"
+                : $"Надіслано: {totalUploaded}, отримано: {totalDownloaded} (нових локально: {totalAddedLocally})";
             await _localStore.SetLastSyncedAtAsync(serverTime, summary, ct);
 
             VacancySyncResult result = new()
@@ -109,7 +130,8 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
                 UpdatedLocally = totalUpdatedLocally,
                 TotalLocalVacancies = stats.TotalCount,
                 TotalServerVacancies = totalServerVacancies,
-                SyncedAt = serverTime
+                SyncedAt = serverTime,
+                ClientVacanciesAccepted = acceptedInResponse
             };
 
             _messenger?.Send(new VacanciesSyncedMessage(result));
@@ -127,6 +149,7 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
                 Succeeded = false,
                 TotalLocalVacancies = stats.TotalCount,
                 SyncedAt = stats.LastSyncedAt,
+                ClientVacanciesAccepted = _clientVacanciesAccepted,
                 ErrorMessage = ex is ApiException apiEx ? apiEx.Message : $"Не вдалося синхронізувати базу: {ex.Message}"
             };
         }
