@@ -220,7 +220,8 @@
             </Grid>
 
             <!-- Рядок 5: Повний список вакансій із БД -->
-            <controls:VacancyListView Grid.Row="5"
+            <controls:VacancyListView x:Name="DatabaseListView"
+                                      Grid.Row="5"
                                       ItemsSource="{Binding Vacancies}"
                                       EnablePullToRefresh="True"
                                       IsRefreshing="{Binding IsRefreshing}"
@@ -236,6 +237,9 @@
                         <Button Text="{Binding SyncButtonText}" Command="{Binding SyncDatabaseCommand}" Style="{StaticResource CardActionPrimary}" />
                     </HorizontalStackLayout>
                 </VerticalStackLayout>
+                <controls:VacancyListView.FooterContent>
+                    <controls:VacancyPagerBar Pager="{Binding Pager}" SummaryText="{Binding PagerSummaryText}" />
+                </controls:VacancyListView.FooterContent>
             </controls:VacancyListView>
         </Grid>
 

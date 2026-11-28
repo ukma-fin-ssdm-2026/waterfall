@@ -612,11 +612,224 @@ public sealed class DatabaseViewModelTests : IDisposable
         Assert.Equal(1, vm.UnsyncedCount);
     }
 
+    [Fact]
+    public async Task LoadDatabase_PaginatesAt20PerPage_WithFirstLastAndPageSizeSwitching()
+    {
+        List<VacancyDto> items = Enumerable.Range(1, 55)
+            .Select(i => new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                Title = $"DB Job {i}",
+                PublishedAt = _time.GetUtcNow().AddMinutes(-i)
+            })
+            .ToList();
+        SetupPagedServer(items, pageSize: 20);
+        using DatabaseViewModel vm = new(_gateway, _messenger, _time);
+
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+        int queryCallsAfterLoad = _gateway.VacancyQueries.Count;
+
+        Assert.Equal(55, vm.TotalInDatabase);
+        Assert.Equal(55, vm.FilteredCount);
+        Assert.Equal(20, vm.Vacancies.Count);
+        Assert.Equal(3, vm.TotalPages);
+        Assert.Equal(1, vm.CurrentPage);
+        Assert.True(vm.IsPagerVisible);
+        Assert.False(vm.HasPreviousPage);
+        Assert.True(vm.HasNextPage);
+        Assert.Equal("DB Job 1", vm.Vacancies[0].Title);
+
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal(2, vm.CurrentPage);
+        Assert.Equal(20, vm.Vacancies.Count);
+        Assert.Equal("DB Job 21", vm.Vacancies[0].Title);
+
+        vm.LastPageCommand.Execute(null);
+        Assert.Equal(3, vm.CurrentPage);
+        Assert.Equal(15, vm.Vacancies.Count);
+        Assert.Equal("DB Job 41", vm.Vacancies[0].Title);
+        Assert.False(vm.HasNextPage);
+
+        vm.FirstPageCommand.Execute(null);
+        Assert.Equal(1, vm.CurrentPage);
+        Assert.Equal("DB Job 1", vm.Vacancies[0].Title);
+
+        // Перемикання на 50 на сторінці скидає на 1-шу та лишає пейджер видимим
+        vm.LastPageCommand.Execute(null);
+        vm.SetPageSizeCommand.Execute(50);
+        Assert.Equal(1, vm.CurrentPage);
+        Assert.Equal(2, vm.TotalPages);
+        Assert.Equal(50, vm.Vacancies.Count);
+        Assert.True(vm.IsPagerVisible);
+
+        vm.SetPageSizeCommand.Execute(20);
+        Assert.Equal(1, vm.CurrentPage);
+        Assert.Equal(3, vm.TotalPages);
+        Assert.Equal(20, vm.Vacancies.Count);
+        Assert.Equal(queryCallsAfterLoad, _gateway.VacancyQueries.Count);
+    }
+
+    [Fact]
+    public async Task LoadDatabase_ExportsAllFilteredAcrossPages_AndPreservesOffPageSaveAndView()
+    {
+        List<VacancyDto> items = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                Title = $"Export Job {i}",
+                PublishedAt = _time.GetUtcNow().AddMinutes(-i)
+            })
+            .ToList();
+        SetupPagedServer(items, pageSize: 25);
+
+        InMemoryTokenStore tokens = new();
+        static string B64(string v) => Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(v)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        string payload = System.Text.Json.JsonSerializer.Serialize(new Dictionary<string, object>
+        {
+            ["email"] = "seeker@test.com",
+            ["role"] = "JobSeeker",
+            ["exp"] = _time.GetUtcNow().AddHours(1).ToUnixTimeSeconds()
+        });
+        await tokens.SetTokenAsync($"{B64("""{"alg":"HS256","typ":"JWT"}""")}.{B64(payload)}.sig");
+
+        using DatabaseViewModel vm = new(_gateway, _messenger, _time, tokenStore: tokens);
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+        Assert.Equal(20, vm.Vacancies.Count);
+
+        Guid pageTwoTargetId = items[21].Id;
+        _messenger.Send(new VacancySaveChangedMessage(pageTwoTargetId, IsSaved: true));
+        _messenger.Send(new VacancyViewedMessage(pageTwoTargetId, IsViewed: true));
+
+        vm.NextPageCommand.Execute(null);
+        Assert.True(vm.Vacancies[1].IsSaved);
+        Assert.True(vm.Vacancies[1].IsViewed);
+
+        string exportPath = Path.Combine(Path.GetTempPath(), $"waterfall-db-export-{Guid.NewGuid():N}.json");
+        try
+        {
+            await vm.ExportDatabaseToAsync(exportPath);
+            string json = await File.ReadAllTextAsync(exportPath);
+            using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(json);
+            Assert.Equal(25, doc.RootElement.GetArrayLength());
+        }
+        finally
+        {
+            if (File.Exists(exportPath))
+            {
+                File.Delete(exportPath);
+            }
+        }
+
+        // Вихід з акаунта прибирає CanTrackViews і стан переглядів поза поточною сторінкою
+        await tokens.ClearAsync();
+        _messenger.Send(new UserAuthStateChangedMessage(false, null));
+        Assert.False(vm.CanTrackViews);
+        Assert.All(vm.Vacancies, v => Assert.False(v.IsViewed));
+        vm.FirstPageCommand.Execute(null);
+        Assert.All(vm.Vacancies, v => Assert.False(v.IsViewed));
+    }
+
+    [Fact]
+    public async Task LoadDatabase_FilterChange_ResetsToFirstPage_AndAsyncFilterAtLargeScaleWorks()
+    {
+        List<VacancyDto> items = Enumerable.Range(1, 600)
+            .Select(i => new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                Title = i <= 15 ? $"Rust Architect {i}" : $"General Dev {i}",
+                PublishedAt = _time.GetUtcNow().AddMinutes(-i)
+            })
+            .ToList();
+        SetupPagedServer(items, pageSize: 600);
+        using DatabaseViewModel vm = new(_gateway, _messenger, _time);
+
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+        vm.NextPageCommand.Execute(null);
+        Assert.Equal(2, vm.CurrentPage);
+
+        vm.NewWhiteListWord = "Rust";
+        vm.AddWhiteListWordCommand.Execute(null);
+
+        for (int i = 0; i < 100 && vm.FilteredCount != 15; i++)
+        {
+            await Task.Delay(10);
+        }
+
+        Assert.Equal(15, vm.FilteredCount);
+        Assert.Equal(1, vm.CurrentPage);
+        Assert.False(vm.IsPagerVisible);
+        Assert.Equal(15, vm.Vacancies.Count);
+    }
+
+    [Fact]
+    public async Task LoadDatabase_FetchesMultipleServerPagesWithBoundedConcurrency_AndLocalFirstPaintsCachedData()
+    {
+        VacancyDto cached = SampleFourSiteVacancies()[0] with { Title = "Cached Local Item" };
+        await _localStore.SaveVacanciesAsync([cached], isSynced: true);
+
+        List<VacancyDto> serverItems = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                ExternalId = $"srv-{i}",
+                Title = $"Server Page Item {i}",
+                Source = JobSource.Dou,
+                SourceUrl = $"https://jobs.dou.ua/{i}",
+                PublishedAt = _time.GetUtcNow().AddMinutes(-i)
+            })
+            .ToList();
+        SetupPagedServer(serverItems, pageSize: 3);
+
+        using DatabaseViewModel vm = new(_gateway, _messenger, _time, localStore: _localStore);
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+
+        Assert.Equal(25, vm.TotalInDatabase);
+        Assert.Equal(9, _gateway.VacancyQueries.Count);
+        Assert.False(vm.IsOfflineMode);
+        Assert.Null(vm.StatusBannerText);
+        Assert.Equal(20, vm.Vacancies.Count);
+        Assert.Equal("Server Page Item 1", vm.Vacancies[0].Title);
+    }
+
+    [Fact]
+    public async Task PrecalculateDistances_DeduplicatesIdenticalAddresses()
+    {
+        List<VacancyDto> items = Enumerable.Range(1, 50)
+            .Select(i => new VacancyDto
+            {
+                Id = Guid.NewGuid(),
+                Title = $"Office Job {i}",
+                Location = "Київ",
+                FullAddress = i % 2 == 0 ? "Київ, Хрещатик 1" : "Київ, Майдан 2"
+            })
+            .ToList();
+
+        CountingDistanceService distanceService = new() { UserAddress = "Київ, Політехнічна 1" };
+        System.Collections.Concurrent.ConcurrentDictionary<Guid, double?> cache = new();
+
+        await VacancyFilterEngine.PrecalculateDistancesAsync(items, distanceService, cache, CancellationToken.None);
+
+        Assert.Equal(2, distanceService.Calls);
+        Assert.Equal(50, cache.Count);
+    }
+
     private sealed class StubDistanceService : IDistanceCalculatorService
     {
         public string? UserAddress { get; set; }
 
         public Task<double?> CalculateDistanceKmAsync(string targetAddress, CancellationToken ct = default) =>
             Task.FromResult<double?>(targetAddress.Contains("Київ", StringComparison.OrdinalIgnoreCase) ? 3.5 : 400.0);
+    }
+
+    private sealed class CountingDistanceService : IDistanceCalculatorService
+    {
+        public string? UserAddress { get; set; }
+        public int Calls { get; private set; }
+
+        public Task<double?> CalculateDistanceKmAsync(string targetAddress, CancellationToken ct = default)
+        {
+            Calls++;
+            return Task.FromResult<double?>(targetAddress.Contains("Хрещатик", StringComparison.Ordinal) ? 2.1 : 3.4);
+        }
     }
 }

@@ -25,8 +25,11 @@ namespace Waterfall.Client.ViewModels;
 public partial class DatabaseViewModel : ObservableObject, IDisposable
 {
     public static readonly TimeSpan SearchDebounce = TimeSpan.FromMilliseconds(300);
+    public const int PageSize = VacancyPager.DefaultPageSize;
     private const int ServerPageSize = 100;
     private const int MaxServerPages = 200;
+    private const int AsyncFilterThreshold = 500;
+    private const int MaxConcurrentPageFetches = 4;
 
     private readonly IHttpGatewayService _gateway;
     private readonly IMessenger _messenger;
@@ -39,6 +42,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     private readonly IAuthTokenStore? _tokenStore;
 
     private readonly List<VacancyDto> _allVacancies = [];
+    private List<VacancyDto> _filteredDtos = [];
     private readonly HashSet<Guid> _viewedIds = [];
     private readonly ConcurrentDictionary<Guid, double?> _distanceCache = new();
     private CancellationTokenSource? _debounceCts;
@@ -47,6 +51,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
     private bool _suppressAutoFilter;
     private bool _hasLoadedOnce;
     private int _openGeneration;
+    private int _filterGeneration;
 
     public DatabaseViewModel(
         IHttpGatewayService gateway,
@@ -69,6 +74,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         _fileDialog = fileDialog;
         _tokenStore = tokenStore;
         CanTrackViews = tokenStore is null;
+        Pager = new VacancyPager(ShowCurrentPage);
+        Pager.PropertyChanged += OnPagerPropertyChanged;
 
         CategoryGroupOptions = ["Усі групи", .. VacancyCategoryMap.All];
         AvailableCategories.Add("Усі категорії");
@@ -76,13 +83,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
         messenger.Register<DatabaseViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
         {
-            for (int i = 0; i < vm._allVacancies.Count; i++)
-            {
-                if (vm._allVacancies[i].Id == message.VacancyId)
-                {
-                    vm._allVacancies[i] = vm._allVacancies[i] with { IsSaved = message.IsSaved };
-                }
-            }
+            vm.UpdateDtos(message.VacancyId, dto => dto with { IsSaved = message.IsSaved });
 
             foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
             {
@@ -106,13 +107,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 vm._viewedIds.Remove(message.VacancyId);
             }
 
-            for (int i = 0; i < vm._allVacancies.Count; i++)
-            {
-                if (vm._allVacancies[i].Id == message.VacancyId)
-                {
-                    vm._allVacancies[i] = vm._allVacancies[i] with { IsViewed = message.IsViewed };
-                }
-            }
+            vm.UpdateDtos(message.VacancyId, dto => dto with { IsViewed = message.IsViewed });
 
             foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
             {
@@ -204,6 +199,16 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             {
                 HideViewed = false;
             }
+
+            for (int i = 0; i < _allVacancies.Count; i++)
+            {
+                _allVacancies[i] = _allVacancies[i] with { IsViewed = false };
+            }
+
+            for (int i = 0; i < _filteredDtos.Count; i++)
+            {
+                _filteredDtos[i] = _filteredDtos[i] with { IsViewed = false };
+            }
         }
 
         foreach (VacancyItemViewModel item in Vacancies)
@@ -213,6 +218,70 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
             {
                 item.IsViewed = false;
             }
+        }
+    }
+
+    public VacancyPager Pager { get; }
+
+    public int CurrentPage
+    {
+        get => Pager.CurrentPage;
+        set => Pager.CurrentPage = value;
+    }
+
+    public int TotalPages => Pager.TotalPages;
+    public bool HasPreviousPage => Pager.HasPreviousPage;
+    public bool HasNextPage => Pager.HasNextPage;
+    public bool IsPagerVisible => Pager.IsPagerVisible;
+    public string PageText => Pager.PageText;
+
+    private bool CanGoPrevPage() => HasPreviousPage;
+    private bool CanGoNextPage() => HasNextPage;
+
+    [RelayCommand(CanExecute = nameof(CanGoPrevPage))]
+    private void FirstPage() => Pager.FirstPageCommand.Execute(null);
+
+    [RelayCommand(CanExecute = nameof(CanGoPrevPage))]
+    private void PrevPage() => Pager.PrevPageCommand.Execute(null);
+
+    [RelayCommand(CanExecute = nameof(CanGoNextPage))]
+    private void NextPage() => Pager.NextPageCommand.Execute(null);
+
+    [RelayCommand(CanExecute = nameof(CanGoNextPage))]
+    private void LastPage() => Pager.LastPageCommand.Execute(null);
+
+    [RelayCommand]
+    private void SetPageSize(int size) => Pager.SetPageSizeCommand.Execute(size);
+
+    private void OnPagerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(VacancyPager.CurrentPage):
+                OnPropertyChanged(nameof(CurrentPage));
+                break;
+            case nameof(VacancyPager.TotalPages):
+                OnPropertyChanged(nameof(TotalPages));
+                break;
+            case nameof(VacancyPager.PageSize):
+                OnPropertyChanged(nameof(PageText));
+                break;
+            case nameof(VacancyPager.HasPreviousPage):
+                OnPropertyChanged(nameof(HasPreviousPage));
+                FirstPageCommand.NotifyCanExecuteChanged();
+                PrevPageCommand.NotifyCanExecuteChanged();
+                break;
+            case nameof(VacancyPager.HasNextPage):
+                OnPropertyChanged(nameof(HasNextPage));
+                NextPageCommand.NotifyCanExecuteChanged();
+                LastPageCommand.NotifyCanExecuteChanged();
+                break;
+            case nameof(VacancyPager.IsPagerVisible):
+                OnPropertyChanged(nameof(IsPagerVisible));
+                break;
+            case nameof(VacancyPager.PageText):
+                OnPropertyChanged(nameof(PageText));
+                break;
         }
     }
 
@@ -309,11 +378,13 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TotalSummaryText))]
+    [NotifyPropertyChangedFor(nameof(PagerSummaryText))]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
     public partial int TotalInDatabase { get; set; }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TotalSummaryText))]
+    [NotifyPropertyChangedFor(nameof(PagerSummaryText))]
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
     public partial int FilteredCount { get; set; }
 
@@ -411,6 +482,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
     public string TotalSummaryText =>
         $"Показано {FilteredCount} із {TotalInDatabase} вакансій у базі (DOU: {DouCount} · Work.ua: {WorkUaCount} · Djinni: {DjinniCount} · Robota.ua: {RobotaUaCount})";
+
+    public string PagerSummaryText => $"Показано {FilteredCount} із {TotalInDatabase}";
 
     public string DouFilterLabel => $"DOU ({DouCount})";
     public string WorkUaFilterLabel => $"Work.ua ({WorkUaCount})";
@@ -684,6 +757,16 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
         try
         {
+            // Локальний кеш показуємо одразу (без зміни статусу офлайн/банера), доки триває мережеве оновлення.
+            if (_localStore is not null && _allVacancies.Count == 0)
+            {
+                IReadOnlyList<VacancyDto> cachedLocal = await _localStore.GetAllAsync(cts.Token);
+                if (cachedLocal.Count > 0 && !cts.IsCancellationRequested)
+                {
+                    await SetDatabaseVacanciesAsync(cachedLocal.ToList());
+                }
+            }
+
             // Якщо є несинхронізовані офлайн-вакансії і сервер доступний — спочатку обмінюємося даними.
             // Коли сервер не приймає вакансії клієнта або користувач у гостьовому режимі, вивантаження пропускаємо.
             if (_syncService is not null && _localStore is not null)
@@ -708,7 +791,23 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 }
             }
 
-            List<VacancyDto> loaded = await FetchAllServerVacanciesAsync(cts.Token);
+            Func<List<VacancyDto>, Task>? onFirstPage = _allVacancies.Count == 0
+                ? async firstPage =>
+                {
+                    if (!cts.IsCancellationRequested)
+                    {
+                        IsOfflineMode = false;
+                        await SetDatabaseVacanciesAsync(firstPage);
+                    }
+                }
+                : null;
+
+            List<VacancyDto> loaded = await FetchAllServerVacanciesAsync(cts.Token, onFirstPage);
+            if (cts.IsCancellationRequested)
+            {
+                return;
+            }
+
             IsOfflineMode = false;
 
             if (_localStore is not null && loaded.Count > 0)
@@ -757,31 +856,75 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         }
     }
 
-    private async Task<List<VacancyDto>> FetchAllServerVacanciesAsync(CancellationToken ct)
+    private async Task<List<VacancyDto>> FetchAllServerVacanciesAsync(
+        CancellationToken ct,
+        Func<List<VacancyDto>, Task>? onFirstPage = null)
     {
         List<VacancyDto> all = [];
         HashSet<Guid> seen = [];
 
-        for (int page = 1; page <= MaxServerPages; page++)
-        {
-            PagedResult<VacancyDto> pageResult = await _gateway.GetVacanciesAsync(
-                new VacancyQueryOptions
-                {
-                    Page = page,
-                    PageSize = ServerPageSize,
-                    OnlyActive = false,
-                    SortBy = "publishedAt",
-                    SortOrder = "desc"
-                },
-                ct);
+        PagedResult<VacancyDto> firstPage = await FetchServerPageAsync(1, ct);
+        AppendUnique(firstPage.Items, all, seen);
 
-            foreach (VacancyDto dto in pageResult.Items)
+        bool hasMorePages = firstPage.HasNextPage
+            && firstPage.Items.Count > 0
+            && (firstPage.TotalCount <= 0 || all.Count < firstPage.TotalCount);
+        if (!hasMorePages)
+        {
+            return all;
+        }
+
+        if (all.Count > 0 && onFirstPage is not null)
+        {
+            await onFirstPage([.. all]);
+        }
+
+        int effectivePageSize = firstPage.PageSize > 0 ? firstPage.PageSize : firstPage.Items.Count;
+        if (firstPage.TotalCount > all.Count && effectivePageSize > 0)
+        {
+            int totalPages = Math.Min(MaxServerPages, (int)Math.Ceiling(firstPage.TotalCount / (double)effectivePageSize));
+            if (totalPages >= 2)
             {
-                if (seen.Add(dto.Id))
+                IReadOnlyList<VacancyDto>?[] pageBuffers = new IReadOnlyList<VacancyDto>?[totalPages - 1];
+                using SemaphoreSlim gate = new(MaxConcurrentPageFetches, MaxConcurrentPageFetches);
+                Task[] tasks = new Task[totalPages - 1];
+                for (int i = 0; i < tasks.Length; i++)
                 {
-                    all.Add(dto);
+                    int page = i + 2;
+                    int slot = i;
+                    tasks[i] = Task.Run(async () =>
+                    {
+                        await gate.WaitAsync(ct);
+                        try
+                        {
+                            PagedResult<VacancyDto> result = await FetchServerPageAsync(page, ct);
+                            pageBuffers[slot] = result.Items;
+                        }
+                        finally
+                        {
+                            gate.Release();
+                        }
+                    }, ct);
+                }
+
+                await Task.WhenAll(tasks);
+
+                foreach (IReadOnlyList<VacancyDto>? items in pageBuffers)
+                {
+                    if (items is not null)
+                    {
+                        AppendUnique(items, all, seen);
+                    }
                 }
             }
+
+            return all;
+        }
+
+        for (int page = 2; page <= MaxServerPages; page++)
+        {
+            PagedResult<VacancyDto> pageResult = await FetchServerPageAsync(page, ct);
+            AppendUnique(pageResult.Items, all, seen);
 
             if (!pageResult.HasNextPage || pageResult.Items.Count == 0 || (pageResult.TotalCount > 0 && all.Count >= pageResult.TotalCount))
             {
@@ -790,6 +933,29 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         }
 
         return all;
+    }
+
+    private Task<PagedResult<VacancyDto>> FetchServerPageAsync(int page, CancellationToken ct) =>
+        _gateway.GetVacanciesAsync(
+            new VacancyQueryOptions
+            {
+                Page = page,
+                PageSize = ServerPageSize,
+                OnlyActive = false,
+                SortBy = "publishedAt",
+                SortOrder = "desc"
+            },
+            ct);
+
+    private static void AppendUnique(IEnumerable<VacancyDto> items, List<VacancyDto> destination, HashSet<Guid> seen)
+    {
+        foreach (VacancyDto dto in items)
+        {
+            if (seen.Add(dto.Id))
+            {
+                destination.Add(dto);
+            }
+        }
     }
 
     [RelayCommand]
@@ -1110,7 +1276,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 Directory.CreateDirectory(directory);
             }
 
-            List<VacancyDto> toExport = Vacancies.Select(v => v.Vacancy).ToList();
+            List<VacancyDto> toExport = _filteredDtos.ToList();
             string json = JsonSerializer.Serialize(toExport, ClientJsonContext.Default.ListVacancyDto);
             await File.WriteAllTextAsync(path, json, CancellationToken.None);
             StatusBannerText = $"Експортовано {toExport.Count} вакансій у {path}";
@@ -1215,8 +1381,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                 SelectedCategory = restoredCategory,
                 SelectedLocation = restoredLocation
             };
-            List<VacancyItemViewModel> cards = BuildCards(source, effective);
-            return new OpenResult(categories, locations, restoredCategory, restoredLocation, cards);
+            List<VacancyDto> filtered = FilterAndSortDtos(source, effective);
+            return new OpenResult(categories, locations, restoredCategory, restoredLocation, filtered);
         }, CancellationToken.None);
 
         if (generation != _openGeneration)
@@ -1239,7 +1405,8 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         }
 
         _hasLoadedOnce = true;
-        ApplyCardsToUi(computed.Cards);
+        ++_filterGeneration;
+        ApplyFilteredDtosToUi(computed.FilteredDtos);
     }
 
     private void RefreshDynamicPickers()
@@ -1297,36 +1464,101 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
     private void ApplyFiltersAndSort()
     {
+        int filterGen = ++_filterGeneration;
         FilterSnapshot filters = CaptureFilterSnapshot(SelectedCategory, SelectedLocation);
-        ApplyCardsToUi(BuildCards(_allVacancies, filters));
-    }
-
-    private List<VacancyItemViewModel> BuildCards(IReadOnlyList<VacancyDto> source, FilterSnapshot filters)
-    {
-        List<VacancyDto> matched = source.Where(v => MatchesAllFilters(v, filters)).ToList();
-        List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(matched, filters.SelectedSortOption, GetDistanceKm).ToList();
-
-        List<VacancyItemViewModel> cards = new(sorted.Count);
-        foreach (VacancyDto dto in sorted)
+        if (_allVacancies.Count < AsyncFilterThreshold)
         {
-            cards.Add(CreateCard(dto));
+            ApplyFilteredDtosToUi(FilterAndSortDtos(_allVacancies, filters));
+            return;
         }
 
-        return cards;
+        List<VacancyDto> source = [.. _allVacancies];
+        _ = ApplyFiltersAndSortAsync(source, filters, filterGen);
     }
 
-    private void ApplyCardsToUi(List<VacancyItemViewModel> cards)
+    private async Task ApplyFiltersAndSortAsync(List<VacancyDto> source, FilterSnapshot filters, int filterGen)
     {
-        _vacancies.ReplaceAll(cards);
+        List<VacancyDto> filtered = await Task.Run(() => FilterAndSortDtos(source, filters), CancellationToken.None);
+        if (filterGen != _filterGeneration)
+        {
+            return;
+        }
+
+        ApplyFilteredDtosToUi(filtered);
+    }
+
+    private List<VacancyDto> FilterAndSortDtos(IReadOnlyList<VacancyDto> source, FilterSnapshot filters)
+    {
+        List<VacancyDto> matched = source.Where(v => MatchesAllFilters(v, filters)).ToList();
+        return VacancyFilterEngine.SortVacancies(matched, filters.SelectedSortOption, GetDistanceKm).ToList();
+    }
+
+    private void ApplyFilteredDtosToUi(List<VacancyDto> dtos)
+    {
+        _filteredDtos = dtos;
+        FilteredCount = dtos.Count;
+        Pager.Reset(dtos.Count, isEnabled: _hasLoadedOnce);
+        ShowCurrentPage();
+
+        OnPropertyChanged(nameof(HasActiveFilters));
+        OnPropertyChanged(nameof(IsFilterHighlightActive));
+        OnPropertyChanged(nameof(IsEmpty));
+    }
+
+    /// <summary>Виводить на екран лише поточну сторінку; решта результату лишається в <see cref="_filteredDtos"/>.</summary>
+    private void ShowCurrentPage()
+    {
+        (int skip, int take) = Pager.GetSlice(_filteredDtos.Count);
+        if (Pager.TotalPages == 0)
+        {
+            _distancePrefetchCts?.Cancel();
+            foreach (VacancyItemViewModel previous in _vacancies)
+            {
+                previous.Detach();
+            }
+
+            _vacancies.ReplaceAll([]);
+            OnPropertyChanged(nameof(IsEmpty));
+            return;
+        }
+
+        List<VacancyItemViewModel> page = new(take);
+        for (int i = 0; i < take; i++)
+        {
+            page.Add(CreateCard(_filteredDtos[skip + i]));
+        }
+
+        foreach (VacancyItemViewModel previous in _vacancies)
+        {
+            previous.Detach();
+        }
+
+        _vacancies.ReplaceAll(page);
+        OnPropertyChanged(nameof(IsEmpty));
 
         _distancePrefetchCts?.Cancel();
         CancellationTokenSource prefetchCts = new();
         _distancePrefetchCts = prefetchCts;
-        _ = VacancyFilterEngine.PrefetchDistancesAsync(cards, _distanceService, prefetchCts.Token);
+        _ = VacancyFilterEngine.PrefetchDistancesAsync(page, _distanceService, prefetchCts.Token);
+    }
 
-        FilteredCount = Vacancies.Count;
-        OnPropertyChanged(nameof(HasActiveFilters));
-        OnPropertyChanged(nameof(IsFilterHighlightActive));
+    private void UpdateDtos(Guid id, Func<VacancyDto, VacancyDto> update)
+    {
+        for (int i = 0; i < _allVacancies.Count; i++)
+        {
+            if (_allVacancies[i].Id == id)
+            {
+                _allVacancies[i] = update(_allVacancies[i]);
+            }
+        }
+
+        for (int i = 0; i < _filteredDtos.Count; i++)
+        {
+            if (_filteredDtos[i].Id == id)
+            {
+                _filteredDtos[i] = update(_filteredDtos[i]);
+            }
+        }
     }
 
     private FilterSnapshot CaptureFilterSnapshot(string selectedCategory, string selectedLocation) => new(
@@ -1619,7 +1851,7 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         List<string> Locations,
         string RestoredCategory,
         string RestoredLocation,
-        List<VacancyItemViewModel> Cards);
+        List<VacancyDto> FilteredDtos);
 
     private static void ReplaceCollection(ObservableCollection<string> target, IReadOnlyList<string> values)
     {
@@ -1641,9 +1873,12 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         item.IsDismissing = true;
         await Task.Delay(300);
 
-        if (HideViewed && item.IsViewed && Vacancies.Remove(item))
+        if (HideViewed && item.IsViewed)
         {
-            FilteredCount = Math.Max(0, FilteredCount - 1);
+            _filteredDtos.RemoveAll(dto => dto.Id == vacancyId);
+            FilteredCount = _filteredDtos.Count;
+            Pager.UpdateTotalCount(_filteredDtos.Count);
+            ShowCurrentPage();
         }
         else
         {
@@ -1653,6 +1888,12 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
 
     public void Dispose()
     {
+        Pager.PropertyChanged -= OnPagerPropertyChanged;
+        foreach (VacancyItemViewModel item in _vacancies)
+        {
+            item.Detach();
+        }
+
         _debounceCts?.Cancel();
         _debounceCts?.Dispose();
         _loadCts?.Cancel();

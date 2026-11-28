@@ -475,47 +475,7 @@
                 </Grid>
                 <controls:VacancyListView.FooterContent>
                     <!-- Пейджер усередині скролу: з'являється під списком, а не висить на екрані (FR-011, US-001 AC-2) -->
-                    <Border IsVisible="{Binding IsPagerVisible}"
-                            StrokeShape="RoundRectangle 10"
-                            StrokeThickness="1"
-                            Stroke="{DynamicResource CardBorder}"
-                            BackgroundColor="{DynamicResource DarkBg1}"
-                            Margin="12,4,12,8"
-                            Padding="6,5">
-                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8" VerticalOptions="Center">
-                            <Button Grid.Column="0"
-                                    Text="‹ Назад"
-                                    Command="{Binding PrevPageCommand}"
-                                    Style="{StaticResource CardAction}"
-                                    FontSize="11.5"
-                                    Padding="10,4"
-                                    HeightRequest="32"
-                                    MinimumHeightRequest="32"
-                                    SemanticProperties.Description="Попередня сторінка" />
-                            <VerticalStackLayout Grid.Column="1" Spacing="0" VerticalOptions="Center">
-                                <Label Text="{Binding PageText}"
-                                       HorizontalOptions="Center"
-                                       HorizontalTextAlignment="Center"
-                                       FontFamily="OpenSansSemibold"
-                                       FontSize="12"
-                                       TextColor="{DynamicResource White}" />
-                                <Label Text="{Binding TotalText}"
-                                       HorizontalOptions="Center"
-                                       HorizontalTextAlignment="Center"
-                                       FontSize="10.5"
-                                       TextColor="{DynamicResource TextMuted}" />
-                            </VerticalStackLayout>
-                            <Button Grid.Column="2"
-                                    Text="Далі ›"
-                                    Command="{Binding NextPageCommand}"
-                                    Style="{StaticResource CardAction}"
-                                    FontSize="11.5"
-                                    Padding="10,4"
-                                    HeightRequest="32"
-                                    MinimumHeightRequest="32"
-                                    SemanticProperties.Description="Наступна сторінка" />
-                        </Grid>
-                    </Border>
+                    <controls:VacancyPagerBar Pager="{Binding Pager}" SummaryText="{Binding TotalText}" />
                 </controls:VacancyListView.FooterContent>
             </controls:VacancyListView>
         </Grid>

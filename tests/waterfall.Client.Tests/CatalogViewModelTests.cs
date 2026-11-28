@@ -629,6 +629,35 @@ public class CatalogViewModelTests
         Assert.True(_vm.Vacancies[1].IsSaved);
     }
 
+    [Fact]
+    public async Task Pager_SupportsFirstLastAndPageSizeSwitching_WhileRemainingVisibleOver20Items()
+    {
+        VacancyDto[] items = Enumerable.Range(1, 35)
+            .Select(i => new VacancyDto { Id = Guid.NewGuid(), Title = $"Job {i}" })
+            .ToArray();
+        await SearchSiteAsync(_vm, items);
+
+        Assert.Equal(2, _vm.TotalPages);
+        Assert.True(_vm.IsPagerVisible);
+
+        _vm.LastPageCommand.Execute(null);
+        Assert.Equal(2, _vm.CurrentPage);
+        Assert.Equal(15, _vm.Vacancies.Count);
+
+        _vm.FirstPageCommand.Execute(null);
+        Assert.Equal(1, _vm.CurrentPage);
+        Assert.Equal(20, _vm.Vacancies.Count);
+
+        _vm.SetPageSizeCommand.Execute(50);
+        Assert.Equal(1, _vm.TotalPages);
+        Assert.Equal(35, _vm.Vacancies.Count);
+        Assert.True(_vm.IsPagerVisible);
+
+        _vm.SetPageSizeCommand.Execute(20);
+        Assert.Equal(2, _vm.TotalPages);
+        Assert.Equal(20, _vm.Vacancies.Count);
+    }
+
     private static VacancyDto[] Vacancies(params string[] titles) => [.. FakeGateway.Page(1, titles.Length, hasNext: false, titles).Items];
 
     private Task SearchSiteAsync(CatalogViewModel vm, params string[] titles) => SearchSiteAsync(vm, Vacancies(titles));

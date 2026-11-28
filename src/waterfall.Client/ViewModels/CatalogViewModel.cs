@@ -43,7 +43,7 @@ public partial class CatalogViewModel : ObservableObject
     /// <summary>Більше сторінок сервер за один пошук не читає (кожна сторінка Djinni — 15 вакансій).</summary>
     public const int MaxSitePages = 5;
     /// <summary>Скільки вакансій показуємо на одній сторінці каталогу (FR-011/US-001 AC-2).</summary>
-    public const int PageSize = 20;
+    public const int PageSize = VacancyPager.DefaultPageSize;
 
     private readonly IHttpGatewayService _gateway;
     private readonly IMessenger _messenger;
@@ -98,6 +98,8 @@ public partial class CatalogViewModel : ObservableObject
         _offlineCollector = offlineCollector;
         _fileDialog = fileDialog;
         CanTrackViews = tokenStore is null;
+        Pager = new VacancyPager(ShowCurrentPage);
+        Pager.PropertyChanged += OnPagerPropertyChanged;
 
         // Зміна «Обраного» з іншої вкладки: оновлюємо DTO та видиму картку, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
@@ -181,34 +183,61 @@ public partial class CatalogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowTotal))]
     public partial string? ErrorMessage { get; set; }
 
+    public VacancyPager Pager { get; }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TotalText))]
-    [NotifyPropertyChangedFor(nameof(TotalPages))]
-    [NotifyPropertyChangedFor(nameof(PageText))]
-    [NotifyPropertyChangedFor(nameof(HasNextPage))]
-    [NotifyPropertyChangedFor(nameof(IsPagerVisible))]
-    [NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
     public partial int TotalCount { get; set; }
 
     /// <summary>Поточна сторінка каталогу (нумерація з 1).</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(PageText))]
-    [NotifyPropertyChangedFor(nameof(HasPreviousPage))]
-    [NotifyPropertyChangedFor(nameof(HasNextPage))]
-    [NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
-    [NotifyCanExecuteChangedFor(nameof(PrevPageCommand))]
-    public partial int CurrentPage { get; set; } = 1;
+    public int CurrentPage
+    {
+        get => Pager.CurrentPage;
+        set => Pager.CurrentPage = value;
+    }
 
-    public int TotalPages => TotalCount <= 0 ? 0 : (TotalCount + PageSize - 1) / PageSize;
+    public int TotalPages => Pager.TotalPages;
 
-    public bool HasPreviousPage => HasLoaded && CurrentPage > 1;
+    public bool HasPreviousPage => Pager.HasPreviousPage;
 
-    public bool HasNextPage => HasLoaded && CurrentPage < TotalPages;
+    public bool HasNextPage => Pager.HasNextPage;
 
     /// <summary>Пейджер показуємо лише коли є що гортати.</summary>
-    public bool IsPagerVisible => HasLoaded && TotalPages > 1;
+    public bool IsPagerVisible => Pager.IsPagerVisible;
 
-    public string PageText => $"Сторінка {CurrentPage} з {Math.Max(1, TotalPages)}";
+    public string PageText => Pager.PageText;
+
+    private void OnPagerPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(VacancyPager.CurrentPage):
+                OnPropertyChanged(nameof(CurrentPage));
+                break;
+            case nameof(VacancyPager.TotalPages):
+                OnPropertyChanged(nameof(TotalPages));
+                break;
+            case nameof(VacancyPager.PageSize):
+                OnPropertyChanged(nameof(PageText));
+                break;
+            case nameof(VacancyPager.HasPreviousPage):
+                OnPropertyChanged(nameof(HasPreviousPage));
+                FirstPageCommand.NotifyCanExecuteChanged();
+                PrevPageCommand.NotifyCanExecuteChanged();
+                break;
+            case nameof(VacancyPager.HasNextPage):
+                OnPropertyChanged(nameof(HasNextPage));
+                NextPageCommand.NotifyCanExecuteChanged();
+                LastPageCommand.NotifyCanExecuteChanged();
+                break;
+            case nameof(VacancyPager.IsPagerVisible):
+                OnPropertyChanged(nameof(IsPagerVisible));
+                break;
+            case nameof(VacancyPager.PageText):
+                OnPropertyChanged(nameof(PageText));
+                break;
+        }
+    }
 
     /// <summary>
     /// Дія для переходу на екран входу/профілю з плашки неавторизованого користувача.
@@ -1461,32 +1490,29 @@ public partial class CatalogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
     [NotifyPropertyChangedFor(nameof(ShowTotal))]
     [NotifyPropertyChangedFor(nameof(IsBeforeFirstSearch))]
-    [NotifyPropertyChangedFor(nameof(IsPagerVisible))]
-    [NotifyPropertyChangedFor(nameof(HasPreviousPage))]
-    [NotifyPropertyChangedFor(nameof(HasNextPage))]
-    [NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
-    [NotifyCanExecuteChangedFor(nameof(PrevPageCommand))]
     public partial bool HasLoaded { get; private set; }
 
-    /// <summary>Перехід на наступну сторінку вже завантаженого результату.</summary>
+    partial void OnHasLoadedChanged(bool value) => Pager.IsEnabled = value;
+
     private bool CanGoNextPage() => HasNextPage;
-
-    [RelayCommand(CanExecute = nameof(CanGoNextPage))]
-    private void NextPage()
-    {
-        CurrentPage++;
-        ShowCurrentPage();
-    }
-
-    /// <summary>Повернення на попередню сторінку.</summary>
     private bool CanGoPrevPage() => HasPreviousPage;
 
     [RelayCommand(CanExecute = nameof(CanGoPrevPage))]
-    private void PrevPage()
-    {
-        CurrentPage--;
-        ShowCurrentPage();
-    }
+    private void FirstPage() => Pager.FirstPageCommand.Execute(null);
+
+    /// <summary>Повернення на попередню сторінку.</summary>
+    [RelayCommand(CanExecute = nameof(CanGoPrevPage))]
+    private void PrevPage() => Pager.PrevPageCommand.Execute(null);
+
+    /// <summary>Перехід на наступну сторінку вже завантаженого результату.</summary>
+    [RelayCommand(CanExecute = nameof(CanGoNextPage))]
+    private void NextPage() => Pager.NextPageCommand.Execute(null);
+
+    [RelayCommand(CanExecute = nameof(CanGoNextPage))]
+    private void LastPage() => Pager.LastPageCommand.Execute(null);
+
+    [RelayCommand]
+    private void SetPageSize(int size) => Pager.SetPageSizeCommand.Execute(size);
 
     public bool HasError => ErrorMessage is not null;
 
@@ -2108,7 +2134,7 @@ public partial class CatalogViewModel : ObservableObject
     {
         _filteredDtos = dtos;
         TotalCount = dtos.Count;
-        CurrentPage = 1;
+        Pager.Reset(dtos.Count, isEnabled: HasLoaded);
         ShowCurrentPage();
 
         OnPropertyChanged(nameof(IsEmpty));
@@ -2119,11 +2145,10 @@ public partial class CatalogViewModel : ObservableObject
     /// <summary>Виводить на екран лише поточну сторінку; решта результату лишається в <see cref="_filteredDtos"/>.</summary>
     private void ShowCurrentPage()
     {
-        int totalPages = TotalPages;
-        if (totalPages == 0)
+        (int skip, int take) = Pager.GetSlice(_filteredDtos.Count);
+        if (Pager.TotalPages == 0)
         {
             _distancePrefetchCts?.Cancel();
-            CurrentPage = 1;
             foreach (VacancyItemViewModel previous in _vacancies)
             {
                 previous.Detach();
@@ -2134,17 +2159,6 @@ public partial class CatalogViewModel : ObservableObject
             return;
         }
 
-        if (CurrentPage > totalPages)
-        {
-            CurrentPage = totalPages;
-        }
-        else if (CurrentPage < 1)
-        {
-            CurrentPage = 1;
-        }
-
-        int skip = (CurrentPage - 1) * PageSize;
-        int take = Math.Clamp(_filteredDtos.Count - skip, 0, PageSize);
         List<VacancyItemViewModel> page = new(take);
         for (int i = 0; i < take; i++)
         {
@@ -3128,6 +3142,7 @@ public partial class CatalogViewModel : ObservableObject
         {
             _filteredDtos.RemoveAll(dto => dto.Id == vacancyId);
             TotalCount = _filteredDtos.Count;
+            Pager.UpdateTotalCount(_filteredDtos.Count);
             ShowCurrentPage();
         }
         else

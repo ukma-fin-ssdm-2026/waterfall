@@ -100,7 +100,11 @@ internal sealed class FakeGateway : IHttpGatewayService
 
     public Task<PagedResult<VacancyDto>> GetVacanciesAsync(VacancyQueryOptions options, CancellationToken ct = default)
     {
-        VacancyQueries.Add(options);
+        lock (VacancyQueries)
+        {
+            VacancyQueries.Add(options);
+        }
+
         if (VacanciesQueryHandler is not null)
         {
             return VacanciesQueryHandler(options, ct);

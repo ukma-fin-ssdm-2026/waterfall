@@ -190,7 +190,7 @@ public static class VacancyFilterEngine
             return;
         }
 
-        List<Task> tasks = [];
+        Dictionary<string, List<Guid>> targetsByAddress = new(StringComparer.OrdinalIgnoreCase);
         foreach (VacancyDto v in items)
         {
             if (distanceCache.ContainsKey(v.Id))
@@ -207,13 +207,29 @@ public static class VacancyFilterEngine
                 continue;
             }
 
-            tasks.Add(CalculateAndCacheDistanceAsync(v.Id, target, distanceService, distanceCache, ct));
+            string normalizedTarget = target.Trim();
+            if (!targetsByAddress.TryGetValue(normalizedTarget, out List<Guid>? ids))
+            {
+                ids = [];
+                targetsByAddress[normalizedTarget] = ids;
+            }
+
+            ids.Add(v.Id);
         }
 
-        if (tasks.Count > 0)
+        if (targetsByAddress.Count == 0)
         {
-            await Task.WhenAll(tasks);
+            return;
         }
+
+        using SemaphoreSlim gate = new(4, 4);
+        List<Task> tasks = new(targetsByAddress.Count);
+        foreach (KeyValuePair<string, List<Guid>> pair in targetsByAddress)
+        {
+            tasks.Add(CalculateAndCacheAddressAsync(pair.Value, pair.Key, distanceService, distanceCache, gate, ct));
+        }
+
+        await Task.WhenAll(tasks);
     }
 
     public static async Task PrefetchDistancesAsync(
@@ -262,20 +278,36 @@ public static class VacancyFilterEngine
         }
     }
 
-    private static async Task CalculateAndCacheDistanceAsync(
-        Guid id,
+    private static async Task CalculateAndCacheAddressAsync(
+        List<Guid> ids,
         string target,
         IDistanceCalculatorService distanceService,
         ConcurrentDictionary<Guid, double?> distanceCache,
+        SemaphoreSlim gate,
         CancellationToken ct)
     {
+        await gate.WaitAsync(ct);
+        double? distance = null;
         try
         {
-            distanceCache[id] = await distanceService.CalculateDistanceKmAsync(target, ct);
+            distance = await distanceService.CalculateDistanceKmAsync(target, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return;
         }
         catch
         {
-            distanceCache[id] = null;
+            distance = null;
+        }
+        finally
+        {
+            gate.Release();
+        }
+
+        foreach (Guid id in ids)
+        {
+            distanceCache[id] = distance;
         }
     }
 
