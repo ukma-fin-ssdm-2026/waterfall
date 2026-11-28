@@ -40,9 +40,6 @@ public sealed class FakeVacancyService : IVacancyService
     public List<VacancyDto> Vacancies { get; } = [];
     public List<(VacancyFilterParameters Filter, Guid? UserId)> GetAllCalls { get; } = [];
     public List<(Guid Id, Guid? UserId)> GetByIdCalls { get; } = [];
-    public List<CreateVacancyRequest> CreateCalls { get; } = [];
-    public List<(Guid Id, UpdateVacancyRequest Request)> UpdateCalls { get; } = [];
-    public List<Guid> DeleteCalls { get; } = [];
 
     public Task<PagedResult<VacancyDto>> GetAllAsync(VacancyFilterParameters filter, CancellationToken ct = default, Guid? userId = null)
     {
@@ -69,63 +66,8 @@ public sealed class FakeVacancyService : IVacancyService
         return Task.FromResult(match);
     }
 
-    public Task<VacancyDto> CreateAsync(CreateVacancyRequest request, CancellationToken ct = default)
-    {
-        CreateCalls.Add(request);
-        VacancyDto created = new()
-        {
-            Id = Guid.NewGuid(),
-            Title = request.Title,
-            Company = request.Company,
-            Description = request.Description,
-            Category = request.Category,
-            Location = request.Location,
-            Currency = request.Currency,
-            Source = request.Source,
-            SourceUrl = request.SourceUrl,
-            Skills = request.Skills ?? [],
-            PublishedAt = DateTimeOffset.UtcNow,
-            IsActive = true
-        };
-        Vacancies.Add(created);
-        return Task.FromResult(created);
-    }
-
-    public Task<VacancyDto?> UpdateAsync(Guid id, UpdateVacancyRequest request, CancellationToken ct = default)
-    {
-        UpdateCalls.Add((id, request));
-        int index = Vacancies.FindIndex(v => v.Id == id);
-        if (index == -1) return Task.FromResult<VacancyDto?>(null);
-
-        VacancyDto existing = Vacancies[index];
-        VacancyDto updated = new()
-        {
-            Id = existing.Id,
-            Title = request.Title ?? existing.Title,
-            Company = request.Company ?? existing.Company,
-            Description = request.Description ?? existing.Description,
-            Category = request.Category ?? existing.Category,
-            Location = request.Location ?? existing.Location,
-            Currency = request.Currency ?? existing.Currency,
-            Source = request.Source ?? existing.Source,
-            SourceUrl = request.SourceUrl ?? existing.SourceUrl,
-            Skills = request.Skills ?? existing.Skills,
-            PublishedAt = existing.PublishedAt,
-            IsActive = request.IsActive ?? existing.IsActive
-        };
-        Vacancies[index] = updated;
-        return Task.FromResult<VacancyDto?>(updated);
-    }
-
     public List<VacancySyncRequestDto> SyncCalls { get; } = [];
     public VacancySyncResponseDto? NextSyncResponse { get; set; }
-
-    public Task<bool> DeleteAsync(Guid id, CancellationToken ct = default)
-    {
-        DeleteCalls.Add(id);
-        int removed = Vacancies.RemoveAll(v => v.Id == id);
-        return Task.FromResult(removed > 0);
-    }
 
     public Task<VacancySyncResponseDto> SyncVacanciesAsync(VacancySyncRequestDto request, CancellationToken ct = default)
     {

@@ -7,7 +7,8 @@ namespace waterfall.UI.Views;
 
 /// <summary>
 /// Сторінка глобальної вкладки «Налаштування».
-/// Дозволяє налаштовувати тему оформлення, фоновий парсинг та періодичність збору з автозбереженням.
+/// Тема оформлення — для всіх; фоновий збір і його інтервал — налаштування сервера: їх бачить і змінює
+/// лише адміністратор (роль Admin), автозбереження йде на сервер (PUT /api/v1/admin/settings).
 /// </summary>
 public partial class SystemSettingsPage : ContentPage, IHostedPage
 {
@@ -33,7 +34,24 @@ public partial class SystemSettingsPage : ContentPage, IHostedPage
     {
         base.OnAppearing();
         SyncThemeUi();
-        _isAutoSaveArmed = true;
+        _ = LoadServerSettingsAsync();
+    }
+
+    /// <summary>
+    /// Читає налаштування з сервера з вимкненим автозбереженням: інакше перемикач, змінений завантаженням,
+    /// одразу «зберіг» би ті самі значення назад на сервер.
+    /// </summary>
+    private async Task LoadServerSettingsAsync()
+    {
+        _isAutoSaveArmed = false;
+        try
+        {
+            await _viewModel.LoadServerSettingsAsync();
+        }
+        finally
+        {
+            _isAutoSaveArmed = true;
+        }
     }
 
     protected override void OnDisappearing()
@@ -111,7 +129,7 @@ public partial class SystemSettingsPage : ContentPage, IHostedPage
 
     private void OnBackgroundParsingToggled(object? sender, ToggledEventArgs e)
     {
-        if (!_isAutoSaveArmed)
+        if (!_isAutoSaveArmed || !_viewModel.IsAdmin)
         {
             return;
         }
@@ -122,7 +140,7 @@ public partial class SystemSettingsPage : ContentPage, IHostedPage
 
     private void OnIntervalSelectedIndexChanged(object? sender, EventArgs e)
     {
-        if (!_isAutoSaveArmed)
+        if (!_isAutoSaveArmed || !_viewModel.IsAdmin)
         {
             return;
         }
@@ -132,6 +150,11 @@ public partial class SystemSettingsPage : ContentPage, IHostedPage
 
     private void OnResetClicked(object? sender, EventArgs e)
     {
+        if (!_viewModel.IsAdmin)
+        {
+            return;
+        }
+
         _isAutoSaveArmed = false;
         try
         {

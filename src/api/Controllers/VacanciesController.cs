@@ -10,12 +10,13 @@ using Waterfall.Services.Models.Vacancies;
 
 namespace Waterfall.Api.Controllers;
 /// <summary>
-/// Керування каталогом вакансій: пошук, фільтрація, створення та оновлення.
+/// Каталог вакансій: пошук, фільтрація, рекомендації та синхронізація з клієнтом.
+/// Змінює каталог лише серверний парсер, тож ендпоінтів ручного створення, зміни й видалення немає.
 /// </summary>
 [ApiController]
 [Route("api/v1/vacancies")]
 [Produces("application/json")]
-[SwaggerTag("Керування агрегованими вакансіями платформи Waterfall (CRUD)")]
+[SwaggerTag("Каталог агрегованих вакансій платформи Waterfall (лише читання; наповнює серверний парсер)")]
 public class VacanciesController : ApiControllerBase
 {
     private readonly IVacancyService _vacancyService;
@@ -121,118 +122,29 @@ public class VacanciesController : ApiControllerBase
     }
 
     /// <summary>
-    /// Створити або імпортувати нову вакансію.
-    /// </summary>
-    /// <param name="request">Дані нової вакансії.</param>
-    /// <param name="ct">Токен скасування операції.</param>
-    /// <response code="201">Вакансію успішно створено. У заголовку Location міститься посилання на новий ресурс.</response>
-    /// <response code="400">Помилка валідації вхідного запиту.</response>
-    [HttpPost]
-    [SwaggerOperation(
-        Summary = "Створити вакансію",
-        Description = "Додає нову вакансію до єдиного каталогу (ручне розміщення або збереження модулем збору даних).",
-        OperationId = "CreateVacancy",
-        Tags = ["Vacancies"])]
-    [ProducesResponseType(typeof(VacancyDto), StatusCodes.Status201Created)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
-    public async Task<ActionResult<VacancyDto>> Create([FromBody] CreateVacancyRequest request, CancellationToken ct)
-    {
-        if (!ModelState.IsValid)
-        {
-            return ErrorBadRequest("Невалідні дані запиту створення вакансії.");
-        }
-
-        VacancyDto created = await _vacancyService.CreateAsync(request, ct);
-
-        return CreatedAtAction(
-            nameof(GetById),
-            new { id = created.Id },
-            created);
-    }
-
-    /// <summary>
-    /// Оновити дані існуючої вакансії.
-    /// </summary>
-    /// <param name="id">Унікальний ідентифікатор вакансії, що оновлюється.</param>
-    /// <param name="request">Оновлені поля вакансії.</param>
-    /// <param name="ct">Токен скасування операції.</param>
-    /// <response code="200">Вакансію успішно оновлено.</response>
-    /// <response code="400">Помилка валідації полів запиту.</response>
-    /// <response code="404">Вакансію для оновлення не знайдено.</response>
-    [HttpPut("{id:guid}")]
-    [SwaggerOperation(
-        Summary = "Оновити вакансію",
-        Description = "Оновлює інформацію про вакансію за її унікальним ідентифікатором.",
-        OperationId = "UpdateVacancy",
-        Tags = ["Vacancies"])]
-    [ProducesResponseType(typeof(VacancyDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
-    public async Task<ActionResult<VacancyDto>> Update([FromRoute] Guid id, [FromBody] UpdateVacancyRequest request, CancellationToken ct)
-    {
-        if (!ModelState.IsValid)
-        {
-            return ErrorBadRequest("Невалідні дані запиту оновлення вакансії.");
-        }
-
-        VacancyDto? updated = await _vacancyService.UpdateAsync(id, request, ct);
-
-        if (updated is null)
-        {
-            return ErrorNotFound($"Вакансію з ID '{id}' не знайдено для оновлення.");
-        }
-
-        return Ok(updated);
-    }
-
-    /// <summary>
-    /// Видалити вакансію з каталогу.
-    /// </summary>
-    /// <param name="id">Унікальний ідентифікатор вакансії.</param>
-    /// <param name="ct">Токен скасування операції.</param>
-    /// <response code="204">Вакансію успішно видалено.</response>
-    /// <response code="404">Вакансію не знайдено.</response>
-    [HttpDelete("{id:guid}")]
-    [SwaggerOperation(
-        Summary = "Видалити вакансію",
-        Description = "Видаляє вакансію за її ідентифікатором з каталогу системи.",
-        OperationId = "DeleteVacancy",
-        Tags = ["Vacancies"])]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> Delete([FromRoute] Guid id, CancellationToken ct)
-    {
-        bool deleted = await _vacancyService.DeleteAsync(id, ct);
-
-        if (!deleted)
-        {
-            return ErrorNotFound($"Вакансію з ID '{id}' не знайдено для видалення.");
-        }
-
-        return NoContent();
-    }
-
-    /// <summary>
     /// Двостороння синхронізація бази вакансій між локальною БД клієнта та сервером.
     /// </summary>
     /// <remarks>
     /// Клієнт надсилає вакансії, зібрані або змінені в офлайні; сервер об'єднує їх зі своєю базою
     /// (дедуплікація за Source+ExternalId / Id / SourceUrl, Last-Write-Wins за LastSeenAt) та повертає
     /// всі актуальні вакансії сервера (або зміни з моменту LastSyncedAt).
+    /// Вакансії клієнта зберігаються лише з VacancySync:AcceptClientVacancies = true; за замовчуванням (false) сервер їх ігнорує й лише віддає свої.
     /// </remarks>
     /// <param name="request">Несинхронізовані локальні вакансії клієнта та мітка часу останньої синхронізації.</param>
     /// <param name="ct">Токен скасування операції.</param>
     /// <response code="200">Синхронізація успішна.</response>
     /// <response code="400">Порожній або невалідний запит синхронізації.</response>
+    /// <response code="401">Потрібно увійти: сервер віддає базу лише користувачам застосунку.</response>
     [HttpPost("sync")]
-    [AllowAnonymous]
+    [Authorize]
     [SwaggerOperation(
         Summary = "Синхронізувати базу вакансій",
-        Description = "Двосторонній обмін вакансіями між локальною БД клієнта (офлайн-збір і правки) та серверною БД.",
+        Description = "Двосторонній обмін вакансіями між локальною БД клієнта (офлайн-збір і правки) та серверною БД. Вакансії від клієнта сервер зберігає лише з VacancySync:AcceptClientVacancies = true (за замовчуванням false: clientVacancies ігноруються, клієнт лише отримує вакансії сервера).",
         OperationId = "SyncVacancies",
         Tags = ["Vacancies"])]
     [ProducesResponseType(typeof(VacancySyncResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<VacancySyncResponseDto>> Sync(
         [FromBody] VacancySyncRequestDto? request,
         CancellationToken ct = default)

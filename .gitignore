@@ -33,3 +33,6 @@ coverage/
 /TestResults
 /src/waterfall.UI/.vs/ProjectEvaluation
 
+# Системні налаштування, змінені адміністратором через API (FileSystemSettingsStore)
+src/api/appsettings.Admin.json
+src/api/appsettings.Admin.json.tmp

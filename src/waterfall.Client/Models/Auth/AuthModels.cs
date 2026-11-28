@@ -8,7 +8,10 @@ namespace Waterfall.Client.Models.Auth;
 public enum UserRole
 {
     JobSeeker = 0,
-    Analyst = 1
+    Analyst = 1,
+
+    // Адміністратор: лише системні налаштування сервера; зареєструватися з цією роллю не можна
+    Admin = 2
 }
 
 /// <summary>

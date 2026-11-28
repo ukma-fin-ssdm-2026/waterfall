@@ -56,6 +56,15 @@ public sealed class AuthValidationTests
     }
 
     [Fact]
+    public void Register_AdminRole_Fails()
+    {
+        // Адміністратора створюють лише вручну: реєстрація з роллю Admin дала б будь-кому доступ до налаштувань сервера
+        var results = Validate(new RegisterRequest { Email = "someone@example.com", Password = "Secret123456", Role = UserRole.Admin });
+
+        Assert.Contains(results, r => r.MemberNames.Contains("Role"));
+    }
+
+    [Fact]
     public void Login_ValidRequest_Passes_WithoutComplexityCheck()
     {
         // A weak password is still a *valid* login request: complexity must not leak via login (THR-01).

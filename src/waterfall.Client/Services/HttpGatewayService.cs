@@ -17,6 +17,7 @@ using Waterfall.Client.Models.Geo;
 using Waterfall.Client.Models.Profile;
 using Waterfall.Client.Models.SavedVacancies;
 using Waterfall.Client.Models.SiteSearch;
+using Waterfall.Client.Models.SystemSettings;
 using Waterfall.Client.Models.Vacancies;
 
 namespace Waterfall.Client.Services;
@@ -95,6 +96,15 @@ public sealed class HttpGatewayService : IHttpGatewayService
 
         return SendAsync(new HttpRequestMessage(HttpMethod.Get, url), Json.MarketAnalyticsDto, ct);
     }
+
+    public Task<SystemSettingsDto> GetSystemSettingsAsync(CancellationToken ct = default) =>
+        SendAsync(new HttpRequestMessage(HttpMethod.Get, "api/v1/admin/settings"), Json.SystemSettingsDto, ct);
+
+    public Task<SystemSettingsDto> UpdateSystemSettingsAsync(UpdateSystemSettingsRequest request, CancellationToken ct = default) =>
+        SendAsync(
+            new HttpRequestMessage(HttpMethod.Put, "api/v1/admin/settings") { Content = JsonContent.Create(request, Json.UpdateSystemSettingsRequest) },
+            Json.SystemSettingsDto,
+            ct);
 
     public Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default) =>
         SendAsync(new HttpRequestMessage(HttpMethod.Get, $"api/v1/vacancies/{id}"), Json.VacancyDto, ct);

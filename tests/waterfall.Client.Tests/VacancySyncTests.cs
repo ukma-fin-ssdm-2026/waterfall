@@ -240,7 +240,7 @@ public sealed class VacancySyncTests : IDisposable
             }
         };
         VacancySyncService syncService = new(gateway, store);
-        SystemSettingsViewModel vm = new(store, syncService);
+        SystemSettingsViewModel vm = new(gateway: null, tokens: null, localVacancyStore: store, vacancySyncService: syncService);
 
         await vm.RefreshSyncStatsAsync();
         Assert.Equal((1, 1), (vm.LocalVacanciesCount, vm.UnsyncedVacanciesCount));

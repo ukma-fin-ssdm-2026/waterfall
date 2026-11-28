@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: сід-вакансії отримують числовий досвід, решта похідних полів рахується нормалізатором; перевірено: тести WaterfallDbSeederTests
+// AI: демо-дані й тестові акаунти лише за includeDemoData (у Program.cs — лише в Development); перевірено: тести WaterfallDbSeederTests, самоперевірка автора (§8)
 
 using System.Data.Common;
 using System.Text.Json;
@@ -20,170 +21,200 @@ public static class WaterfallDbSeeder
     private const string QaSkillsJson = "[\"C#\",\"Playwright\",\"NUnit\",\"CI/CD\",\"REST API\"]";
     private const string AiMlSkillsJson = "[\"Python\",\"C#\",\"PyTorch\",\"LLM\",\"Docker\",\"ONNX\"]";
 
-    public static async Task SeedAsync(WaterfallDbContext context)
+    /// <summary>
+    /// Готує базу: створює таблиці й дописує колонки старих схем, дозаповнює похідні поля наявних вакансій.
+    /// Демо-дані (5 вакансій, закладки, адреса, геокеш) і тестові акаунти з відомими паролями додаються
+    /// лише з <paramref name="includeDemoData"/> = true: API передає сюди <c>app.Environment.IsDevelopment()</c>,
+    /// тож на будь-якому іншому сервері вони не з'являться.
+    /// </summary>
+    public static async Task SeedAsync(WaterfallDbContext context, bool includeDemoData = true)
     {
         await context.Database.EnsureCreatedAsync();
         await EnsureTablesCreatedAsync(context);
 
         if (!await context.Vacancies.AnyAsync())
         {
-            var vacancies = new List<VacancyDB>
+            if (includeDemoData)
             {
-                new VacancyDB
-                {
-                    Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-                    Title = "Senior C# .NET Backend Developer",
-                    Company = "Genesis Tech",
-                    Description = "Розробка high-load мікросервісів на .NET 10, Kafka, Redis та PostgreSQL. Підтримка мільйонів активних користувачів.",
-                    Category = ".NET",
-                    Location = "Київ (Віддалено)",
-                    FullAddress = "Київ, вул. Мечникова, 2, БЦ Парус",
-                    Schedule = "Повна зайнятість · Гнучкий графік",
-                    Experience = "5+ років",
-                    ExperienceMonths = 60,
-                    SalaryMin = 4000,
-                    SalaryMax = 5500,
-                    Currency = "USD",
-                    Source = "Djinni",
-                    SourceUrl = "https://djinni.co/jobs/example-senior-dotnet/",
-                    SkillsJson = SeniorDotNetSkillsJson,
-                    PublishedAt = DateTimeOffset.UtcNow.AddDays(-2),
-                    FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-2),
-                    LastSeenAt = DateTimeOffset.UtcNow,
-                    IsActive = true
-                },
-                new VacancyDB
-                {
-                    Id = Guid.Parse("22222222-2222-2222-2222-222222222222"),
-                    Title = "Middle .NET MAUI / Mobile Developer",
-                    Company = "SoftServe",
-                    Description = "Створення кросплатформного клієнтського застосунку з архітектурою MVVM на базі .NET MAUI для iOS та Android.",
-                    Category = "Mobile",
-                    Location = "Львів / Віддалено",
-                    FullAddress = "Львів, вул. Садова, 2а",
-                    Schedule = "Повна зайнятість · Стандартний графік: 5/2",
-                    Experience = "2+ роки",
-                    ExperienceMonths = 24,
-                    SalaryMin = 2200,
-                    SalaryMax = 3200,
-                    Currency = "USD",
-                    Source = "Dou",
-                    SourceUrl = "https://jobs.dou.ua/vacancies/example-middle-maui/",
-                    SkillsJson = MiddleMauiSkillsJson,
-                    PublishedAt = DateTimeOffset.UtcNow.AddDays(-1),
-                    FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-1),
-                    LastSeenAt = DateTimeOffset.UtcNow,
-                    IsActive = true
-                },
-                new VacancyDB
-                {
-                    Id = Guid.Parse("33333333-3333-3333-3333-333333333333"),
-                    Title = "Full Stack C# / Angular Developer",
-                    Company = "EPAM Systems",
-                    Description = "Розробка корпоративної платформи управління даними. Стек: ASP.NET Core, EF Core, Angular 17, Azure Cloud.",
-                    Category = "Full Stack",
-                    Location = "Київ (Гібрид)",
-                    FullAddress = "Київ, проспект Академіка Глушкова, 1",
-                    Schedule = "Повна зайнятість · Гібридний формат",
-                    Experience = "3+ роки",
-                    ExperienceMonths = 36,
-                    SalaryMin = 3000,
-                    SalaryMax = 4500,
-                    Currency = "USD",
-                    Source = "WorkUa",
-                    SourceUrl = "https://www.work.ua/jobs/example-fullstack-csharp/",
-                    SkillsJson = FullStackSkillsJson,
-                    PublishedAt = DateTimeOffset.UtcNow.AddHours(-12),
-                    FirstSeenAt = DateTimeOffset.UtcNow.AddHours(-12),
-                    LastSeenAt = DateTimeOffset.UtcNow,
-                    IsActive = true
-                },
-                new VacancyDB
-                {
-                    Id = Guid.Parse("44444444-4444-4444-4444-444444444444"),
-                    Title = "QA Automation (.NET / Playwright)",
-                    Company = "Grammarly",
-                    Description = "Автоматизація тестування Web та API сервісів. Створення тест-сьютів на C# з використанням Playwright та Allure.",
-                    Category = "QA",
-                    Location = "Віддалено",
-                    FullAddress = "Київ, Спортивна площа, 1а, БЦ Гулівер",
-                    Schedule = "Повна зайнятість · Віддалена робота",
-                    Experience = "2+ роки",
-                    ExperienceMonths = 24,
-                    SalaryMin = 2800,
-                    SalaryMax = 3800,
-                    Currency = "USD",
-                    Source = "RobotaUa",
-                    SourceUrl = "https://robota.ua/company123/vacancy-qa-dotnet",
-                    SkillsJson = QaSkillsJson,
-                    PublishedAt = DateTimeOffset.UtcNow.AddDays(-3),
-                    FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-3),
-                    LastSeenAt = DateTimeOffset.UtcNow,
-                    IsActive = true
-                },
-                new VacancyDB
-                {
-                    Id = Guid.Parse("55555555-5555-5555-5555-555555555555"),
-                    Title = "Lead AI / ML Solutions Engineer",
-                    Company = "Ajax Systems",
-                    Description = "Інтеграція сучасних мовних моделей (LLM) та комп'ютерного зору в системи безпеки розумного будинку.",
-                    Category = "AI / ML",
-                    Location = "Київ (Офіс)",
-                    FullAddress = "Київ, вул. Семена Скляренка, 5",
-                    Schedule = "Повна зайнятість · Офіс: 5/2",
-                    Experience = "5+ років",
-                    ExperienceMonths = 60,
-                    SalaryMin = 5000,
-                    SalaryMax = 7000,
-                    Currency = "USD",
-                    Source = "Dou",
-                    SourceUrl = "https://jobs.dou.ua/vacancies/example-lead-ai-ml/",
-                    SkillsJson = AiMlSkillsJson,
-                    PublishedAt = DateTimeOffset.UtcNow.AddDays(-4),
-                    FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-4),
-                    LastSeenAt = DateTimeOffset.UtcNow,
-                    IsActive = true
-                }
-            };
-
-            await context.Vacancies.AddRangeAsync(vacancies);
-            await context.SaveChangesAsync();
+                await SeedDemoVacanciesAsync(context);
+            }
         }
         else
         {
-            List<VacancyDB> missingAddresses = await context.Vacancies.Where(v => v.FullAddress == null || v.FullAddress == "" || v.FullAddress.Contains("(Головний офіс)")).ToListAsync();
-            if (missingAddresses.Count > 0)
-            {
-                foreach (VacancyDB v in missingAddresses)
-                {
-                    string loc = (v.Location ?? string.Empty).ToLowerInvariant();
-                    string city = loc.Contains("lviv") || loc.Contains("львів") ? "Львів"
-                        : (loc.Contains("dnipro") || loc.Contains("дніпро") ? "Дніпро"
-                        : (loc.Contains("odesa") || loc.Contains("одеса") ? "Одеса"
-                        : (loc.Contains("kharkiv") || loc.Contains("харків") ? "Харків"
-                        : (loc.Contains("kyiv") || loc.Contains("київ") ? "Київ"
-                        : (loc.Contains("remote") || loc.Contains("віддалено") ? "Віддалено" : "Локація")))));
-                    v.FullAddress = $"{city}, не вказано точну адресу";
-                }
-                await context.SaveChangesAsync();
-            }
-
-            // Якщо БД оновлено зі старішої схеми, дозаповнюємо нормалізовані поля (CategoryGroup, WorkFormat, SearchText, ExperienceMonths)
-            List<VacancyDB> unnormalized = await context.Vacancies
-                .Where(v => v.CategoryGroup == null || v.CategoryGroup == "" || v.SearchText == "")
-                .ToListAsync();
-            if (unnormalized.Count > 0)
-            {
-                foreach (VacancyDB v in unnormalized)
-                {
-                    v.ExperienceMonths ??= VacancyExperienceParser.ParseMonths(v.Experience, v.Description);
-                    VacancyNormalizer.Apply(v);
-                }
-
-                await context.SaveChangesAsync();
-            }
+            await RepairExistingVacanciesAsync(context);
         }
 
+        // Геокеш: прибираємо записи лише з назвою міста (вони перехоплювали конкретні вулиці) — це виправлення даних, не демо
+        await RemoveCityOnlyGeoEntriesAsync(context);
+
+        if (includeDemoData)
+        {
+            await SeedDemoUsersAndRelatedDataAsync(context);
+        }
+    }
+
+    private static async Task SeedDemoVacanciesAsync(WaterfallDbContext context)
+    {
+        var vacancies = new List<VacancyDB>
+        {
+            new VacancyDB
+            {
+                Id = Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                Title = "Senior C# .NET Backend Developer",
+                Company = "Genesis Tech",
+                Description = "Розробка high-load мікросервісів на .NET 10, Kafka, Redis та PostgreSQL. Підтримка мільйонів активних користувачів.",
+                Category = ".NET",
+                Location = "Київ (Віддалено)",
+                FullAddress = "Київ, вул. Мечникова, 2, БЦ Парус",
+                Schedule = "Повна зайнятість · Гнучкий графік",
+                Experience = "5+ років",
+                ExperienceMonths = 60,
+                SalaryMin = 4000,
+                SalaryMax = 5500,
+                Currency = "USD",
+                Source = "Djinni",
+                SourceUrl = "https://djinni.co/jobs/example-senior-dotnet/",
+                SkillsJson = SeniorDotNetSkillsJson,
+                PublishedAt = DateTimeOffset.UtcNow.AddDays(-2),
+                FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-2),
+                LastSeenAt = DateTimeOffset.UtcNow,
+                IsActive = true
+            },
+            new VacancyDB
+            {
+                Id = Guid.Parse("22222222-2222-2222-2222-222222222222"),
+                Title = "Middle .NET MAUI / Mobile Developer",
+                Company = "SoftServe",
+                Description = "Створення кросплатформного клієнтського застосунку з архітектурою MVVM на базі .NET MAUI для iOS та Android.",
+                Category = "Mobile",
+                Location = "Львів / Віддалено",
+                FullAddress = "Львів, вул. Садова, 2а",
+                Schedule = "Повна зайнятість · Стандартний графік: 5/2",
+                Experience = "2+ роки",
+                ExperienceMonths = 24,
+                SalaryMin = 2200,
+                SalaryMax = 3200,
+                Currency = "USD",
+                Source = "Dou",
+                SourceUrl = "https://jobs.dou.ua/vacancies/example-middle-maui/",
+                SkillsJson = MiddleMauiSkillsJson,
+                PublishedAt = DateTimeOffset.UtcNow.AddDays(-1),
+                FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-1),
+                LastSeenAt = DateTimeOffset.UtcNow,
+                IsActive = true
+            },
+            new VacancyDB
+            {
+                Id = Guid.Parse("33333333-3333-3333-3333-333333333333"),
+                Title = "Full Stack C# / Angular Developer",
+                Company = "EPAM Systems",
+                Description = "Розробка корпоративної платформи управління даними. Стек: ASP.NET Core, EF Core, Angular 17, Azure Cloud.",
+                Category = "Full Stack",
+                Location = "Київ (Гібрид)",
+                FullAddress = "Київ, проспект Академіка Глушкова, 1",
+                Schedule = "Повна зайнятість · Гібридний формат",
+                Experience = "3+ роки",
+                ExperienceMonths = 36,
+                SalaryMin = 3000,
+                SalaryMax = 4500,
+                Currency = "USD",
+                Source = "WorkUa",
+                SourceUrl = "https://www.work.ua/jobs/example-fullstack-csharp/",
+                SkillsJson = FullStackSkillsJson,
+                PublishedAt = DateTimeOffset.UtcNow.AddHours(-12),
+                FirstSeenAt = DateTimeOffset.UtcNow.AddHours(-12),
+                LastSeenAt = DateTimeOffset.UtcNow,
+                IsActive = true
+            },
+            new VacancyDB
+            {
+                Id = Guid.Parse("44444444-4444-4444-4444-444444444444"),
+                Title = "QA Automation (.NET / Playwright)",
+                Company = "Grammarly",
+                Description = "Автоматизація тестування Web та API сервісів. Створення тест-сьютів на C# з використанням Playwright та Allure.",
+                Category = "QA",
+                Location = "Віддалено",
+                FullAddress = "Київ, Спортивна площа, 1а, БЦ Гулівер",
+                Schedule = "Повна зайнятість · Віддалена робота",
+                Experience = "2+ роки",
+                ExperienceMonths = 24,
+                SalaryMin = 2800,
+                SalaryMax = 3800,
+                Currency = "USD",
+                Source = "RobotaUa",
+                SourceUrl = "https://robota.ua/company123/vacancy-qa-dotnet",
+                SkillsJson = QaSkillsJson,
+                PublishedAt = DateTimeOffset.UtcNow.AddDays(-3),
+                FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-3),
+                LastSeenAt = DateTimeOffset.UtcNow,
+                IsActive = true
+            },
+            new VacancyDB
+            {
+                Id = Guid.Parse("55555555-5555-5555-5555-555555555555"),
+                Title = "Lead AI / ML Solutions Engineer",
+                Company = "Ajax Systems",
+                Description = "Інтеграція сучасних мовних моделей (LLM) та комп'ютерного зору в системи безпеки розумного будинку.",
+                Category = "AI / ML",
+                Location = "Київ (Офіс)",
+                FullAddress = "Київ, вул. Семена Скляренка, 5",
+                Schedule = "Повна зайнятість · Офіс: 5/2",
+                Experience = "5+ років",
+                ExperienceMonths = 60,
+                SalaryMin = 5000,
+                SalaryMax = 7000,
+                Currency = "USD",
+                Source = "Dou",
+                SourceUrl = "https://jobs.dou.ua/vacancies/example-lead-ai-ml/",
+                SkillsJson = AiMlSkillsJson,
+                PublishedAt = DateTimeOffset.UtcNow.AddDays(-4),
+                FirstSeenAt = DateTimeOffset.UtcNow.AddDays(-4),
+                LastSeenAt = DateTimeOffset.UtcNow,
+                IsActive = true
+            }
+        };
+
+        await context.Vacancies.AddRangeAsync(vacancies);
+        await context.SaveChangesAsync();
+    }
+
+    private static async Task RepairExistingVacanciesAsync(WaterfallDbContext context)
+    {
+        List<VacancyDB> missingAddresses = await context.Vacancies.Where(v => v.FullAddress == null || v.FullAddress == "" || v.FullAddress.Contains("(Головний офіс)")).ToListAsync();
+        if (missingAddresses.Count > 0)
+        {
+            foreach (VacancyDB v in missingAddresses)
+            {
+                string loc = (v.Location ?? string.Empty).ToLowerInvariant();
+                string city = loc.Contains("lviv") || loc.Contains("львів") ? "Львів"
+                    : (loc.Contains("dnipro") || loc.Contains("дніпро") ? "Дніпро"
+                    : (loc.Contains("odesa") || loc.Contains("одеса") ? "Одеса"
+                    : (loc.Contains("kharkiv") || loc.Contains("харків") ? "Харків"
+                    : (loc.Contains("kyiv") || loc.Contains("київ") ? "Київ"
+                    : (loc.Contains("remote") || loc.Contains("віддалено") ? "Віддалено" : "Локація")))));
+                v.FullAddress = $"{city}, не вказано точну адресу";
+            }
+            await context.SaveChangesAsync();
+        }
+
+        // Якщо БД оновлено зі старішої схеми, дозаповнюємо нормалізовані поля (CategoryGroup, WorkFormat, SearchText, ExperienceMonths)
+        List<VacancyDB> unnormalized = await context.Vacancies
+            .Where(v => v.CategoryGroup == null || v.CategoryGroup == "" || v.SearchText == "")
+            .ToListAsync();
+        if (unnormalized.Count > 0)
+        {
+            foreach (VacancyDB v in unnormalized)
+            {
+                v.ExperienceMonths ??= VacancyExperienceParser.ParseMonths(v.Experience, v.Description);
+                VacancyNormalizer.Apply(v);
+            }
+
+            await context.SaveChangesAsync();
+        }
+    }
+
+    private static async Task SeedDemoUsersAndRelatedDataAsync(WaterfallDbContext context)
+    {
         if (!await context.SavedVacancies.AnyAsync())
         {
             var sampleBookmarks = new List<SavedVacancyDB>
@@ -211,10 +242,9 @@ public static class WaterfallDbSeeder
             await context.SaveChangesAsync();
         }
 
-        // Тестові облікові записи лише для локальної розробки.
-        // Гілка закрита за умовою провайдер - sqlite, щоб дані не потрапили в продакшн.
-        if (context.Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite"
-            && !await context.Users.AnyAsync())
+        // Тестові облікові записи лише для локальної розробки: метод викликається тільки з includeDemoData
+        // (API — лише в Development), а не за типом бази, бо SQLite у нас стоїть і за замовчуванням
+        if (!await context.Users.AnyAsync())
         {
             var devUsers = new List<UserDB>
             {
@@ -248,6 +278,22 @@ public static class WaterfallDbSeeder
             await context.SaveChangesAsync();
         }
 
+        // Демо-адміністратор (лише системні налаштування сервера). Окремо від блоку вище, щоб з'явився й у вже наповненій
+        // базі розробника; пароль — у README, як і в інших тестових акаунтів
+        const string DevAdminEmail = "admin@waterfall.com";
+        if (!await context.Users.AnyAsync(u => u.Email == DevAdminEmail))
+        {
+            await context.Users.AddAsync(new UserDB
+            {
+                Id = Guid.Parse("88888888-8888-8888-8888-888888888888"),
+                Email = DevAdminEmail,
+                PasswordHash = "AQAAAAIAAYagAAAAECXs85vCTbWwJd+DMypA83afHeSItJvUBoBJRJ9SMjgOAFuyl754ta0AygdE41u2Hg==",
+                Role = "Admin",
+                CreatedAt = DateTimeOffset.UtcNow.AddDays(-30)
+            });
+            await context.SaveChangesAsync();
+        }
+
         try
         {
             if (!await context.UserPersonalData.AnyAsync())
@@ -278,6 +324,27 @@ public static class WaterfallDbSeeder
             }
         }
 
+        try
+        {
+            if (!await context.GeoLocationCache.AnyAsync())
+            {
+                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
+                await context.SaveChangesAsync();
+            }
+        }
+        catch
+        {
+            await EnsureTablesCreatedAsync(context);
+            if (!await context.GeoLocationCache.AnyAsync())
+            {
+                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
+                await context.SaveChangesAsync();
+            }
+        }
+    }
+
+    private static async Task RemoveCityOnlyGeoEntriesAsync(WaterfallDbContext context)
+    {
         try
         {
             // Видаляємо суто назви міст без вулиць, щоб вони не перехоплювали конкретні вулиці
@@ -292,21 +359,11 @@ public static class WaterfallDbSeeder
                 context.GeoLocationCache.RemoveRange(cityOnlyEntries);
                 await context.SaveChangesAsync();
             }
-
-            if (!await context.GeoLocationCache.AnyAsync())
-            {
-                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
-                await context.SaveChangesAsync();
-            }
         }
         catch
         {
+            // Таблиці геокешу ще немає в старій базі: її створить EnsureTablesCreatedAsync
             await EnsureTablesCreatedAsync(context);
-            if (!await context.GeoLocationCache.AnyAsync())
-            {
-                await context.GeoLocationCache.AddRangeAsync(GetBaseLocations());
-                await context.SaveChangesAsync();
-            }
         }
     }
 

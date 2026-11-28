@@ -19,9 +19,12 @@ using Waterfall.Repository.Data;
 using Waterfall.Repository.Extensions;
 using Waterfall.Repository.Interfaces;
 using Waterfall.Services;
+using Waterfall.Services.Configuration;
 using Waterfall.Services.Extensions;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+// Зміни адміністратора (вкладка «Системні налаштування») — окремий файл поверх appsettings.json; перечитується без перезапуску
+builder.Configuration.AddJsonFile(FileSystemSettingsStore.FileName, optional: true, reloadOnChange: true);
 
 // 1. Реєстрація контролерів у DI-контейнері та налаштування стандартизованої обробки помилок валідації
 builder.Services.AddControllers(options =>
@@ -107,10 +110,14 @@ builder.Services.AddControllers(options =>
 // 2. Реєстрація інфраструктури (EF Core SQLite/MSSQL), репозиторіїв та сервісів бізнес-логіки
 builder.Services.AddWaterfallRepositories(builder.Configuration);
 builder.Services.AddWaterfallServices();
+// Чи приймати вакансії від клієнта в /vacancies/sync (за замовчуванням ні: у базу пише лише серверний парсер)
+builder.Services.Configure<VacancySyncOptions>(builder.Configuration.GetSection(VacancySyncOptions.SectionName));
 // LLM-шлюз (FR-002, REL-003): без ключів API стартує, а ШІ-функції повідомляють про недоступність
 builder.Services.AddWaterfallLlm(builder.Configuration);
 // Ліміт запитів до LLM на користувача (THR-10) — спільна політика для /messages і /analyze
 builder.Services.AddWaterfallAiConsultantRateLimiting(builder.Configuration);
+// Не більше 5 спроб входу за хвилину з однієї адреси (THR-01)
+builder.Services.AddWaterfallAuthRateLimiting();
 // Надто частий збір не дасть запустити API (fail-fast, THR-11)
 builder.Services.AddOptions<IngestionOptions>().Bind(builder.Configuration.GetSection("Ingestion")).ValidateOnStart();
 builder.Services.AddSingleton<IValidateOptions<IngestionOptions>, IngestionOptionsValidator>();
@@ -121,6 +128,8 @@ builder.Services.AddHostedService<JobParserService>();
 builder.Services.AddHostedService<VacancyExpirationService>();
 // Пошук на сайтах на запит користувача: черга, прогрес і кеш живуть у пам'яті, тож сервіс один на застосунок
 builder.Services.AddSingleton<ISiteSearchService, SiteSearchService>();
+builder.Services.AddSingleton<ISystemSettingsStore>(sp => new FileSystemSettingsStore(
+    sp.GetRequiredService<IConfiguration>(), sp.GetRequiredService<IHostEnvironment>()));
 // Реєструємо BrowserFetcher як Singleton
 builder.Services.AddSingleton<IBrowserFetcher, BrowserFetcher>();
 
@@ -209,7 +218,8 @@ WebApplication app = builder.Build();
 using (IServiceScope scope = app.Services.CreateScope())
 {
     WaterfallDbContext db = scope.ServiceProvider.GetRequiredService<WaterfallDbContext>();
-    await WaterfallDbSeeder.SeedAsync(db);
+    // Демо-вакансії й тестові акаунти з відомими паролями — лише в Development; структура бази — завжди
+    await WaterfallDbSeeder.SeedAsync(db, includeDemoData: app.Environment.IsDevelopment());
 }
 
 // 5. Middleware для підтримки кореляційного Request ID (Structured Logging & Error Contract)

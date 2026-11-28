@@ -2,7 +2,9 @@
 
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Swashbuckle.AspNetCore.Annotations;
+using Waterfall.Api.Extensions;
 using Waterfall.Api.Models.Common;
 using Waterfall.Services.Exceptions;
 using Waterfall.Services.Interfaces;
@@ -74,7 +76,9 @@ public class AuthController : ApiControllerBase
     /// <response code="200">Вхід успішний, токен видано.</response>
     /// <response code="400">Помилка валідації вхідного запиту.</response>
     /// <response code="401">Невірні облікові дані (однакове повідомлення для обох причин, THR-01).</response>
+    /// <response code="429">Забагато спроб входу з цієї адреси (не більше 5 за хвилину, THR-01); заголовок Retry-After каже, скільки чекати.</response>
     [HttpPost("login")]
+    [EnableRateLimiting(AuthRateLimitingExtensions.PolicyName)]
     [SwaggerOperation(
         Summary = "Увійти",
         Description = "Перевіряє облікові дані та повертає access-JWT на 15 хвилин.",
@@ -83,6 +87,7 @@ public class AuthController : ApiControllerBase
     [ProducesResponseType(typeof(AuthResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ApiErrorResponse), StatusCodes.Status429TooManyRequests)]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request, CancellationToken ct)
     {
         if (!ModelState.IsValid)

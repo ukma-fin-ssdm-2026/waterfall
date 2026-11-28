@@ -68,10 +68,14 @@ public static class MauiProgram
         builder.Services.AddSingleton<AnalyticsViewModel>();
         builder.Services.AddSingleton<FavoritesViewModel>();
         builder.Services.AddSingleton<LoginViewModel>();
+        // Налаштування фонового збору читаються й зберігаються через сервер (лише роль Admin), тож потрібні шлюз і токен
         builder.Services.AddSingleton(sp => new SystemSettingsViewModel(
+            sp.GetService<Waterfall.Client.Interfaces.IHttpGatewayService>(),
+            sp.GetService<Waterfall.Client.Interfaces.IAuthTokenStore>(),
             sp.GetService<Waterfall.Client.Interfaces.ILocalVacancyStore>(),
             sp.GetService<Waterfall.Client.Interfaces.IVacancySyncService>(),
-            sp.GetService<Waterfall.Client.Interfaces.IDistanceCalculatorService>()));
+            sp.GetService<Waterfall.Client.Interfaces.IDistanceCalculatorService>(),
+            sp.GetService<CommunityToolkit.Mvvm.Messaging.IMessenger>()));
 
 #if WINDOWS
         // На Windows DesktopHostPage тримає сторінки живими в RAM для миттєвого перемикання (<16ms).

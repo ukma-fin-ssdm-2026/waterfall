@@ -13,9 +13,6 @@ public interface IVacancyService
 {
     Task<PagedResult<VacancyDto>> GetAllAsync(VacancyFilterParameters filter, CancellationToken ct = default, Guid? userId = null);
     Task<VacancyDto?> GetByIdAsync(Guid id, CancellationToken ct = default, Guid? userId = null);
-    Task<VacancyDto> CreateAsync(CreateVacancyRequest request, CancellationToken ct = default);
-    Task<VacancyDto?> UpdateAsync(Guid id, UpdateVacancyRequest request, CancellationToken ct = default);
-    Task<bool> DeleteAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
     /// Двостороння синхронізація бази вакансій між клієнтом та сервером:

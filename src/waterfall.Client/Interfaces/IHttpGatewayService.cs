@@ -40,6 +40,13 @@ public interface IHttpGatewayService
     /// </summary>
     Task<MarketAnalyticsDto> GetMarketAnalyticsAsync(string? category = null, int months = 3, CancellationToken ct = default);
 
+    /// <summary>Системні налаштування сервера (GET /api/v1/admin/settings); доступні лише ролі Admin.</summary>
+    Task<Waterfall.Client.Models.SystemSettings.SystemSettingsDto> GetSystemSettingsAsync(CancellationToken ct = default);
+
+    /// <summary>Змінює системні налаштування сервера (PUT /api/v1/admin/settings); лише роль Admin.</summary>
+    Task<Waterfall.Client.Models.SystemSettings.SystemSettingsDto> UpdateSystemSettingsAsync(
+        Waterfall.Client.Models.SystemSettings.UpdateSystemSettingsRequest request, CancellationToken ct = default);
+
     Task<VacancyDto> GetVacancyAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Запускає пошук на сайті за фільтрами (POST /api/v1/site-searches); потрібен вхід.</summary>
