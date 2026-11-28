@@ -597,6 +597,11 @@ public partial class VacancyItemViewModel : ObservableObject
 
     public string ViewedButtonText => IsViewed ? "Зняти позначку переглянуто" : "Позначити як переглянуто";
 
+    /// <summary>
+    /// Відписує картку від messenger, коли сторінка списку її відпускає (лінива матеріалізація).
+    /// </summary>
+    internal void Detach() => _messenger.UnregisterAll(this);
+
     [RelayCommand]
     private async Task ToggleViewedAsync()
     {

@@ -15,6 +15,7 @@ public partial class DatabasePage : ContentPage, IHostedPage
         viewModel.IsFilterPanelVisible = false;
         BindingContext = _viewModel = viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _viewModel.Pager.PropertyChanged += OnPagerPropertyChanged;
         OverflowMenuLayer.PropertyChanged += OnOverlayVisibilityPropertyChanged;
         SortMenuLayer.PropertyChanged += OnOverlayVisibilityPropertyChanged;
     }
@@ -40,6 +41,14 @@ public partial class DatabasePage : ContentPage, IHostedPage
         {
             OverlayStateChanged?.Invoke(this, EventArgs.Empty);
             _ = AnimateSheetAsync(FilterSheetHost, "FilterSheetTemplate", _viewModel.IsFilterPanelVisible, _filterSheetAnimState);
+        }
+    }
+
+    private void OnPagerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(VacancyPager.CurrentPage) or nameof(VacancyPager.PageSize))
+        {
+            DatabaseListView.ScrollToTop();
         }
     }
 

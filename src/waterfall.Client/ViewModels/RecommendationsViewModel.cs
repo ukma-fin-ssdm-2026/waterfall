@@ -41,6 +41,7 @@ public partial class RecommendationsViewModel : ObservableObject
             {
                 foreach (VacancyItemViewModel item in vm.Recommendations.Where(v => v.Id == message.VacancyId).ToList())
                 {
+                    item.Detach();
                     vm.Recommendations.Remove(item);
                 }
             }
@@ -140,6 +141,11 @@ public partial class RecommendationsViewModel : ObservableObject
                 .Select(vacancy => new VacancyItemViewModel(
                     vacancy, _gateway, _messenger, msg => ErrorMessage = msg, _urlLauncher, _distanceService))
                 .ToList();
+            foreach (VacancyItemViewModel previous in _recommendations)
+            {
+                previous.Detach();
+            }
+
             _recommendations.ReplaceAll(cards);
 
             HasLoaded = true;

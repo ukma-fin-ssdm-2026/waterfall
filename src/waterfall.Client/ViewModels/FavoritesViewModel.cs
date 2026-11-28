@@ -45,6 +45,7 @@ public partial class FavoritesViewModel : ObservableObject
 
             foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId).ToList())
             {
+                item.Detach();
                 vm.Vacancies.Remove(item);
             }
 
@@ -140,6 +141,11 @@ public partial class FavoritesViewModel : ObservableObject
                 .Select(entry => new VacancyItemViewModel(
                     entry.Vacancy! with { IsSaved = true }, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher, _distanceService))
                 .ToList();
+            foreach (VacancyItemViewModel previous in _vacancies)
+            {
+                previous.Detach();
+            }
+
             _vacancies.ReplaceAll(cards);
 
             HasLoaded = true;

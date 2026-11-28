@@ -22,6 +22,7 @@ public partial class CatalogPage : ContentPage, IHostedPage
         viewModel.IsLocalFilterPanelVisible = false;
         BindingContext = _viewModel = viewModel;
         _viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        _viewModel.Pager.PropertyChanged += OnPagerPropertyChanged;
         OverflowMenuLayer.PropertyChanged += OnOverlayVisibilityPropertyChanged;
         SortMenuLayer.PropertyChanged += OnOverlayVisibilityPropertyChanged;
         _viewModel.NavigateToLoginAction = async () =>
@@ -77,6 +78,14 @@ public partial class CatalogPage : ContentPage, IHostedPage
         {
             OverlayStateChanged?.Invoke(this, EventArgs.Empty);
             _ = AnimateSheetAsync(LocalFilterSheetHost, "LocalFilterSheetTemplate", _viewModel.IsLocalFilterPanelVisible, _localFilterSheetAnimState);
+        }
+    }
+
+    private void OnPagerPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(VacancyPager.CurrentPage) or nameof(VacancyPager.PageSize))
+        {
+            CatalogListView.ScrollToTop();
         }
     }
 

@@ -446,7 +446,8 @@
             </Border>
 
             <!-- Рядок 5: Список вакансій (без фейкового RefreshView — плавний stretch на обох краях) -->
-            <controls:VacancyListView Grid.Row="5"
+            <controls:VacancyListView x:Name="CatalogListView"
+                                      Grid.Row="5"
                                       ItemsSource="{Binding Vacancies}"
                                       EnablePullToRefresh="False">
                 <Grid>
@@ -472,6 +473,10 @@
                         <Button Text="Скинути фільтри" Command="{Binding ResetFiltersCommand}" HorizontalOptions="Center" Margin="0,6,0,0" Style="{StaticResource CardActionPrimary}" />
                     </VerticalStackLayout>
                 </Grid>
+                <controls:VacancyListView.FooterContent>
+                    <!-- Пейджер усередині скролу: з'являється під списком, а не висить на екрані (FR-011, US-001 AC-2) -->
+                    <controls:VacancyPagerBar Pager="{Binding Pager}" SummaryText="{Binding TotalText}" />
+                </controls:VacancyListView.FooterContent>
             </controls:VacancyListView>
         </Grid>
 
