@@ -42,6 +42,8 @@ public partial class CatalogViewModel : ObservableObject
 
     /// <summary>Більше сторінок сервер за один пошук не читає (кожна сторінка Djinni — 15 вакансій).</summary>
     public const int MaxSitePages = 5;
+    /// <summary>Скільки вакансій показуємо на одній сторінці каталогу (FR-011/US-001 AC-2).</summary>
+    public const int PageSize = 20;
 
     private readonly IHttpGatewayService _gateway;
     private readonly IMessenger _messenger;
@@ -56,6 +58,8 @@ public partial class CatalogViewModel : ObservableObject
 
     // Результат останнього пошуку на сайті без локальних фільтрів; список на екрані — його відфільтрована частина
     private readonly List<VacancyDto> _loadedDtos = [];
+    // Усі картки поточного відфільтрованого результату; на екран виводимо лише сторінку CurrentPage.
+    private List<VacancyItemViewModel> _allCards = [];
 
     // Вакансії, переглянуті в цьому сеансі (сервер позначає IsViewed лише на момент пошуку)
     private readonly HashSet<Guid> _viewedIds = [];
@@ -98,7 +102,7 @@ public partial class CatalogViewModel : ObservableObject
         // Зміна «Обраного» з іншої вкладки: оновлюємо картку на місці, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
         {
-            foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
+            foreach (VacancyItemViewModel item in vm._allCards.Where(v => v.Id == message.VacancyId))
             {
                 item.IsSaved = message.IsSaved;
             }
@@ -124,7 +128,7 @@ public partial class CatalogViewModel : ObservableObject
                 }
             }
 
-            foreach (VacancyItemViewModel item in vm.Vacancies.Where(v => v.Id == message.VacancyId))
+            foreach (VacancyItemViewModel item in vm._allCards.Where(v => v.Id == message.VacancyId))
             {
                 item.IsViewed = message.IsViewed;
             }
@@ -184,7 +188,32 @@ public partial class CatalogViewModel : ObservableObject
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(TotalText))]
+    [NotifyPropertyChangedFor(nameof(TotalPages))]
+    [NotifyPropertyChangedFor(nameof(PageText))]
+    [NotifyPropertyChangedFor(nameof(HasNextPage))]
+    [NotifyPropertyChangedFor(nameof(IsPagerVisible))]
+    [NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
     public partial int TotalCount { get; set; }
+
+    /// <summary>Поточна сторінка каталогу (нумерація з 1).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PageText))]
+    [NotifyPropertyChangedFor(nameof(HasPreviousPage))]
+    [NotifyPropertyChangedFor(nameof(HasNextPage))]
+    [NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PrevPageCommand))]
+    public partial int CurrentPage { get; set; } = 1;
+
+    public int TotalPages => TotalCount <= 0 ? 0 : (TotalCount + PageSize - 1) / PageSize;
+
+    public bool HasPreviousPage => HasLoaded && CurrentPage > 1;
+
+    public bool HasNextPage => HasLoaded && CurrentPage < TotalPages;
+
+    /// <summary>Пейджер показуємо лише коли є що гортати.</summary>
+    public bool IsPagerVisible => HasLoaded && TotalPages > 1;
+
+    public string PageText => $"Сторінка {CurrentPage} з {Math.Max(1, TotalPages)}";
 
     /// <summary>
     /// Дія для переходу на екран входу/профілю з плашки неавторизованого користувача.
@@ -1437,7 +1466,32 @@ public partial class CatalogViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsEmpty))]
     [NotifyPropertyChangedFor(nameof(ShowTotal))]
     [NotifyPropertyChangedFor(nameof(IsBeforeFirstSearch))]
+    [NotifyPropertyChangedFor(nameof(IsPagerVisible))]
+    [NotifyPropertyChangedFor(nameof(HasPreviousPage))]
+    [NotifyPropertyChangedFor(nameof(HasNextPage))]
+    [NotifyCanExecuteChangedFor(nameof(NextPageCommand))]
+    [NotifyCanExecuteChangedFor(nameof(PrevPageCommand))]
     public partial bool HasLoaded { get; private set; }
+
+    /// <summary>Перехід на наступну сторінку вже завантаженого результату.</summary>
+    private bool CanGoNextPage() => HasNextPage;
+
+    [RelayCommand(CanExecute = nameof(CanGoNextPage))]
+    private void NextPage()
+    {
+        CurrentPage++;
+        ShowCurrentPage();
+    }
+
+    /// <summary>Повернення на попередню сторінку.</summary>
+    private bool CanGoPrevPage() => HasPreviousPage;
+
+    [RelayCommand(CanExecute = nameof(CanGoPrevPage))]
+    private void PrevPage()
+    {
+        CurrentPage--;
+        ShowCurrentPage();
+    }
 
     public bool HasError => ErrorMessage is not null;
 
@@ -2081,17 +2135,46 @@ public partial class CatalogViewModel : ObservableObject
 
     private void ApplyCardsToUi(List<VacancyItemViewModel> cards)
     {
-        _vacancies.ReplaceAll(cards);
+        _allCards = cards;
+        TotalCount = cards.Count;
+        CurrentPage = 1;
+        ShowCurrentPage();
+
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(HasActiveLocalFilters));
+        OnPropertyChanged(nameof(IsFilterHighlightActive));
+    }
+
+    /// <summary>Виводить на екран лише поточну сторінку, решта карток лишається в <see cref="_allCards"/>.</summary>
+    private void ShowCurrentPage()
+    {
+        int totalPages = TotalPages;
+        if (totalPages == 0)
+        {
+            CurrentPage = 1;
+            _vacancies.ReplaceAll([]);
+            OnPropertyChanged(nameof(IsEmpty));
+            return;
+        }
+
+        if (CurrentPage > totalPages)
+        {
+            CurrentPage = totalPages;
+        }
+        else if (CurrentPage < 1)
+        {
+            CurrentPage = 1;
+        }
+
+        int skip = (CurrentPage - 1) * PageSize;
+        List<VacancyItemViewModel> page = _allCards.Skip(skip).Take(PageSize).ToList();
+        _vacancies.ReplaceAll(page);
+        OnPropertyChanged(nameof(IsEmpty));
 
         _distancePrefetchCts?.Cancel();
         CancellationTokenSource prefetchCts = new();
         _distancePrefetchCts = prefetchCts;
-        _ = VacancyFilterEngine.PrefetchDistancesAsync(cards, _distanceService, prefetchCts.Token);
-
-        TotalCount = cards.Count;
-        OnPropertyChanged(nameof(IsEmpty));
-        OnPropertyChanged(nameof(HasActiveLocalFilters));
-        OnPropertyChanged(nameof(IsFilterHighlightActive));
+        _ = VacancyFilterEngine.PrefetchDistancesAsync(page, _distanceService, prefetchCts.Token);
     }
 
     /// <summary>З якої сторінки списку почати пошук на активному сайті (синхронізується з індивідуальною сторінкою платформи).</summary>
@@ -2913,7 +2996,7 @@ public partial class CatalogViewModel : ObservableObject
         IEnumerable<VacancyDto> query = _loadedDtos.Where(v => MatchesLocalFilters(v, titleOnly));
         List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(query, SelectedSortOption, GetDistanceKm).ToList();
 
-        Dictionary<Guid, bool> savedStates = Vacancies.ToDictionary(v => v.Id, v => v.IsSaved);
+        Dictionary<Guid, bool> savedStates = _allCards.ToDictionary(v => v.Id, v => v.IsSaved);
         for (int i = 0; i < sorted.Count; i++)
         {
             VacancyDto dto = sorted[i];
@@ -3037,7 +3120,7 @@ public partial class CatalogViewModel : ObservableObject
             return km;
         }
 
-        VacancyItemViewModel? existing = Vacancies.FirstOrDefault(item => item.Id == v.Id);
+        VacancyItemViewModel? existing = _allCards.FirstOrDefault(item => item.Id == v.Id);
         if (existing?.DistanceKm != null)
         {
             _distanceCache[v.Id] = existing.DistanceKm;
@@ -3058,9 +3141,10 @@ public partial class CatalogViewModel : ObservableObject
         item.IsDismissing = true;
         await Task.Delay(300);
 
-        if (UnifiedHideViewed && item.IsViewed && Vacancies.Remove(item))
+        if (UnifiedHideViewed && item.IsViewed && _allCards.Remove(item))
         {
-            TotalCount = Math.Max(0, TotalCount - 1);
+            TotalCount = _allCards.Count;
+            ShowCurrentPage();
         }
         else
         {
