@@ -253,7 +253,6 @@ public sealed class VacancySyncTests : IDisposable
                     Source TEXT NOT NULL,
                     SourceUrl TEXT NOT NULL,
                     SkillsJson TEXT NOT NULL,
-                    SearchText TEXT NOT NULL,
                     PublishedAt INTEGER NOT NULL,
                     FirstSeenAt INTEGER NOT NULL,
                     LastSeenAt INTEGER NOT NULL,

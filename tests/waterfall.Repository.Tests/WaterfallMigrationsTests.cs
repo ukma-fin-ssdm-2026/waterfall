@@ -13,6 +13,7 @@ public sealed class WaterfallMigrationsTests
     private const string SavedIntegrityMigrationId = "20261127215638_RestoreSavedVacanciesIntegrity";
     private const string IndexVacanciesMigrationId = "20261127220606_IndexVacanciesForSyncUpsert";
     private const string ClearAddressSentinelMigrationId = "20261127221129_ClearFullAddressSentinel";
+    private const string DropSearchTextMigrationId = "20261127221526_DropVacancySearchText";
 
     [Fact]
     public async Task MigrateAsync_OnEmptySqliteDatabase_CreatesSchemaAndRecordsInitialMigrationHistory()
@@ -32,7 +33,7 @@ public sealed class WaterfallMigrationsTests
         // Assert
         List<string> applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
         List<string> pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
-        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId, ClearAddressSentinelMigrationId], applied);
+        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId, ClearAddressSentinelMigrationId, DropSearchTextMigrationId], applied);
         Assert.Empty(pending);
         Assert.Equal(0, await db.Vacancies.CountAsync());
         Assert.Equal(0, await db.SiteSearchCache.CountAsync());
@@ -182,7 +183,7 @@ public sealed class WaterfallMigrationsTests
         Assert.Equal(WorkFormat.None, preserved.WorkFormat);
         Assert.Equal(0, await db.SiteSearchCache.CountAsync());
         Assert.Equal(0, await db.ChatSessions.CountAsync());
-        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId, ClearAddressSentinelMigrationId], await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId, IndexVacanciesMigrationId, ClearAddressSentinelMigrationId, DropSearchTextMigrationId], await db.Database.GetAppliedMigrationsAsync());
     }
 
     [Fact]
@@ -332,5 +333,39 @@ public sealed class WaterfallMigrationsTests
             Assert.Null(hq.FullAddress);
             Assert.Equal("Київ, вул. Мечникова, 2", street.FullAddress);
         }
+    }
+
+    [Fact]
+    public async Task MigrateAsync_FromClearAddressSentinel_DropsSearchTextColumn()
+    {
+        // Arrange
+        await using SqliteConnection connection = new("DataSource=:memory:");
+        await connection.OpenAsync();
+        DbContextOptions<WaterfallDbContext> options = new DbContextOptionsBuilder<WaterfallDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using (WaterfallDbContext beforeDb = new(options))
+        {
+            await beforeDb.GetService<IMigrator>().MigrateAsync(ClearAddressSentinelMigrationId);
+        }
+
+        // Act
+        await using (WaterfallDbContext migratedDb = new(options))
+        {
+            await migratedDb.Database.MigrateAsync();
+        }
+
+        // Assert
+        await using SqliteCommand pragma = connection.CreateCommand();
+        pragma.CommandText = "PRAGMA table_info('Vacancies');";
+        await using System.Data.Common.DbDataReader reader = await pragma.ExecuteReaderAsync();
+        List<string> columnNames = [];
+        while (await reader.ReadAsync())
+        {
+            columnNames.Add(reader.GetString(1));
+        }
+
+        Assert.DoesNotContain("SearchText", columnNames, StringComparer.OrdinalIgnoreCase);
     }
 }

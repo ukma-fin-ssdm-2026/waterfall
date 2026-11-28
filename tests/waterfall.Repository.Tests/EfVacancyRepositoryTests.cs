@@ -459,9 +459,12 @@ public sealed class EfVacancyRepositoryTests : IDisposable
         Assert.Equal("Brand New Vacancy", newStored.Title);
     }
 
-    // AI: кириличний пошук без урахування регістру через SearchText; перевірено: падає без нормалізатора
-    [Fact]
-    public async Task GetAllAsync_Search_FindsCyrillicIgnoringCase()
+    // Пошук кирилицею без урахування регістру через SqliteUnicodeLowerInterceptor
+    [Theory]
+    [InlineData("бухгалтер")]
+    [InlineData("БУХГАЛТЕР")]
+    [InlineData("Бухгалтер")]
+    public async Task GetAllAsync_Search_FindsCyrillicTitleIgnoringCase(string term)
     {
         // Arrange
         await using WaterfallDbContext db = _fixture.CreateContext();
@@ -473,14 +476,73 @@ public sealed class EfVacancyRepositoryTests : IDisposable
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
-        // Act + Assert: запит у будь-якому регістрі знаходить «Бухгалтер»
-        foreach (string term in new[] { "бухгалтер", "БУХГАЛТЕР", "Бухгалтер" })
-        {
-            (IReadOnlyList<VacancyDB> items, int totalCount) = await repo.GetAllAsync(search: term);
+        // Act
+        (IReadOnlyList<VacancyDB> items, int totalCount) = await repo.GetAllAsync(search: term);
 
-            Assert.Equal(1, totalCount);
-            Assert.Equal(accountant.Id, items.Single().Id);
-        }
+        // Assert
+        Assert.Equal(1, totalCount);
+        Assert.Equal(accountant.Id, items.Single().Id);
+    }
+
+    [Theory]
+    [InlineData("фінансова")]
+    [InlineData("розробка")]
+    [InlineData("комунікація")]
+    public async Task GetAllAsync_Search_MatchesCyrillicIgnoringCaseAcrossCompanyDescriptionAndSkills(string term)
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        VacancyDB target = CreateVacancy(title: "Аналітик", company: "Фінансова Група");
+        target.Description = "Розробка та підтримка модулів";
+        target.SkillsJson = "[\"Комунікація\"]";
+
+        VacancyDB other = CreateVacancy(title: "Дизайнер", company: "Студія");
+        other.Description = "Створення макетів";
+        other.SkillsJson = "[\"Figma\"]";
+
+        db.Vacancies.AddRange(target, other);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act
+        (IReadOnlyList<VacancyDB> items, int totalCount) = await repo.GetAllAsync(search: term);
+
+        // Assert
+        Assert.Equal(1, totalCount);
+        Assert.Equal(target.Id, items.Single().Id);
+    }
+
+    [Theory]
+    [InlineData("комунікація")]
+    [InlineData("бухгалтер")]
+    [InlineData("фінансова")]
+    [InlineData("розробка")]
+    public async Task GetAllAsync_Skills_MatchesCyrillicIgnoringCaseAcrossSkillsTitleCompanyAndDescription(string skill)
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfVacancyRepository repo = new(db);
+
+        VacancyDB target = CreateVacancy(title: "Головний Бухгалтер", company: "Фінансова Група");
+        target.Description = "Розробка фінансових звітів";
+        target.SkillsJson = "[\"Комунікація\"]";
+
+        VacancyDB other = CreateVacancy(title: "Дизайнер", company: "Студія");
+        other.Description = "Створення макетів";
+        other.SkillsJson = "[\"Figma\"]";
+
+        db.Vacancies.AddRange(target, other);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act
+        (IReadOnlyList<VacancyDB> items, int totalCount) = await repo.GetAllAsync(skills: [skill]);
+
+        // Assert
+        Assert.Equal(1, totalCount);
+        Assert.Equal(target.Id, items.Single().Id);
     }
 
     [Fact]

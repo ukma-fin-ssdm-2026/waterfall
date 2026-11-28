@@ -320,10 +320,6 @@ namespace waterfall.Repository.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("nvarchar(100)");
 
-                    b.Property<string>("SearchText")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
                     b.Property<string>("SkillsJson")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");

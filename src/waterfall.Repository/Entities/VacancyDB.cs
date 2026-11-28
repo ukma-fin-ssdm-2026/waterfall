@@ -83,13 +83,6 @@ public class VacancyDB
 
     public string SkillsJson { get; set; } = "[]";
 
-    /// <summary>
-    /// Нижній регістр назви, компанії, опису й тегів. SQLite порівнює кирилицю з урахуванням регістру,
-    /// тож каталог шукає підрядок саме в цьому полі — і працює однаково на SQLite та MSSQL.
-    /// </summary>
-    [Required]
-    public string SearchText { get; set; } = string.Empty;
-
     public DateTimeOffset PublishedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset FirstSeenAt { get; set; } = DateTimeOffset.UtcNow;

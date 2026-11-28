@@ -184,9 +184,9 @@ public static class WaterfallDbSeeder
 
     private static async Task RepairExistingVacanciesAsync(WaterfallDbContext context)
     {
-        // Якщо БД оновлено зі старішої схеми, дозаповнюємо нормалізовані поля (CategoryGroup, WorkFormat, SearchText, ExperienceMonths)
+        // Якщо БД оновлено зі старішої схеми, дозаповнюємо нормалізовані поля (CategoryGroup, WorkFormat, ExperienceMonths)
         List<VacancyDB> unnormalized = await context.Vacancies
-            .Where(v => v.CategoryGroup == null || v.CategoryGroup == "" || v.SearchText == "")
+            .Where(v => v.CategoryGroup == null || v.CategoryGroup == "")
             .ToListAsync();
         if (unnormalized.Count > 0)
         {

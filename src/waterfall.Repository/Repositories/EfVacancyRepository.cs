@@ -1,6 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 // AI: метод BulkUpsertAsync для фонового збору вакансій (issue #62); перевірено: юніт-тести tests/waterfall.Ingestion.Tests на SQLite, самоперевірка автора (§8)
-// AI: пошук по SearchText і фільтри формату роботи, досвіду в місяцях, широкої категорії та навичок; перевірено: тести EfVacancyRepositoryTests на SQLite
+// AI: пошук по полях вакансії і фільтри формату роботи, досвіду в місяцях, широкої категорії та навичок; перевірено: тести EfVacancyRepositoryTests на SQLite
 // AI: метод GetBySourceIdsAsync для пошуку на сайтах на запит (issue #62); перевірено: тест EfVacancyRepositoryTests на SQLite, самоперевірка автора (§8)
 
 using Microsoft.EntityFrameworkCore;
@@ -47,10 +47,9 @@ public class EfVacancyRepository : IVacancyRepository
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            // SearchText уже в нижньому регістрі (VacancyNormalizer), тож пошук не залежить від регістру
-            // навіть для кирилиці: SQLite LIKE/lower() знають лише латиницю
+            // SqliteUnicodeLowerInterceptor підміняє lower() на SQLite, тож ToLower() без урахування регістру працює і для кирилиці
             string term = search.Trim().ToLowerInvariant();
-            query = query.Where(v => v.SearchText.Contains(term));
+            query = query.Where(v => v.Title.ToLower().Contains(term) || v.Company.ToLower().Contains(term) || v.Description.ToLower().Contains(term) || v.SkillsJson.ToLower().Contains(term));
         }
 
         if (!string.IsNullOrWhiteSpace(category))
@@ -98,11 +97,11 @@ public class EfVacancyRepository : IVacancyRepository
 
         if (skills is { Count: > 0 })
         {
-            // Кожен термін має знайтися або в тегах (SkillsJson), або в решті тексту (SearchText); терміни — через AND
+            // Кожен термін має знайтися в тегах (SkillsJson) або в основних текстових полях вакансії; терміни — через AND
             foreach (string skill in skills.Where(skill => !string.IsNullOrWhiteSpace(skill)))
             {
                 string term = skill.Trim().ToLowerInvariant();
-                query = query.Where(v => v.SkillsJson.ToLower().Contains(term) || v.SearchText.Contains(term));
+                query = query.Where(v => v.SkillsJson.ToLower().Contains(term) || v.Title.ToLower().Contains(term) || v.Company.ToLower().Contains(term) || v.Description.ToLower().Contains(term));
             }
         }
 
