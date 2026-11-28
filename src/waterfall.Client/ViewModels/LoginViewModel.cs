@@ -115,7 +115,13 @@ public partial class LoginViewModel : ObservableObject
         : null;
 
     public string UserEmail => Session?.Email ?? string.Empty;
-    public string UserRoleText => Session is null ? string.Empty : Roles.First(r => r.Role == Session.Role).Title;
+    public string UserRoleText => Session?.Role switch
+    {
+        UserRole.JobSeeker => "Шукач роботи",
+        UserRole.Analyst => "Аналітик ринку",
+        UserRole.Admin => "Адміністратор",
+        _ => string.Empty
+    };
 
     public string SessionText => Session is null
         ? string.Empty
@@ -458,14 +464,24 @@ public partial class LoginViewModel : ObservableObject
     [RelayCommand]
     private async Task RestoreSessionAsync()
     {
-        // Викликається з OnAppearing: повторні активації вкладки не мають перезапускати відновлення.
+        // Викликається з OnStart та OnAppearing: повторні активації вкладки не мають перезапускати відновлення.
         if (_restoreStarted)
         {
             return;
         }
         _restoreStarted = true;
 
-        string? token = await _tokens.GetTokenAsync();
+        string? token;
+        try
+        {
+            token = await _tokens.GetTokenAsync();
+        }
+        catch
+        {
+            _restoreStarted = false;
+            throw;
+        }
+
         AuthSession? session = token is null ? null : AuthSession.FromToken(token);
 
         if (session is null || session.IsExpired(_time.GetUtcNow()))

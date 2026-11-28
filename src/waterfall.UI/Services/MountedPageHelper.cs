@@ -59,7 +59,7 @@ internal static class MountedPageHelper
         {
             string? token = await tokens.GetTokenAsync(CancellationToken.None);
             AuthSession? session = token is null ? null : AuthSession.FromToken(token);
-            if (session is not null)
+            if (session is not null && !session.IsExpired(DateTimeOffset.UtcNow))
             {
                 string roleLabel = session.Role switch
                 {

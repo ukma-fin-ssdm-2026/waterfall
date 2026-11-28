@@ -45,10 +45,7 @@ public sealed class PhoneSectionHostPage : ContentPage, IHostedPage
             ?
             [
                 new("login", typeof(LoginPage)),
-                new("systemsettings", typeof(SystemSettingsPage)),
-                isAnalyst
-                    ? new("recommendations", typeof(RecommendationsPage))
-                    : new("analytics", typeof(AnalyticsPage))
+                new("systemsettings", typeof(SystemSettingsPage))
             ]
             :
             [

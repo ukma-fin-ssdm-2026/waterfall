@@ -32,7 +32,7 @@ public sealed class PhoneHostPage : ContentPage, IAppNavigationHost
     private PhoneSectionHostPage? _vacanciesHost;
     private PhoneSectionHostPage? _cabinetHost;
     private string _activeTabRoute = string.Empty;
-    private bool _isAnalyst;
+    private UserRole? _role;
     private bool _isSwitching;
 
     public PhoneHostPage(
@@ -88,7 +88,7 @@ public sealed class PhoneHostPage : ContentPage, IAppNavigationHost
 
         Content = root;
 
-        RebuildTabs(isAnalyst: false);
+        RebuildTabs(role: null);
 
         _themeService.ThemeChanged += (_, _) => MainThread.BeginInvokeOnMainThread(UpdateTabVisuals);
 
@@ -104,14 +104,14 @@ public sealed class PhoneHostPage : ContentPage, IAppNavigationHost
         _ = RefreshRoleAsync();
     }
 
-    private void RebuildTabs(bool isAnalyst)
+    private void RebuildTabs(UserRole? role)
     {
         if (!string.IsNullOrEmpty(_activeTabRoute) && _mounted.TryGetValue(_activeTabRoute, out MountedPage? active))
         {
             MountedPageHelper.Deactivate(active.Page);
         }
 
-        _isAnalyst = isAnalyst;
+        _role = role;
         _tabs.Clear();
         _tabVisuals.Clear();
         _mounted.Clear();
@@ -120,22 +120,31 @@ public sealed class PhoneHostPage : ContentPage, IAppNavigationHost
         _tabBarGrid.ColumnDefinitions.Clear();
         _activeTabRoute = string.Empty;
 
-        _vacanciesHost = new PhoneSectionHostPage(_services, isCabinet: false, isAnalyst);
-        _cabinetHost = new PhoneSectionHostPage(_services, isCabinet: true, isAnalyst);
-
-        _tabs.Add(new("vacancies", "Вакансії", Icons.Globe, () => _vacanciesHost));
-        if (isAnalyst)
+        if (role == UserRole.Admin)
         {
+            _vacanciesHost = null;
+            _cabinetHost = null;
+            _tabs.Add(new("login", "Профіль", Icons.User, () => _services.GetRequiredService<LoginPage>()));
+            _tabs.Add(new("systemsettings", "Налаштування", Icons.Settings, () => _services.GetRequiredService<SystemSettingsPage>()));
+        }
+        else if (role == UserRole.Analyst)
+        {
+            _vacanciesHost = new PhoneSectionHostPage(_services, isCabinet: false, isAnalyst: true);
+            _cabinetHost = new PhoneSectionHostPage(_services, isCabinet: true, isAnalyst: true);
+            _tabs.Add(new("vacancies", "Вакансії", Icons.Globe, () => _vacanciesHost));
             _tabs.Add(new("analytics", "Аналітика", Icons.ChartColumn, () => _services.GetRequiredService<AnalyticsPage>()));
+            _tabs.Add(new("cabinet", "Кабінет", Icons.User, () => _cabinetHost));
         }
         else
         {
+            _vacanciesHost = new PhoneSectionHostPage(_services, isCabinet: false, isAnalyst: false);
+            _cabinetHost = new PhoneSectionHostPage(_services, isCabinet: true, isAnalyst: false);
+            _tabs.Add(new("vacancies", "Вакансії", Icons.Globe, () => _vacanciesHost));
             _tabs.Add(new("recommendations", "Підбірка", Icons.Sparkles, () => _services.GetRequiredService<RecommendationsPage>()));
+            _tabs.Add(new("aiconsultant", "ШІ-чат", Icons.MessageSquare, () => _services.GetRequiredService<AIConsultantPage>()));
+            _tabs.Add(new("favorites", "Обране", Icons.Heart, () => _services.GetRequiredService<FavoritesPage>()));
+            _tabs.Add(new("cabinet", "Кабінет", Icons.User, () => _cabinetHost));
         }
-
-        _tabs.Add(new("aiconsultant", "ШІ-чат", Icons.MessageSquare, () => _services.GetRequiredService<AIConsultantPage>()));
-        _tabs.Add(new("favorites", "Обране", Icons.Heart, () => _services.GetRequiredService<FavoritesPage>()));
-        _tabs.Add(new("cabinet", "Кабінет", Icons.User, () => _cabinetHost));
 
         for (int i = 0; i < _tabs.Count; i++)
         {
@@ -286,14 +295,24 @@ public sealed class PhoneHostPage : ContentPage, IAppNavigationHost
 
     private (string? TabRoute, string? SubRoute) ResolveDestination(string rawRoute)
     {
-        string route = rawRoute.Trim().TrimStart('/');
-        return route.ToLowerInvariant() switch
+        string route = rawRoute.Trim().TrimStart('/').ToLowerInvariant();
+        if (_role == UserRole.Admin)
+        {
+            return route switch
+            {
+                "login" or "systemsettings" => (route, null),
+                "cabinet" => ("login", null),
+                _ => (null, null)
+            };
+        }
+
+        return route switch
         {
             "catalog" or "database" => ("vacancies", route),
             "login" or "systemsettings" => ("cabinet", route),
-            "analytics" => _isAnalyst ? ("analytics", null) : ("cabinet", "analytics"),
-            "recommendations" => _isAnalyst ? ("cabinet", "recommendations") : ("recommendations", null),
-            "vacancies" or "aiconsultant" or "favorites" or "cabinet" => (route, null),
+            "analytics" => _role == UserRole.Analyst ? ("analytics", null) : (null, null),
+            "recommendations" or "aiconsultant" or "favorites" => _role == UserRole.Analyst ? (null, null) : (route, null),
+            "vacancies" or "cabinet" => (route, null),
             _ => (null, null)
         };
     }
@@ -327,18 +346,20 @@ public sealed class PhoneHostPage : ContentPage, IAppNavigationHost
     private async Task RefreshRoleAsync()
     {
         (_, UserRole? role, _) = await MountedPageHelper.ResolveRoleAsync(_tokens);
-        bool isAnalyst = role == UserRole.Analyst;
 
         await MainThread.InvokeOnMainThreadAsync(async () =>
         {
-            if (isAnalyst == _isAnalyst)
+            if (role == _role)
             {
                 return;
             }
 
             string currentLeafRoute = GetCurrentLeafRoute();
-            RebuildTabs(isAnalyst);
-            await NavigateToAsync(currentLeafRoute, animate: false);
+            RebuildTabs(role);
+            string targetRoute = ResolveDestination(currentLeafRoute).TabRoute is not null
+                ? currentLeafRoute
+                : (role == UserRole.Admin ? "systemsettings" : "catalog");
+            await NavigateToAsync(targetRoute, animate: false);
         });
     }
 
@@ -366,9 +387,10 @@ public sealed class PhoneHostPage : ContentPage, IAppNavigationHost
             return true;
         }
 
-        if (!string.Equals(_activeTabRoute, "vacancies", StringComparison.OrdinalIgnoreCase))
+        string homeRoute = _role == UserRole.Admin ? "login" : "vacancies";
+        if (!string.Equals(_activeTabRoute, homeRoute, StringComparison.OrdinalIgnoreCase))
         {
-            _ = NavigateToAsync("vacancies");
+            _ = NavigateToAsync(homeRoute);
             return true;
         }
 

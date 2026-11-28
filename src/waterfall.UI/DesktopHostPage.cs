@@ -423,7 +423,8 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
 
         if (railRebuilt && !_visibleRoutes.Contains(_activeRoute))
         {
-            await NavigateToAsync("catalog");
+            string fallbackRoute = role == UserRole.Admin ? "systemsettings" : "catalog";
+            await NavigateToAsync(fallbackRoute);
         }
     }
 }

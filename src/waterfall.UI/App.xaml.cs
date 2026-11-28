@@ -39,6 +39,16 @@ public partial class App : Application
         SubscribeConnectivitySync();
     }
 
+    protected override void OnStart()
+    {
+        base.OnStart();
+        LoginViewModel? loginVm = _services.GetService<LoginViewModel>();
+        if (loginVm is not null && loginVm.RestoreSessionCommand.CanExecute(null))
+        {
+            loginVm.RestoreSessionCommand.Execute(null);
+        }
+    }
+
     // Збережений токен не видаляється при старті (REL-002): сесія переживає перезапуск.
     // /vacancies/sync і /geo/sync вимагають входу, тому синхронізація стартує після входу (SyncAfterLogin).
 
