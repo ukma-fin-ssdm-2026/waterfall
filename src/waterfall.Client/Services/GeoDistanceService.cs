@@ -111,8 +111,7 @@ public class GeoDistanceService : IDistanceCalculatorService
 
         // Для віддаленої роботи або якщо точну адресу не вказано — фізична відстань не рахується
         if (destinationAddress.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
-            destinationAddress.Contains("Віддалено", StringComparison.OrdinalIgnoreCase) ||
-            destinationAddress.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
+            destinationAddress.Contains("Віддалено", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }

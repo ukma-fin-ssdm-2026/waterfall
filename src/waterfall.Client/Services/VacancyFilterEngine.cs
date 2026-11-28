@@ -200,8 +200,7 @@ public static class VacancyFilterEngine
             string target = !string.IsNullOrWhiteSpace(v.FullAddress) ? v.FullAddress : v.Location;
             if (string.IsNullOrWhiteSpace(target)
                 || target.Contains("Remote", StringComparison.OrdinalIgnoreCase)
-                || target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase)
-                || target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
+                || target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase))
             {
                 distanceCache[v.Id] = null;
                 continue;

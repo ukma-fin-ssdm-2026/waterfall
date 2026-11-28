@@ -12,7 +12,7 @@ namespace Waterfall.Client.Data;
 /// </summary>
 public static class ClientDatabaseBootstrapper
 {
-    public const int CurrentSchemaVersion = 3;
+    public const int CurrentSchemaVersion = 4;
 
     private static readonly ConcurrentDictionary<string, byte> s_initializedDatabases =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -171,6 +171,9 @@ public static class ClientDatabaseBootstrapper
             case 3:
                 await context.Database.ExecuteSqlRawAsync("PRAGMA user_version = 3;", ct).ConfigureAwait(false);
                 break;
+            case 4:
+                await context.Database.ExecuteSqlRawAsync("PRAGMA user_version = 4;", ct).ConfigureAwait(false);
+                break;
             default:
                 throw new NotSupportedException($"Непідтримувана версія схеми клієнта: {version}.");
         }
@@ -216,6 +219,16 @@ public static class ClientDatabaseBootstrapper
                         ON "Vacancies" ("SourceUrl");
                     """, ct).ConfigureAwait(false);
                 return 3;
+            case 3:
+                await context.Database.ExecuteSqlRawAsync(
+                    """
+                    UPDATE "Vacancies"
+                    SET "FullAddress" = NULL
+                    WHERE "FullAddress" LIKE '%не вказано точну адресу%'
+                       OR "FullAddress" LIKE '%(Головний офіс)%'
+                       OR TRIM("FullAddress") = '';
+                    """, ct).ConfigureAwait(false);
+                return 4;
             default:
                 throw new NotSupportedException($"Непідтримуваний перехід схеми клієнта з версії {currentVersion}.");
         }

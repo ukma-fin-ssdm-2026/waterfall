@@ -285,8 +285,57 @@ public class VacancyIngestionServiceTests
         Assert.Equal(200, vacancy.Company.Length); // рівно на межі — без змін
         Assert.Null(vacancy.Experience);
         Assert.Null(vacancy.Schedule);
+        Assert.Null(vacancy.FullAddress);
         Assert.Equal("Не вказано", vacancy.Location);
         Assert.Equal("[]", vacancy.SkillsJson);
+    }
+
+    [Theory]
+    [InlineData("Kyiv", null)]
+    [InlineData("Львів", "   ")]
+    [InlineData("Віддалено", "<p> </p>")]
+    [InlineData(",", null)]
+    [InlineData(null, null)]
+    public void Normalize_SetsFullAddressToNull_WhenNoExactAddressProvided(string? location, string? rawFullAddress)
+    {
+        RawVacancy raw = Raw() with { Location = location, FullAddress = rawFullAddress };
+
+        (VacancyDB? vacancy, string? error) = VacancyIngestionService.Normalize(raw, Now);
+
+        Assert.Null(error);
+        Assert.NotNull(vacancy);
+        Assert.Null(vacancy.FullAddress);
+    }
+
+    [Fact]
+    public void Normalize_PreservesFullAddress_WhenStreetAddressProvided()
+    {
+        RawVacancy raw = Raw() with { Location = "Київ", FullAddress = "  Київ, <b>вул. Мечникова, 2</b>  " };
+
+        (VacancyDB? vacancy, string? error) = VacancyIngestionService.Normalize(raw, Now);
+
+        Assert.Null(error);
+        Assert.NotNull(vacancy);
+        Assert.Equal("Київ, вул. Мечникова, 2", vacancy.FullAddress);
+    }
+
+    [Fact]
+    public void KeepStoredDetails_FillsNullFullAddress_FromStoredPageDetails()
+    {
+        VacancyDB stored = VacancyIngestionService.Normalize(Raw() with
+        {
+            Location = "Київ",
+            FullAddress = "Київ, вул. Мечникова, 2"
+        }, Now).Vacancy!;
+        VacancyDB fromList = VacancyIngestionService.Normalize(Raw() with
+        {
+            Location = "Київ",
+            FullAddress = null
+        }, Now).Vacancy!;
+
+        VacancyIngestionService.KeepStoredDetails(fromList, stored);
+
+        Assert.Equal("Київ, вул. Мечникова, 2", fromList.FullAddress);
     }
 
     [Fact]

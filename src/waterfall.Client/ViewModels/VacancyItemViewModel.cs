@@ -258,8 +258,7 @@ public partial class VacancyItemViewModel : ObservableObject
         {
             if (_distanceService is null ||
                 !HasAddress ||
-                string.IsNullOrWhiteSpace(userAddress) ||
-                FullAddress?.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase) == true)
+                string.IsNullOrWhiteSpace(userAddress))
             {
                 _distanceLoadedForAddress = userAddress;
                 DistanceKm = null;
@@ -274,10 +273,10 @@ public partial class VacancyItemViewModel : ObservableObject
                 return;
             }
 
-            string target = !string.IsNullOrWhiteSpace(FullAddress) ? FullAddress : Vacancy.Location;
-            if (target.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
-                target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase) ||
-                target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
+            string target = GetMapTarget();
+            if (string.IsNullOrWhiteSpace(target) ||
+                target.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
+                target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase))
             {
                 _distanceLoadedForAddress = userAddress;
                 DistanceKm = null;
@@ -425,8 +424,7 @@ public partial class VacancyItemViewModel : ObservableObject
         }
 
         string trimmed = target.Trim();
-        if (trimmed.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Contains("remote", StringComparison.OrdinalIgnoreCase) ||
+        if (trimmed.Contains("remote", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("віддален", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("дистанц", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("за кордоном", StringComparison.OrdinalIgnoreCase) ||
@@ -481,17 +479,16 @@ public partial class VacancyItemViewModel : ObservableObject
 
         string target = GetMapTarget();
 
-        if (string.IsNullOrWhiteSpace(target) ||
-            target.Contains("не вказано точну адресу", StringComparison.OrdinalIgnoreCase))
-        {
-            MapErrorMessage = "Точну адресу офісу не вказано.";
-            return;
-        }
-
         if (target.Contains("Remote", StringComparison.OrdinalIgnoreCase) ||
             target.Contains("Віддалено", StringComparison.OrdinalIgnoreCase))
         {
             MapErrorMessage = "Вакансія віддалена (Remote), фізичний офіс відсутній.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(target) || !CanShowOnMap)
+        {
+            MapErrorMessage = "Точну адресу офісу не вказано.";
             return;
         }
 
