@@ -35,6 +35,7 @@ public partial class LoginViewModel : ObservableObject
     private readonly IAddressAutocompleteService? _autocompleteService;
     private CancellationTokenSource? _autocompleteCts;
     private bool _isSelectingSuggestion;
+    private bool _restoreStarted;
 
     public LoginViewModel(
         IHttpGatewayService gateway,
@@ -457,6 +458,13 @@ public partial class LoginViewModel : ObservableObject
     [RelayCommand]
     private async Task RestoreSessionAsync()
     {
+        // Викликається з OnAppearing: повторні активації вкладки не мають перезапускати відновлення.
+        if (_restoreStarted)
+        {
+            return;
+        }
+        _restoreStarted = true;
+
         string? token = await _tokens.GetTokenAsync();
         AuthSession? session = token is null ? null : AuthSession.FromToken(token);
 
