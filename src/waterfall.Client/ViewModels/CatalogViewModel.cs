@@ -76,7 +76,6 @@ public partial class CatalogViewModel : ObservableObject
     private readonly IOfflineSiteCollector? _offlineCollector;
     private readonly IFileDialogService? _fileDialog;
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, double?> _distanceCache = new();
-    private readonly VacancySelectionState _selectionState = new();
 
     public CatalogViewModel(
         IHttpGatewayService gateway,
@@ -101,22 +100,8 @@ public partial class CatalogViewModel : ObservableObject
         CanTrackViews = tokenStore is null;
         Pager = new VacancyPager(ShowCurrentPage);
         Pager.PropertyChanged += OnPagerPropertyChanged;
-        _selectionState.Changed += OnVacancySelectionChanged;
-
-        messenger.Register<CatalogViewModel, AnalyzeVacancyRequestedMessage>(this, static (vm, _) =>
-        {
-            if (vm.IsSelectionMode)
-            {
-                vm.ExitSelectionMode(clearSelection: true);
-            }
-        });
-        messenger.Register<CatalogViewModel, AnalyzeVacanciesRequestedMessage>(this, static (vm, _) =>
-        {
-            if (vm.IsSelectionMode)
-            {
-                vm.ExitSelectionMode(clearSelection: true);
-            }
-        });
+        Selection = new VacancySelectionCoordinator(messenger, () => CanTrackViews, () => _vacancies);
+        Selection.PropertyChanged += OnSelectionPropertyChanged;
 
         // Зміна «Обраного» з іншої вкладки: оновлюємо DTO та видиму картку, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
@@ -344,7 +329,7 @@ public partial class CatalogViewModel : ObservableObject
                 UnifiedHideViewed = false;
             }
 
-            ExitSelectionMode(clearSelection: true);
+            Selection.Reset();
 
             for (int i = 0; i < _loadedDtos.Count; i++)
             {
@@ -362,7 +347,7 @@ public partial class CatalogViewModel : ObservableObject
             item.CanMarkViewed = canTrack;
             item.CanSave = canTrack;
             item.CanUseAi = canTrack;
-            item.IsSelectionModeActive = IsSelectionMode;
+            item.IsSelectionModeActive = Selection.IsSelectionMode;
             if (!canTrack)
             {
                 item.IsViewed = false;
@@ -371,84 +356,56 @@ public partial class CatalogViewModel : ObservableObject
         }
     }
 
+    public VacancySelectionCoordinator Selection { get; }
+
     /// <summary>
     /// Режим вибору 1–3 вакансій для групового ШІ-аналізу (FR-010). Чекбокси карток
     /// з'являються лише в цьому режимі, панель дій — лише поки режим активний.
     /// </summary>
-    [ObservableProperty]
-    public partial bool IsSelectionMode { get; set; }
+    public bool IsSelectionMode => Selection.IsSelectionMode;
 
-    public int SelectedForAnalysisCount => _selectionState.Count;
+    public int SelectedForAnalysisCount => Selection.SelectedCount;
 
-    public string SelectionTrayText => $"Обрано {_selectionState.Count} з {VacancySelectionState.MaxSelected}";
+    public string SelectionTrayText => Selection.SelectionTrayText;
 
-    public bool HasSelection => _selectionState.Count > 0;
-
-    [RelayCommand]
-    private void ToggleSelectionMode()
-    {
-        if (!CanTrackViews)
-        {
-            return;
-        }
-
-        if (IsSelectionMode)
-        {
-            ExitSelectionMode(clearSelection: true);
-            return;
-        }
-
-        IsSelectionMode = true;
-        foreach (VacancyItemViewModel item in _vacancies)
-        {
-            item.IsSelectionModeActive = true;
-        }
-
-        NotifySelectionChanged();
-    }
+    public bool HasSelection => Selection.HasSelection;
 
     [RelayCommand]
-    private void CancelSelectionMode() => ExitSelectionMode(clearSelection: true);
+    private void ToggleSelectionMode() => Selection.ToggleSelectionModeCommand.Execute(null);
+
+    [RelayCommand]
+    private void CancelSelectionMode() => Selection.CancelSelectionModeCommand.Execute(null);
+
+    private bool CanAnalyzeSelection() => Selection.HasSelection;
 
     [RelayCommand(CanExecute = nameof(CanAnalyzeSelection))]
-    private void AnalyzeSelection()
+    private void AnalyzeSelection() => Selection.AnalyzeSelectionCommand.Execute(null);
+
+    private void OnSelectionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        IReadOnlyList<VacancyDto> batch = _selectionState.Snapshot();
-        if (batch.Count == 0)
+        switch (e.PropertyName)
         {
-            return;
+            case nameof(VacancySelectionCoordinator.IsSelectionMode):
+                OnPropertyChanged(nameof(IsSelectionMode));
+                break;
+            case nameof(VacancySelectionCoordinator.SelectedCount):
+                OnPropertyChanged(nameof(SelectedForAnalysisCount));
+                break;
+            case nameof(VacancySelectionCoordinator.SelectionTrayText):
+                OnPropertyChanged(nameof(SelectionTrayText));
+                break;
+            case nameof(VacancySelectionCoordinator.HasSelection):
+                OnPropertyChanged(nameof(HasSelection));
+                AnalyzeSelectionCommand.NotifyCanExecuteChanged();
+                break;
+            case null or "":
+                OnPropertyChanged(nameof(IsSelectionMode));
+                OnPropertyChanged(nameof(SelectedForAnalysisCount));
+                OnPropertyChanged(nameof(SelectionTrayText));
+                OnPropertyChanged(nameof(HasSelection));
+                AnalyzeSelectionCommand.NotifyCanExecuteChanged();
+                break;
         }
-
-        ExitSelectionMode(clearSelection: true);
-        _messenger.Send(new AnalyzeVacanciesRequestedMessage(batch));
-    }
-
-    private bool CanAnalyzeSelection() => HasSelection;
-
-    private void ExitSelectionMode(bool clearSelection)
-    {
-        if (clearSelection)
-        {
-            _selectionState.Clear();
-        }
-
-        IsSelectionMode = false;
-        foreach (VacancyItemViewModel item in _vacancies)
-        {
-            item.IsSelectionModeActive = false;
-        }
-
-        NotifySelectionChanged();
-    }
-
-    private void OnVacancySelectionChanged() => NotifySelectionChanged();
-
-    private void NotifySelectionChanged()
-    {
-        OnPropertyChanged(nameof(SelectedForAnalysisCount));
-        OnPropertyChanged(nameof(SelectionTrayText));
-        OnPropertyChanged(nameof(HasSelection));
-        AnalyzeSelectionCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>
@@ -3043,8 +3000,8 @@ public partial class CatalogViewModel : ObservableObject
             canMarkViewed: CanTrackViews,
             canSave: CanTrackViews,
             canUseAi: CanTrackViews,
-            selectionState: _selectionState);
-        item.IsSelectionModeActive = IsSelectionMode;
+            selectionState: Selection.State);
+        Selection.ApplyToCard(item);
         return item;
     }
 

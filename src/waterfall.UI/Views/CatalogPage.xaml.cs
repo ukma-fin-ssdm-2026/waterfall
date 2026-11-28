@@ -133,6 +133,12 @@ public partial class CatalogPage : ContentPage, IHostedPage
             return true;
         }
 
+        if (_viewModel.Selection.IsSelectionMode)
+        {
+            _viewModel.Selection.CancelSelectionModeCommand.Execute(null);
+            return true;
+        }
+
         return base.OnBackButtonPressed();
     }
 

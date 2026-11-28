@@ -393,7 +393,7 @@
                     <controls:FilterChipControl Text="З ЗП" Command="{Binding ToggleUnifiedOnlyWithSalaryCommand}" IsActive="{Binding UnifiedOnlyWithSalary}" />
                     <controls:FilterChipControl Text="Активні" Command="{Binding ToggleUnifiedOnlyActiveCommand}" IsActive="{Binding UnifiedOnlyActive}" />
                     <controls:FilterChipControl Text="Без переглянутих" Command="{Binding ToggleUnifiedHideViewedCommand}" IsActive="{Binding UnifiedHideViewed}" IsVisible="{Binding CanTrackViews}" />
-                    <controls:FilterChipControl Text="Обрати для ШІ" Command="{Binding ToggleSelectionModeCommand}" IsVisible="{Binding CanTrackViews}" IsAccentText="True" />
+                    <controls:FilterChipControl Text="Обрати для ШІ" Command="{Binding ToggleSelectionModeCommand}" IsActive="{Binding Selection.IsSelectionMode}" IsVisible="{Binding CanTrackViews}" IsAccentText="True" />
                     <controls:FilterChipControl Text="Скинути" Command="{Binding ResetFiltersCommand}" IsAccentText="True" />
                 </HorizontalStackLayout>
             </ScrollView>
@@ -481,38 +481,7 @@
             </controls:VacancyListView>
 
             <!-- Рядок 6: Панель вибору для групового ШІ-аналізу (FR-010), лише поки активний режим вибору -->
-            <Border Grid.Row="6"
-                    IsVisible="{Binding IsSelectionMode}"
-                    StrokeShape="RoundRectangle 10"
-                    StrokeThickness="1"
-                    Stroke="{DynamicResource CardBorder}"
-                    BackgroundColor="{DynamicResource DarkBg1}"
-                    Margin="12,4,12,8"
-                    Padding="10,6">
-                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8" VerticalOptions="Center">
-                    <Label Text="{Binding SelectionTrayText}"
-                           FontFamily="OpenSansSemibold"
-                           FontSize="12"
-                           TextColor="{DynamicResource White}"
-                           VerticalOptions="Center" />
-                    <Button Grid.Column="1"
-                            Text="Скасувати"
-                            Command="{Binding CancelSelectionModeCommand}"
-                            Style="{StaticResource CardAction}"
-                            FontSize="11.5"
-                            Padding="10,4"
-                            HeightRequest="32"
-                            MinimumHeightRequest="32" />
-                    <Button Grid.Column="2"
-                            Text="Порівняти з ШІ"
-                            Command="{Binding AnalyzeSelectionCommand}"
-                            Style="{StaticResource CardActionPrimary}"
-                            FontSize="11.5"
-                            Padding="10,4"
-                            HeightRequest="32"
-                            MinimumHeightRequest="32" />
-                </Grid>
-            </Border>
+            <controls:VacancySelectionTray Grid.Row="6" Coordinator="{Binding Selection}" />
         </Grid>
 
         <!-- ==================== ШАР 1 & 2: ЛІНИВІ OVERLAY SHEETS ==================== -->

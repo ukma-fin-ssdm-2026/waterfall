@@ -103,6 +103,12 @@ public partial class DatabasePage : ContentPage, IHostedPage
             return true;
         }
 
+        if (_viewModel.Selection.IsSelectionMode)
+        {
+            _viewModel.Selection.CancelSelectionModeCommand.Execute(null);
+            return true;
+        }
+
         return base.OnBackButtonPressed();
     }
 
@@ -148,6 +154,15 @@ public partial class DatabasePage : ContentPage, IHostedPage
         if (_viewModel.ExportDatabaseCommand.CanExecute(null))
         {
             await _viewModel.ExportDatabaseCommand.ExecuteAsync(null);
+        }
+    }
+
+    private void OnToggleSelectionModeTapped(object? sender, TappedEventArgs e)
+    {
+        OverflowMenuLayer.IsVisible = false;
+        if (_viewModel.Selection.ToggleSelectionModeCommand.CanExecute(null))
+        {
+            _viewModel.Selection.ToggleSelectionModeCommand.Execute(null);
         }
     }
 
