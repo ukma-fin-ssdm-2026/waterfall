@@ -44,8 +44,8 @@ public class VacancyIngestionService : IVacancyIngestionService
     private static readonly Regex Number = new(@"\d+", RegexOptions.None, RegexTimeout);
     private static readonly Regex TimeAgo = new(@"(\d+)\s*(хв|год|дн|ден|тиж|міс)", RegexOptions.IgnoreCase, RegexTimeout);
 
-    // Кирилицю й «+» лишаємо як є: інакше «Комунікація» чи «C++» лягли б у БД як К… і їх не знаходив би пошук каталогу,
-    // що шукає підрядок у SkillsJson. Це безпечно, бо цей JSON не вставляється в HTML: API віддає навички окремим масивом.
+    // Кирилицю й «+» лишаємо як є: інакше «Комунікація» чи «C++» лягли б у БД як \uXXXX, що ускладнює пошук
+    // і порівняння тегів у SkillsJson. Це безпечно, бо цей JSON не вставляється в HTML: API віддає навички окремим масивом.
     private static readonly JsonSerializerOptions SkillsJsonOptions = new() { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     private const string UnknownCategory = "Інше";
