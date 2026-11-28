@@ -334,7 +334,7 @@ public partial class CatalogViewModel : ObservableObject
             ExitSelectionMode(clearSelection: true);
         }
 
-        foreach (VacancyItemViewModel item in _allCards)
+        foreach (VacancyItemViewModel item in _vacancies)
         {
             item.CanMarkViewed = canTrack;
             item.CanSave = canTrack;
@@ -376,7 +376,7 @@ public partial class CatalogViewModel : ObservableObject
         }
 
         IsSelectionMode = true;
-        foreach (VacancyItemViewModel item in _allCards)
+        foreach (VacancyItemViewModel item in _vacancies)
         {
             item.IsSelectionModeActive = true;
         }
@@ -411,7 +411,7 @@ public partial class CatalogViewModel : ObservableObject
         }
 
         IsSelectionMode = false;
-        foreach (VacancyItemViewModel item in _allCards)
+        foreach (VacancyItemViewModel item in _vacancies)
         {
             item.IsSelectionModeActive = false;
         }

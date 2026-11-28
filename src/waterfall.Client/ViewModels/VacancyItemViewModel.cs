@@ -49,6 +49,7 @@ public partial class VacancyItemViewModel : ObservableObject
     /// <param name="canMarkViewed">Чи дозволено відстежувати перегляд вакансії (лише роль JobSeeker за data-model.md §6).</param>
     /// <param name="notes">Нотатка користувача до збереженої вакансії (FR-005, лише читання).</param>
     /// <param name="canSave">Чи дозволено зберігати вакансію в «Обране» (лише авторизований JobSeeker за FR-005/FR-008).</param>
+    /// <param name="canUseAi">Чи дозволено надсилати вакансію ШІ-консультанту (лише JobSeeker).</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
@@ -683,6 +684,11 @@ public partial class VacancyItemViewModel : ObservableObject
             SelectionLimitReached?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>
+    /// Відписує картку від messenger, коли сторінка списку її відпускає (лінива матеріалізація).
+    /// </summary>
+    internal void Detach() => _messenger.UnregisterAll(this);
 
     internal void NotifySelectionChanged()
     {
