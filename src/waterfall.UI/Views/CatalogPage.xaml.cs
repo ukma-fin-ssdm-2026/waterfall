@@ -78,6 +78,10 @@ public partial class CatalogPage : ContentPage, IHostedPage
             OverlayStateChanged?.Invoke(this, EventArgs.Empty);
             _ = AnimateSheetAsync(LocalFilterSheetHost, "LocalFilterSheetTemplate", _viewModel.IsLocalFilterPanelVisible, _localFilterSheetAnimState);
         }
+        else if (e.PropertyName == nameof(CatalogViewModel.CurrentPage))
+        {
+            CatalogListView.ScrollToTop();
+        }
     }
 
     private Task AnimateSheetAsync(

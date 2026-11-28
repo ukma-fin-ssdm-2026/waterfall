@@ -58,13 +58,13 @@ public partial class CatalogViewModel : ObservableObject
 
     // Результат останнього пошуку на сайті без локальних фільтрів; список на екрані — його відфільтрована частина
     private readonly List<VacancyDto> _loadedDtos = [];
-    // Усі картки поточного відфільтрованого результату; на екран виводимо лише сторінку CurrentPage.
-    private List<VacancyItemViewModel> _allCards = [];
+    // Відфільтрований і відсортований результат поточного пошуку (DTO). Картки (VM) створюються
+    // лише для видимої сторінки, тож пейджер є справжньою межею матеріалізації.
+    private List<VacancyDto> _filteredDtos = [];
 
     // Вакансії, переглянуті в цьому сеансі (сервер позначає IsViewed лише на момент пошуку)
     private readonly HashSet<Guid> _viewedIds = [];
     private bool _isLocalFilterActive;
-    private int _fetchGeneration;
     private bool _isSyncingSort;
     private bool _hasExplicitSiteSelection;
     private bool _isSyncingPlatformFlags;
@@ -99,10 +99,11 @@ public partial class CatalogViewModel : ObservableObject
         _fileDialog = fileDialog;
         CanTrackViews = tokenStore is null;
 
-        // Зміна «Обраного» з іншої вкладки: оновлюємо картку на місці, без перезавантаження списку.
+        // Зміна «Обраного» з іншої вкладки: оновлюємо DTO та видиму картку, без перезавантаження списку.
         messenger.Register<CatalogViewModel, VacancySaveChangedMessage>(this, static (vm, message) =>
         {
-            foreach (VacancyItemViewModel item in vm._allCards.Where(v => v.Id == message.VacancyId))
+            vm.UpdateDtos(message.VacancyId, dto => dto with { IsSaved = message.IsSaved });
+            foreach (VacancyItemViewModel item in vm._vacancies.Where(v => v.Id == message.VacancyId))
             {
                 item.IsSaved = message.IsSaved;
             }
@@ -120,15 +121,9 @@ public partial class CatalogViewModel : ObservableObject
                 vm._viewedIds.Remove(message.VacancyId);
             }
 
-            for (int i = 0; i < vm._loadedDtos.Count; i++)
-            {
-                if (vm._loadedDtos[i].Id == message.VacancyId)
-                {
-                    vm._loadedDtos[i] = vm._loadedDtos[i] with { IsViewed = message.IsViewed };
-                }
-            }
+            vm.UpdateDtos(message.VacancyId, dto => dto with { IsViewed = message.IsViewed });
 
-            foreach (VacancyItemViewModel item in vm._allCards.Where(v => v.Id == message.VacancyId))
+            foreach (VacancyItemViewModel item in vm._vacancies.Where(v => v.Id == message.VacancyId))
             {
                 item.IsViewed = message.IsViewed;
             }
@@ -2063,7 +2058,7 @@ public partial class CatalogViewModel : ObservableObject
         await ApplyFetchedVacanciesAsync(found);
 
         string cache = status.FromCache ? " (кеш, протягом 3 годин)" : string.Empty;
-        string shown = Vacancies.Count < found.Count ? $", за фільтрами списку показано {Vacancies.Count}" : string.Empty;
+        string shown = TotalCount < found.Count ? $", за фільтрами списку показано {TotalCount}" : string.Empty;
         StaleCacheText = found.Count == 0
             ? $"{site}: {status.Message ?? "нічого не знайдено."}"
             : $"{site}: знайдено {found.Count} вакансій{cache}{shown}";
@@ -2086,7 +2081,7 @@ public partial class CatalogViewModel : ObservableObject
                 ? $"{SiteDisplayName(s.Source)}: помилка"
                 : $"{SiteDisplayName(s.Source)}: {s.Found}"));
         string cache = status.AllFromCache ? " (з кешу)" : string.Empty;
-        string shown = Vacancies.Count < found.Count ? $", за фільтрами списку показано {Vacancies.Count}" : string.Empty;
+        string shown = TotalCount < found.Count ? $", за фільтрами списку показано {TotalCount}" : string.Empty;
         string warning = !string.IsNullOrWhiteSpace(status.Message) && found.Count > 0 ? $" · {status.Message}" : string.Empty;
 
         StaleCacheText = found.Count == 0
@@ -2094,49 +2089,25 @@ public partial class CatalogViewModel : ObservableObject
             : $"Спарсено {status.Sites.Count} сайти ({breakdown}): {found.Count} вакансій{cache}{shown}{warning}";
     }
 
-    private async Task ApplyFetchedVacanciesAsync(List<VacancyDto> found)
+    private Task ApplyFetchedVacanciesAsync(List<VacancyDto> found)
     {
         _loadedDtos.Clear();
         _loadedDtos.AddRange(found);
 
-        int generation = ++_fetchGeneration;
-
-        // Локальна фільтрація/сортування лишаються на UI-потоці (дешеві), а створення карток
-        // (по одному VM на вакансію) виконується поза UI-потоком.
-        List<VacancyDto> toCreate = _isLocalFilterActive || HasActiveLocalFilterOrSort()
+        List<VacancyDto> filtered = _isLocalFilterActive || HasActiveLocalFilterOrSort()
             ? BuildLocalFilteredDtos()
             : found;
 
-        // Явна відмова від токена: Task.Run з токеном лише не дає стартувати, зупинити вже
-        // почате створення карток він не може; застарілий результат відсікає generation-guard нижче.
-        List<VacancyItemViewModel> cards = await Task.Run(() => CreateCards(toCreate), CancellationToken.None);
-
-        if (generation != _fetchGeneration)
-        {
-            // Новіший результат пошуку вже замінив список — застарілий тихо відкидаємо.
-            return;
-        }
-
         ErrorMessage = null;
         HasLoaded = true;
-        ApplyCardsToUi(cards);
+        ApplyCardsToUi(filtered);
+        return Task.CompletedTask;
     }
 
-    private List<VacancyItemViewModel> CreateCards(List<VacancyDto> dtos)
+    private void ApplyCardsToUi(List<VacancyDto> dtos)
     {
-        List<VacancyItemViewModel> cards = new(dtos.Count);
-        foreach (VacancyDto dto in dtos)
-        {
-            cards.Add(CreateVacancyItemViewModel(dto));
-        }
-
-        return cards;
-    }
-
-    private void ApplyCardsToUi(List<VacancyItemViewModel> cards)
-    {
-        _allCards = cards;
-        TotalCount = cards.Count;
+        _filteredDtos = dtos;
+        TotalCount = dtos.Count;
         CurrentPage = 1;
         ShowCurrentPage();
 
@@ -2145,13 +2116,19 @@ public partial class CatalogViewModel : ObservableObject
         OnPropertyChanged(nameof(IsFilterHighlightActive));
     }
 
-    /// <summary>Виводить на екран лише поточну сторінку, решта карток лишається в <see cref="_allCards"/>.</summary>
+    /// <summary>Виводить на екран лише поточну сторінку; решта результату лишається в <see cref="_filteredDtos"/>.</summary>
     private void ShowCurrentPage()
     {
         int totalPages = TotalPages;
         if (totalPages == 0)
         {
+            _distancePrefetchCts?.Cancel();
             CurrentPage = 1;
+            foreach (VacancyItemViewModel previous in _vacancies)
+            {
+                previous.Detach();
+            }
+
             _vacancies.ReplaceAll([]);
             OnPropertyChanged(nameof(IsEmpty));
             return;
@@ -2167,7 +2144,19 @@ public partial class CatalogViewModel : ObservableObject
         }
 
         int skip = (CurrentPage - 1) * PageSize;
-        List<VacancyItemViewModel> page = _allCards.Skip(skip).Take(PageSize).ToList();
+        int take = Math.Clamp(_filteredDtos.Count - skip, 0, PageSize);
+        List<VacancyItemViewModel> page = new(take);
+        for (int i = 0; i < take; i++)
+        {
+            page.Add(CreateVacancyItemViewModel(_filteredDtos[skip + i]));
+        }
+
+        // Картки попередньої сторінки відпускаємо, щоб не тримати тисячі VM у памʼяті.
+        foreach (VacancyItemViewModel previous in _vacancies)
+        {
+            previous.Detach();
+        }
+
         _vacancies.ReplaceAll(page);
         OnPropertyChanged(nameof(IsEmpty));
 
@@ -2771,7 +2760,7 @@ public partial class CatalogViewModel : ObservableObject
                 Directory.CreateDirectory(directory);
             }
 
-            List<VacancyDto> toExport = Vacancies.Select(v => v.Vacancy).ToList();
+            List<VacancyDto> toExport = _filteredDtos.ToList();
             string json = JsonSerializer.Serialize(toExport, ClientJsonContext.Default.ListVacancyDto);
             await File.WriteAllTextAsync(path, json, CancellationToken.None);
             StaleCacheText = $"Експортовано {toExport.Count} вакансій у {path}";
@@ -2984,7 +2973,7 @@ public partial class CatalogViewModel : ObservableObject
 
     private void ApplyLocalFilterAndSort()
     {
-        ApplyCardsToUi(CreateCards(BuildLocalFilteredDtos()));
+        ApplyCardsToUi(BuildLocalFilteredDtos());
     }
 
     private List<VacancyDto> BuildLocalFilteredDtos()
@@ -2994,19 +2983,7 @@ public partial class CatalogViewModel : ObservableObject
             || (SelectedPlatform == "Djinni" && DjinniSelectedSearchType.Contains("title-only", StringComparison.OrdinalIgnoreCase));
 
         IEnumerable<VacancyDto> query = _loadedDtos.Where(v => MatchesLocalFilters(v, titleOnly));
-        List<VacancyDto> sorted = VacancyFilterEngine.SortVacancies(query, SelectedSortOption, GetDistanceKm).ToList();
-
-        Dictionary<Guid, bool> savedStates = _allCards.ToDictionary(v => v.Id, v => v.IsSaved);
-        for (int i = 0; i < sorted.Count; i++)
-        {
-            VacancyDto dto = sorted[i];
-            if (savedStates.TryGetValue(dto.Id, out bool isSaved) && isSaved != dto.IsSaved)
-            {
-                sorted[i] = dto with { IsSaved = isSaved };
-            }
-        }
-
-        return sorted;
+        return VacancyFilterEngine.SortVacancies(query, SelectedSortOption, GetDistanceKm).ToList();
     }
 
     private bool MatchesLocalFilters(VacancyDto v, bool titleOnly)
@@ -3113,21 +3090,27 @@ public partial class CatalogViewModel : ObservableObject
     public static bool IsDistanceSort(string? sortOption) =>
         VacancyFilterEngine.IsDistanceSort(sortOption);
 
-    private double? GetDistanceKm(VacancyDto v)
+    private double? GetDistanceKm(VacancyDto v) =>
+        _distanceCache.TryGetValue(v.Id, out double? km) ? km : null;
+
+    /// <summary>Оновлює DTO вакансії в обох робочих списках (завантажені та відфільтровані).</summary>
+    private void UpdateDtos(Guid id, Func<VacancyDto, VacancyDto> update)
     {
-        if (_distanceCache.TryGetValue(v.Id, out double? km))
+        for (int i = 0; i < _loadedDtos.Count; i++)
         {
-            return km;
+            if (_loadedDtos[i].Id == id)
+            {
+                _loadedDtos[i] = update(_loadedDtos[i]);
+            }
         }
 
-        VacancyItemViewModel? existing = _allCards.FirstOrDefault(item => item.Id == v.Id);
-        if (existing?.DistanceKm != null)
+        for (int i = 0; i < _filteredDtos.Count; i++)
         {
-            _distanceCache[v.Id] = existing.DistanceKm;
-            return existing.DistanceKm;
+            if (_filteredDtos[i].Id == id)
+            {
+                _filteredDtos[i] = update(_filteredDtos[i]);
+            }
         }
-
-        return null;
     }
 
     private async Task DismissViewedItemAsync(Guid vacancyId)
@@ -3141,9 +3124,10 @@ public partial class CatalogViewModel : ObservableObject
         item.IsDismissing = true;
         await Task.Delay(300);
 
-        if (UnifiedHideViewed && item.IsViewed && _allCards.Remove(item))
+        if (UnifiedHideViewed && item.IsViewed)
         {
-            TotalCount = _allCards.Count;
+            _filteredDtos.RemoveAll(dto => dto.Id == vacancyId);
+            TotalCount = _filteredDtos.Count;
             ShowCurrentPage();
         }
         else

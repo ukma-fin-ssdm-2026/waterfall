@@ -27,6 +27,14 @@ public sealed class VacancyListView : ContentView
             propertyChanged: static (bindable, _, newValue) =>
                 ((VacancyListView)bindable)._collectionView.EmptyView = newValue);
 
+    public static readonly BindableProperty FooterContentProperty =
+        BindableProperty.Create(
+            nameof(FooterContent),
+            typeof(object),
+            typeof(VacancyListView),
+            propertyChanged: static (bindable, _, newValue) =>
+                ((VacancyListView)bindable)._collectionView.Footer = newValue);
+
     public static readonly BindableProperty EnablePullToRefreshProperty =
         BindableProperty.Create(
             nameof(EnablePullToRefresh),
@@ -89,6 +97,12 @@ public sealed class VacancyListView : ContentView
         set => SetValue(EmptyViewContentProperty, value);
     }
 
+    public object? FooterContent
+    {
+        get => GetValue(FooterContentProperty);
+        set => SetValue(FooterContentProperty, value);
+    }
+
     public bool EnablePullToRefresh
     {
         get => (bool)GetValue(EnablePullToRefreshProperty);
@@ -105,6 +119,28 @@ public sealed class VacancyListView : ContentView
     {
         get => (ICommand?)GetValue(RefreshCommandProperty);
         set => SetValue(RefreshCommandProperty, value);
+    }
+
+    public void ScrollToTop()
+    {
+        if (ItemsSource is null)
+        {
+            return;
+        }
+
+        IEnumerator enumerator = ItemsSource.GetEnumerator();
+        if (!enumerator.MoveNext())
+        {
+            return;
+        }
+
+        try
+        {
+            _collectionView.ScrollTo(0, position: ScrollToPosition.Start, animate: false);
+        }
+        catch
+        {
+        }
     }
 
     private void RebuildTree()

@@ -503,6 +503,132 @@ public class CatalogViewModelTests
         Assert.False(_vm.IsFilterHighlightActive);
     }
 
+    [Fact]
+    public async Task SiteSearch_PaginatesResultsAt20PerPage_WithoutExtraNetworkCalls()
+    {
+        VacancyDto[] items = Enumerable.Range(1, 45)
+            .Select(i => new VacancyDto { Id = Guid.NewGuid(), Title = $"Job {i}" })
+            .ToArray();
+
+        await SearchSiteAsync(_vm, items);
+        int requestsAfterSearch = _gateway.SiteSearchRequests.Count;
+
+        Assert.Equal(45, _vm.TotalCount);
+        Assert.Equal(3, _vm.TotalPages);
+        Assert.Equal(1, _vm.CurrentPage);
+        Assert.True(_vm.IsPagerVisible);
+        Assert.False(_vm.HasPreviousPage);
+        Assert.True(_vm.HasNextPage);
+        Assert.Equal("Сторінка 1 з 3", _vm.PageText);
+        Assert.Equal(20, _vm.Vacancies.Count);
+        Assert.Equal("Job 1", _vm.Vacancies[0].Title);
+
+        _vm.NextPageCommand.Execute(null);
+        Assert.Equal(2, _vm.CurrentPage);
+        Assert.True(_vm.HasPreviousPage);
+        Assert.True(_vm.HasNextPage);
+        Assert.Equal("Сторінка 2 з 3", _vm.PageText);
+        Assert.Equal(20, _vm.Vacancies.Count);
+        Assert.Equal("Job 21", _vm.Vacancies[0].Title);
+
+        _vm.NextPageCommand.Execute(null);
+        Assert.Equal(3, _vm.CurrentPage);
+        Assert.True(_vm.HasPreviousPage);
+        Assert.False(_vm.HasNextPage);
+        Assert.Equal("Сторінка 3 з 3", _vm.PageText);
+        Assert.Equal(5, _vm.Vacancies.Count);
+        Assert.Equal("Job 41", _vm.Vacancies[0].Title);
+
+        _vm.PrevPageCommand.Execute(null);
+        Assert.Equal(2, _vm.CurrentPage);
+        Assert.Equal(requestsAfterSearch, _gateway.SiteSearchRequests.Count);
+    }
+
+    [Fact]
+    public async Task SiteSearch_MultiPageWithoutFilters_DoesNotReportFilteredSubsetInBanner()
+    {
+        VacancyDto[] items = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto { Id = Guid.NewGuid(), Title = $"Dev {i}" })
+            .ToArray();
+
+        await SearchSiteAsync(_vm, items);
+
+        Assert.Equal(20, _vm.Vacancies.Count);
+        Assert.Equal(25, _vm.TotalCount);
+        Assert.DoesNotContain("за фільтрами списку показано", _vm.StaleCacheText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FilterChange_ResetsToFirstPage_AndHidesPagerWhenSinglePage()
+    {
+        VacancyDto[] items = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto { Id = Guid.NewGuid(), Title = i <= 5 ? $"Rust Dev {i}" : $"Java Dev {i}" })
+            .ToArray();
+
+        await SearchSiteAsync(_vm, items);
+        _vm.NextPageCommand.Execute(null);
+        Assert.Equal(2, _vm.CurrentPage);
+
+        _vm.NewWhiteListWord = "Rust";
+        await _vm.AddWhiteListWordCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, _vm.CurrentPage);
+        Assert.Equal(5, _vm.TotalCount);
+        Assert.False(_vm.IsPagerVisible);
+        Assert.False(_vm.HasNextPage);
+
+        _vm.NewBanListWord = "Rust";
+        await _vm.AddBanListWordCommand.ExecuteAsync(null);
+
+        Assert.Equal(1, _vm.CurrentPage);
+        Assert.Equal(0, _vm.TotalCount);
+        Assert.True(_vm.IsEmpty);
+        Assert.False(_vm.IsPagerVisible);
+    }
+
+    [Fact]
+    public async Task ExportVacancies_WithMultiplePages_ExportsAllFilteredVacancies()
+    {
+        VacancyDto[] items = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto { Id = Guid.NewGuid(), Title = $"Exported {i}" })
+            .ToArray();
+        await SearchSiteAsync(_vm, items);
+        Assert.Equal(20, _vm.Vacancies.Count);
+
+        string tempPath = Path.Combine(Path.GetTempPath(), $"waterfall-export-{Guid.NewGuid():N}.json");
+        try
+        {
+            await _vm.ExportVacanciesToAsync(tempPath);
+            string json = await File.ReadAllTextAsync(tempPath);
+            using System.Text.Json.JsonDocument doc = System.Text.Json.JsonDocument.Parse(json);
+
+            Assert.Equal(25, doc.RootElement.GetArrayLength());
+        }
+        finally
+        {
+            if (File.Exists(tempPath))
+            {
+                File.Delete(tempPath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task SaveMessageForOffPageVacancy_PreservesStateWhenNavigatingToThatPage()
+    {
+        VacancyDto[] items = Enumerable.Range(1, 25)
+            .Select(i => new VacancyDto { Id = Guid.NewGuid(), Title = $"Vacancy {i}" })
+            .ToArray();
+        await SearchSiteAsync(_vm, items);
+
+        Guid pageTwoTargetId = items[21].Id;
+        _messenger.Send(new VacancySaveChangedMessage(pageTwoTargetId, IsSaved: true));
+
+        _vm.NextPageCommand.Execute(null);
+
+        Assert.True(_vm.Vacancies[1].IsSaved);
+    }
+
     private static VacancyDto[] Vacancies(params string[] titles) => [.. FakeGateway.Page(1, titles.Length, hasNext: false, titles).Items];
 
     private Task SearchSiteAsync(CatalogViewModel vm, params string[] titles) => SearchSiteAsync(vm, Vacancies(titles));
