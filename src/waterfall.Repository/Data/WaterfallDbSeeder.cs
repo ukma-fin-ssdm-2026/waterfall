@@ -219,35 +219,9 @@ public static class WaterfallDbSeeder
 
     private static async Task SeedDemoUsersAndRelatedDataAsync(WaterfallDbContext context)
     {
-        if (!await context.SavedVacancies.AnyAsync())
-        {
-            var sampleBookmarks = new List<SavedVacancyDB>
-            {
-                new SavedVacancyDB
-                {
-                    Id = Guid.Parse("aaaaaaa1-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                    VacancyId = Guid.Parse("11111111-1111-1111-1111-111111111111"),
-                    // Закладки належать seeker1@waterfall.com (див. devUsers нижче).
-                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
-                    Notes = "Пріоритет №1: підготувати сертифікати та стек мікросервісів.",
-                    SavedAt = DateTimeOffset.UtcNow.AddHours(-5)
-                },
-                new SavedVacancyDB
-                {
-                    Id = Guid.Parse("aaaaaaa2-aaaa-aaaa-aaaa-aaaaaaaaaaaa"),
-                    VacancyId = Guid.Parse("22222222-2222-2222-2222-222222222222"),
-                    UserId = Guid.Parse("66666666-6666-6666-6666-66666666666a"),
-                    Notes = "Цікава вакансія по .NET MAUI: повторити життєвий цикл сторінок та XAML bindings.",
-                    SavedAt = DateTimeOffset.UtcNow.AddHours(-2)
-                }
-            };
-
-            await context.SavedVacancies.AddRangeAsync(sampleBookmarks);
-            await context.SaveChangesAsync();
-        }
-
         // Тестові облікові записи лише для локальної розробки: метод викликається тільки з includeDemoData
-        // (API — лише в Development), а не за типом бази, бо SQLite у нас стоїть і за замовчуванням
+        // (API — лише в Development), а не за типом бази, бо SQLite у нас стоїть і за замовчуванням.
+        // Сідуємо Users перед SavedVacancies та UserPersonalData, щоб задовольнити зовнішні ключі.
         if (!await context.Users.AnyAsync())
         {
             var devUsers = new List<UserDB>
@@ -298,7 +272,49 @@ public static class WaterfallDbSeeder
             await context.SaveChangesAsync();
         }
 
-        if (!await context.UserPersonalData.AnyAsync())
+        Guid demoUserId = Guid.Parse("66666666-6666-6666-6666-66666666666a");
+        if (!await context.SavedVacancies.AnyAsync() && await context.Users.AnyAsync(u => u.Id == demoUserId))
+        {
+            Guid demoVacancy1 = Guid.Parse("11111111-1111-1111-1111-111111111111");
+            Guid demoVacancy2 = Guid.Parse("22222222-2222-2222-2222-222222222222");
+            HashSet<Guid> existingDemoVacancies = (await context.Vacancies
+                .Where(v => v.Id == demoVacancy1 || v.Id == demoVacancy2)
+                .Select(v => v.Id)
+                .ToListAsync())
+                .ToHashSet();
+
+            var sampleBookmarks = new List<SavedVacancyDB>();
+            if (existingDemoVacancies.Contains(demoVacancy1))
+            {
+                sampleBookmarks.Add(new SavedVacancyDB
+                {
+                    VacancyId = demoVacancy1,
+                    // Закладки належать seeker1@waterfall.com.
+                    UserId = demoUserId,
+                    Notes = "Пріоритет №1: підготувати сертифікати та стек мікросервісів.",
+                    SavedAt = DateTimeOffset.UtcNow.AddHours(-5)
+                });
+            }
+
+            if (existingDemoVacancies.Contains(demoVacancy2))
+            {
+                sampleBookmarks.Add(new SavedVacancyDB
+                {
+                    VacancyId = demoVacancy2,
+                    UserId = demoUserId,
+                    Notes = "Цікава вакансія по .NET MAUI: повторити життєвий цикл сторінок та XAML bindings.",
+                    SavedAt = DateTimeOffset.UtcNow.AddHours(-2)
+                });
+            }
+
+            if (sampleBookmarks.Count > 0)
+            {
+                await context.SavedVacancies.AddRangeAsync(sampleBookmarks);
+                await context.SaveChangesAsync();
+            }
+        }
+
+        if (!await context.UserPersonalData.AnyAsync() && await context.Users.AnyAsync(u => u.Id == demoUserId))
         {
             await context.UserPersonalData.AddAsync(new UserPersonalDataDB
             {

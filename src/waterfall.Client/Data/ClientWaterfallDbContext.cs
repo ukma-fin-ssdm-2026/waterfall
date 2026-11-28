@@ -12,9 +12,8 @@ namespace Waterfall.Client.Data;
 
 /// <summary>
 /// Загальний контекст локальної бази даних клієнта на базі Entity Framework Core.
-/// Дзеркальний до серверного WaterfallDbContext (вакансії, збережені вакансії, користувачі, персональні дані),
-/// але для таблиць вакансій і геокешу використовує ClientVacancyDB / ClientGeoLocationCacheDB із прапорцем IsSynced
-/// та зберігає стан синхронізації у SyncState.
+/// Містить офлайн-сховище вакансій і геокешу (ClientVacancyDB / ClientGeoLocationCacheDB із прапорцем IsSynced)
+/// та стан синхронізації у SyncState.
 /// </summary>
 public class ClientWaterfallDbContext : DbContext
 {
@@ -25,9 +24,6 @@ public class ClientWaterfallDbContext : DbContext
     }
 
     public DbSet<ClientVacancyDB> Vacancies => Set<ClientVacancyDB>();
-    public DbSet<SavedVacancyDB> SavedVacancies => Set<SavedVacancyDB>();
-    public DbSet<UserDB> Users => Set<UserDB>();
-    public DbSet<UserPersonalDataDB> UserPersonalData => Set<UserPersonalDataDB>();
     public DbSet<ClientGeoLocationCacheDB> GeoLocationCache => Set<ClientGeoLocationCacheDB>();
     public DbSet<ClientSyncStateDB> SyncStates => Set<ClientSyncStateDB>();
 
@@ -65,7 +61,6 @@ public class ClientWaterfallDbContext : DbContext
 
         // Щоб EF Core не створював TPH-дискримінатор між VacancyDB та ClientVacancyDB
         // (та між GeoLocationCacheDB і ClientGeoLocationCacheDB), виключаємо базові класи з моделі.
-        modelBuilder.Entity<SavedVacancyDB>().Ignore(s => s.Vacancy);
         modelBuilder.Ignore<VacancyDB>();
         modelBuilder.Ignore<GeoLocationCacheDB>();
         modelBuilder.Entity<ClientVacancyDB>().HasBaseType((Type?)null);

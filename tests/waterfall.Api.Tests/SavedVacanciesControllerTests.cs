@@ -122,21 +122,25 @@ public sealed class SavedVacanciesControllerTests
             Location = "Kyiv",
             Currency = "USD",
             PublishedAt = DateTimeOffset.UtcNow,
-            IsSaved = true // Already saved!
+            IsSaved = true
         };
         _vacancyService.Vacancies.Add(existingVacancy);
+        _savedVacancyService.SavedVacancies.Add(new SavedVacancyDto
+        {
+            Id = vacancyId,
+            VacancyId = vacancyId
+        });
 
         SaveVacancyRequest request = new() { VacancyId = vacancyId };
 
         // Act
         ActionResult<SavedVacancyDto> result = await _controller.Save(request, CancellationToken.None);
 
-        // Assert - HTTP 409 Conflict
+        // Assert - HTTP 409 Conflict через DuplicateSavedVacancyException із сервісу/БД
         ConflictObjectResult conflict = Assert.IsType<ConflictObjectResult>(result.Result);
         ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(conflict.Value);
         Assert.Equal("CONFLICT", error.Error.Code);
         Assert.Contains(vacancyId.ToString(), error.Error.Message);
-        Assert.Empty(_savedVacancyService.SaveCalls); // Save service must not be invoked
     }
 
     [Fact]

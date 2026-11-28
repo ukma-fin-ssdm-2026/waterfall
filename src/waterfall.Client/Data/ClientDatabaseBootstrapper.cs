@@ -12,7 +12,7 @@ namespace Waterfall.Client.Data;
 /// </summary>
 public static class ClientDatabaseBootstrapper
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     private static readonly ConcurrentDictionary<string, byte> s_initializedDatabases =
         new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
@@ -165,19 +165,33 @@ public static class ClientDatabaseBootstrapper
             case 1:
                 await context.Database.ExecuteSqlRawAsync("PRAGMA user_version = 1;", ct).ConfigureAwait(false);
                 break;
+            case 2:
+                await context.Database.ExecuteSqlRawAsync("PRAGMA user_version = 2;", ct).ConfigureAwait(false);
+                break;
             default:
                 throw new NotSupportedException($"Непідтримувана версія схеми клієнта: {version}.");
         }
     }
 
-    private static Task<int> ApplyUpgradeStepAsync(
+    private static async Task<int> ApplyUpgradeStepAsync(
         ClientWaterfallDbContext context,
         DbConnection connection,
         int currentVersion,
         CancellationToken ct)
     {
-        // Наразі CurrentSchemaVersion == 1; наступні інкрементальні кроки (1 -> 2 тощо) додаються сюди.
-        throw new NotSupportedException($"Непідтримуваний перехід схеми клієнта з версії {currentVersion}.");
+        switch (currentVersion)
+        {
+            case 1:
+                await context.Database.ExecuteSqlRawAsync(
+                    """
+                    DROP TABLE IF EXISTS "SavedVacancies";
+                    DROP TABLE IF EXISTS "Users";
+                    DROP TABLE IF EXISTS "UserPersonalData";
+                    """, ct).ConfigureAwait(false);
+                return 2;
+            default:
+                throw new NotSupportedException($"Непідтримуваний перехід схеми клієнта з версії {currentVersion}.");
+        }
     }
 
     private static async Task RebuildLocalCacheDatabaseAsync(

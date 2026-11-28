@@ -1,5 +1,7 @@
 // AI: модульні тести репозиторію збережених вакансій (EfSavedVacancyRepository, Lab 06); перевірено: запуск dotnet test, самоперевірка автора (Денис Сидоренко, §8)
 
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Data;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Repositories;
@@ -15,6 +17,18 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
     private readonly SqliteTestFixture _fixture = new();
 
     public void Dispose() => _fixture.Dispose();
+
+    private static UserDB CreateUser(string? email = null)
+    {
+        return new UserDB
+        {
+            Id = Guid.NewGuid(),
+            Email = email ?? $"{Guid.NewGuid():N}@waterfall.test",
+            PasswordHash = "hash",
+            Role = "JobSeeker",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+    }
 
     private static VacancyDB CreateVacancy(string title = "Backend Engineer", bool isActive = true)
     {
@@ -48,8 +62,9 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
         await using WaterfallDbContext db = _fixture.CreateContext();
         EfSavedVacancyRepository repo = new(db);
 
-        Guid user1 = Guid.NewGuid();
-        Guid user2 = Guid.NewGuid();
+        UserDB user1 = CreateUser();
+        UserDB user2 = CreateUser();
+        db.Users.AddRange(user1, user2);
 
         VacancyDB activeVac = CreateVacancy("Active Vacancy", isActive: true);
         VacancyDB inactiveVac = CreateVacancy("Inactive Vacancy", isActive: false);
@@ -57,22 +72,19 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
 
         SavedVacancyDB savedActive = new()
         {
-            Id = Guid.NewGuid(),
-            UserId = user1,
+            UserId = user1.Id,
             VacancyId = activeVac.Id,
             SavedAt = DateTimeOffset.UtcNow.AddMinutes(-10)
         };
         SavedVacancyDB savedInactive = new()
         {
-            Id = Guid.NewGuid(),
-            UserId = user1,
+            UserId = user1.Id,
             VacancyId = inactiveVac.Id,
             SavedAt = DateTimeOffset.UtcNow.AddMinutes(-5)
         };
         SavedVacancyDB otherUserSaved = new()
         {
-            Id = Guid.NewGuid(),
-            UserId = user2,
+            UserId = user2.Id,
             VacancyId = activeVac.Id,
             SavedAt = DateTimeOffset.UtcNow
         };
@@ -81,13 +93,14 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
         await db.SaveChangesAsync();
 
         // Act
-        IReadOnlyList<SavedVacancyDB> results = await repo.GetAllAsync(user1, onlyActive: true);
+        IReadOnlyList<SavedVacancyDB> results = await repo.GetAllAsync(user1.Id, onlyActive: true);
 
         // Assert
         Assert.Single(results);
-        Assert.Equal(savedActive.Id, results[0].Id);
+        Assert.Equal(user1.Id, results[0].UserId);
+        Assert.Equal(activeVac.Id, results[0].VacancyId);
         Assert.NotNull(results[0].Vacancy);
-        Assert.Equal("Active Vacancy", results[0].Vacancy!.Title);
+        Assert.Equal("Active Vacancy", results[0].Vacancy.Title);
     }
 
     [Fact]
@@ -97,40 +110,42 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
         await using WaterfallDbContext db = _fixture.CreateContext();
         EfSavedVacancyRepository repo = new(db);
 
-        Guid user = Guid.NewGuid();
+        UserDB user = CreateUser();
+        db.Users.Add(user);
 
         VacancyDB active = CreateVacancy("Active", isActive: true);
         VacancyDB inactive = CreateVacancy("Archived", isActive: false);
         db.Vacancies.AddRange(active, inactive);
 
         db.SavedVacancies.AddRange(
-            new SavedVacancyDB { Id = Guid.NewGuid(), UserId = user, VacancyId = active.Id, SavedAt = DateTimeOffset.UtcNow.AddMinutes(-20) },
-            new SavedVacancyDB { Id = Guid.NewGuid(), UserId = user, VacancyId = inactive.Id, SavedAt = DateTimeOffset.UtcNow.AddMinutes(-10) }
+            new SavedVacancyDB { UserId = user.Id, VacancyId = active.Id, SavedAt = DateTimeOffset.UtcNow.AddMinutes(-20) },
+            new SavedVacancyDB { UserId = user.Id, VacancyId = inactive.Id, SavedAt = DateTimeOffset.UtcNow.AddMinutes(-10) }
         );
         await db.SaveChangesAsync();
 
         // Act
-        IReadOnlyList<SavedVacancyDB> results = await repo.GetAllAsync(user, onlyActive: false);
+        IReadOnlyList<SavedVacancyDB> results = await repo.GetAllAsync(user.Id, onlyActive: false);
 
         // Assert
         Assert.Equal(2, results.Count);
     }
 
     [Fact]
-    public async Task GetByIdAsync_FindsBySavedVacancyIdOrVacancyId_ForCorrectUser()
+    public async Task GetByIdAsync_FindsByVacancyId_OnlyForOwningUser()
     {
         // Arrange
         await using WaterfallDbContext db = _fixture.CreateContext();
         EfSavedVacancyRepository repo = new(db);
 
-        Guid user = Guid.NewGuid();
+        UserDB user = CreateUser();
+        db.Users.Add(user);
+
         VacancyDB vac = CreateVacancy();
         db.Vacancies.Add(vac);
 
         SavedVacancyDB saved = new()
         {
-            Id = Guid.NewGuid(),
-            UserId = user,
+            UserId = user.Id,
             VacancyId = vac.Id,
             Notes = "Check tomorrow"
         };
@@ -138,87 +153,182 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
         await db.SaveChangesAsync();
 
         // Act
-        SavedVacancyDB? bySavedId = await repo.GetByIdAsync(saved.Id, user);
-        SavedVacancyDB? byVacancyId = await repo.GetByIdAsync(vac.Id, user);
-        SavedVacancyDB? otherUserLookup = await repo.GetByIdAsync(saved.Id, Guid.NewGuid());
+        SavedVacancyDB? byVacancyId = await repo.GetByIdAsync(vac.Id, user.Id);
+        SavedVacancyDB? otherUserLookup = await repo.GetByIdAsync(vac.Id, Guid.NewGuid());
 
         // Assert
-        Assert.NotNull(bySavedId);
-        Assert.Equal("Check tomorrow", bySavedId.Notes);
-
         Assert.NotNull(byVacancyId);
-        Assert.Equal(saved.Id, byVacancyId.Id);
+        Assert.Equal(user.Id, byVacancyId.UserId);
+        Assert.Equal(vac.Id, byVacancyId.VacancyId);
+        Assert.Equal("Check tomorrow", byVacancyId.Notes);
 
         Assert.Null(otherUserLookup);
     }
 
     [Fact]
-    public async Task SaveAsync_GeneratesGuidAndTimestamp_AndLinksVacancy()
+    public async Task SaveAsync_SetsTimestamp_AndLinksVacancyWithoutTrackingConflict()
     {
         // Arrange
         await using WaterfallDbContext db = _fixture.CreateContext();
         EfSavedVacancyRepository repo = new(db);
 
-        Guid user = Guid.NewGuid();
+        UserDB user = CreateUser();
+        db.Users.Add(user);
+
         VacancyDB vac = CreateVacancy("Data Engineer");
         db.Vacancies.Add(vac);
         await db.SaveChangesAsync();
-        db.ChangeTracker.Clear();
 
         SavedVacancyDB newSaved = new()
         {
-            Id = Guid.Empty, // Should be auto-generated
-            UserId = user,
+            UserId = user.Id,
             VacancyId = vac.Id,
-            Notes = "Promising stack"
+            Notes = "Promising stack",
+            SavedAt = default
         };
 
         // Act
         SavedVacancyDB result = await repo.SaveAsync(newSaved);
 
         // Assert
-        Assert.NotEqual(Guid.Empty, result.Id);
         Assert.True(result.SavedAt > DateTimeOffset.UtcNow.AddMinutes(-1));
         Assert.NotNull(result.Vacancy);
         Assert.Equal("Data Engineer", result.Vacancy.Title);
 
         await using WaterfallDbContext verifyDb = _fixture.CreateContext();
-        SavedVacancyDB? stored = await verifyDb.SavedVacancies.FindAsync(result.Id);
+        SavedVacancyDB? stored = await verifyDb.SavedVacancies.FindAsync(user.Id, vac.Id);
         Assert.NotNull(stored);
         Assert.Equal("Promising stack", stored.Notes);
     }
 
-    [Theory]
-    [InlineData(true, "Delete by SavedVacancy ID")]
-    [InlineData(false, "Delete by Vacancy ID")]
-    public async Task DeleteAsync_ExistingForUser_RemovesRecordAndReturnsTrue(bool useSavedId, string scenario)
+    [Fact]
+    public async Task SaveAsync_DuplicateUserAndVacancy_ThrowsDbUpdateExceptionAndKeepsSingleRow()
     {
         // Arrange
         await using WaterfallDbContext db = _fixture.CreateContext();
         EfSavedVacancyRepository repo = new(db);
 
-        Guid user = Guid.NewGuid();
+        UserDB user = CreateUser();
+        db.Users.Add(user);
+
+        VacancyDB vac = CreateVacancy("Platform Engineer");
+        db.Vacancies.Add(vac);
+        await db.SaveChangesAsync();
+
+        await repo.SaveAsync(new SavedVacancyDB { UserId = user.Id, VacancyId = vac.Id });
+
+        // Act & Assert
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            repo.SaveAsync(new SavedVacancyDB { UserId = user.Id, VacancyId = vac.Id }));
+
+        await using WaterfallDbContext verifyDb = _fixture.CreateContext();
+        int rowCount = await verifyDb.SavedVacancies.CountAsync(s => s.UserId == user.Id && s.VacancyId == vac.Id);
+        Assert.Equal(1, rowCount);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenVacancyDoesNotExist_ThrowsDbUpdateException()
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfSavedVacancyRepository repo = new(db);
+
+        UserDB user = CreateUser();
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        // Act & Assert
+        await Assert.ThrowsAsync<DbUpdateException>(() =>
+            repo.SaveAsync(new SavedVacancyDB { UserId = user.Id, VacancyId = Guid.NewGuid() }));
+    }
+
+    [Fact]
+    public async Task SaveAsync_ConcurrentDoubleSave_ProducesSingleRowAndDeterministicFailure()
+    {
+        // Arrange: shared-cache file/memory SQLite з двома окремими з'єднаннями для реальної гонки
+        string dbPath = Path.Combine(Path.GetTempPath(), $"wf_saved_race_{Guid.NewGuid():N}.db");
+        try
+        {
+            DbContextOptions<WaterfallDbContext> options = new DbContextOptionsBuilder<WaterfallDbContext>()
+                .UseSqlite($"Data Source={dbPath};Default Timeout=5")
+                .Options;
+
+            UserDB user = CreateUser();
+            VacancyDB vac = CreateVacancy("Concurrent Job");
+
+            await using (WaterfallDbContext setupDb = new(options))
+            {
+                await setupDb.Database.EnsureCreatedAsync();
+                setupDb.Users.Add(user);
+                setupDb.Vacancies.Add(vac);
+                await setupDb.SaveChangesAsync();
+            }
+
+            using ManualResetEventSlim startGate = new(false);
+
+            async Task<bool> AttemptSaveAsync()
+            {
+                await using WaterfallDbContext context = new(options);
+                EfSavedVacancyRepository repo = new(context);
+                startGate.Wait();
+                try
+                {
+                    await repo.SaveAsync(new SavedVacancyDB { UserId = user.Id, VacancyId = vac.Id });
+                    return true;
+                }
+                catch (DbUpdateException)
+                {
+                    return false;
+                }
+            }
+
+            Task<bool> first = Task.Run(AttemptSaveAsync);
+            Task<bool> second = Task.Run(AttemptSaveAsync);
+            startGate.Set();
+
+            bool[] outcomes = await Task.WhenAll(first, second);
+
+            // Assert: рівно 1 успіх, 1 відмова та 1 запис у БД
+            Assert.Equal(1, outcomes.Count(succeeded => succeeded));
+            Assert.Equal(1, outcomes.Count(succeeded => !succeeded));
+
+            await using WaterfallDbContext verifyDb = new(options);
+            int savedCount = await verifyDb.SavedVacancies.CountAsync(s => s.UserId == user.Id && s.VacancyId == vac.Id);
+            Assert.Equal(1, savedCount);
+        }
+        finally
+        {
+            SqliteConnection.ClearAllPools();
+            if (File.Exists(dbPath))
+            {
+                File.Delete(dbPath);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task DeleteAsync_ExistingForUser_RemovesBookmarkByVacancyId()
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+        EfSavedVacancyRepository repo = new(db);
+
+        UserDB user = CreateUser();
+        db.Users.Add(user);
+
         VacancyDB vac = CreateVacancy();
         db.Vacancies.Add(vac);
 
-        SavedVacancyDB saved = new()
-        {
-            Id = Guid.NewGuid(),
-            UserId = user,
-            VacancyId = vac.Id
-        };
-        db.SavedVacancies.Add(saved);
+        db.SavedVacancies.Add(new SavedVacancyDB { UserId = user.Id, VacancyId = vac.Id });
         await db.SaveChangesAsync();
 
-        Guid targetId = useSavedId ? saved.Id : vac.Id;
-
         // Act
-        bool result = await repo.DeleteAsync(targetId, user);
+        bool result = await repo.DeleteAsync(vac.Id, user.Id);
 
         // Assert
-        Assert.True(result, $"Scenario '{scenario}' should return true.");
+        Assert.True(result);
         await using WaterfallDbContext verifyDb = _fixture.CreateContext();
-        Assert.Null(await verifyDb.SavedVacancies.FindAsync(saved.Id));
+        Assert.Null(await verifyDb.SavedVacancies.FindAsync(user.Id, vac.Id));
     }
 
     [Fact]
@@ -228,27 +338,60 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
         await using WaterfallDbContext db = _fixture.CreateContext();
         EfSavedVacancyRepository repo = new(db);
 
-        Guid owner = Guid.NewGuid();
-        Guid otherUser = Guid.NewGuid();
+        UserDB owner = CreateUser();
+        UserDB otherUser = CreateUser();
+        db.Users.AddRange(owner, otherUser);
+
         VacancyDB vac = CreateVacancy();
         db.Vacancies.Add(vac);
 
-        SavedVacancyDB saved = new()
-        {
-            Id = Guid.NewGuid(),
-            UserId = owner,
-            VacancyId = vac.Id
-        };
-        db.SavedVacancies.Add(saved);
+        db.SavedVacancies.Add(new SavedVacancyDB { UserId = owner.Id, VacancyId = vac.Id });
         await db.SaveChangesAsync();
 
         // Act
-        bool wrongUserResult = await repo.DeleteAsync(saved.Id, otherUser);
-        bool nonExistentResult = await repo.DeleteAsync(Guid.NewGuid(), owner);
+        bool wrongUserResult = await repo.DeleteAsync(vac.Id, otherUser.Id);
+        bool nonExistentResult = await repo.DeleteAsync(Guid.NewGuid(), owner.Id);
 
         // Assert
         Assert.False(wrongUserResult);
         Assert.False(nonExistentResult);
+    }
+
+    [Fact]
+    public async Task DeleteUser_CascadesSavedVacanciesAndUserPersonalData()
+    {
+        // Arrange
+        await using WaterfallDbContext db = _fixture.CreateContext();
+
+        UserDB targetUser = CreateUser("delete-me@waterfall.test");
+        UserDB otherUser = CreateUser("keep-me@waterfall.test");
+        db.Users.AddRange(targetUser, otherUser);
+
+        VacancyDB vacancy = CreateVacancy("Shared Vacancy");
+        db.Vacancies.Add(vacancy);
+
+        db.SavedVacancies.AddRange(
+            new SavedVacancyDB { UserId = targetUser.Id, VacancyId = vacancy.Id },
+            new SavedVacancyDB { UserId = otherUser.Id, VacancyId = vacancy.Id });
+
+        db.UserPersonalData.AddRange(
+            new UserPersonalDataDB { Id = Guid.NewGuid(), UserId = targetUser.Id, Address = "вул. Хрещатик, 1" },
+            new UserPersonalDataDB { Id = Guid.NewGuid(), UserId = otherUser.Id, Address = "вул. Садова, 2" });
+
+        await db.SaveChangesAsync();
+
+        // Act
+        db.Users.Remove(targetUser);
+        await db.SaveChangesAsync();
+
+        // Assert
+        await using WaterfallDbContext verifyDb = _fixture.CreateContext();
+        Assert.False(await verifyDb.SavedVacancies.AnyAsync(s => s.UserId == targetUser.Id));
+        Assert.False(await verifyDb.UserPersonalData.AnyAsync(p => p.UserId == targetUser.Id));
+
+        Assert.True(await verifyDb.SavedVacancies.AnyAsync(s => s.UserId == otherUser.Id && s.VacancyId == vacancy.Id));
+        Assert.True(await verifyDb.UserPersonalData.AnyAsync(p => p.UserId == otherUser.Id));
+        Assert.True(await verifyDb.Vacancies.AnyAsync(v => v.Id == vacancy.Id));
     }
 
     [Fact]
@@ -258,22 +401,19 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
         await using WaterfallDbContext db = _fixture.CreateContext();
         EfSavedVacancyRepository repo = new(db);
 
-        Guid user = Guid.NewGuid();
+        UserDB user = CreateUser();
+        db.Users.Add(user);
+
         VacancyDB vac1 = CreateVacancy();
         VacancyDB vac2 = CreateVacancy();
         db.Vacancies.AddRange(vac1, vac2);
 
-        db.SavedVacancies.Add(new SavedVacancyDB
-        {
-            Id = Guid.NewGuid(),
-            UserId = user,
-            VacancyId = vac1.Id
-        });
+        db.SavedVacancies.Add(new SavedVacancyDB { UserId = user.Id, VacancyId = vac1.Id });
         await db.SaveChangesAsync();
 
         // Act
-        bool existsForVac1 = await repo.ExistsForVacancyAsync(vac1.Id, user);
-        bool existsForVac2 = await repo.ExistsForVacancyAsync(vac2.Id, user);
+        bool existsForVac1 = await repo.ExistsForVacancyAsync(vac1.Id, user.Id);
+        bool existsForVac2 = await repo.ExistsForVacancyAsync(vac2.Id, user.Id);
         bool nullUserCheck = await repo.ExistsForVacancyAsync(vac1.Id, null);
         bool otherUserCheck = await repo.ExistsForVacancyAsync(vac1.Id, Guid.NewGuid());
 
@@ -291,8 +431,9 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
         await using WaterfallDbContext db = _fixture.CreateContext();
         EfSavedVacancyRepository repo = new(db);
 
-        Guid user = Guid.NewGuid();
-        Guid otherUser = Guid.NewGuid();
+        UserDB user = CreateUser();
+        UserDB otherUser = CreateUser();
+        db.Users.AddRange(user, otherUser);
 
         VacancyDB vac1 = CreateVacancy();
         VacancyDB vac2 = CreateVacancy();
@@ -300,16 +441,16 @@ public sealed class EfSavedVacancyRepositoryTests : IDisposable
         db.Vacancies.AddRange(vac1, vac2, vac3);
 
         db.SavedVacancies.AddRange(
-            new SavedVacancyDB { Id = Guid.NewGuid(), UserId = user, VacancyId = vac1.Id },
-            new SavedVacancyDB { Id = Guid.NewGuid(), UserId = otherUser, VacancyId = vac2.Id }
+            new SavedVacancyDB { UserId = user.Id, VacancyId = vac1.Id },
+            new SavedVacancyDB { UserId = otherUser.Id, VacancyId = vac2.Id }
         );
         await db.SaveChangesAsync();
 
         // Act - empty input list edge case
-        HashSet<Guid> emptyResult = await repo.GetSavedVacancyIdsAsync([], user);
+        HashSet<Guid> emptyResult = await repo.GetSavedVacancyIdsAsync([], user.Id);
 
         // Act - query [vac1, vac2, vac3]
-        HashSet<Guid> foundResult = await repo.GetSavedVacancyIdsAsync([vac1.Id, vac2.Id, vac3.Id], user);
+        HashSet<Guid> foundResult = await repo.GetSavedVacancyIdsAsync([vac1.Id, vac2.Id, vac3.Id], user.Id);
 
         // Assert
         Assert.Empty(emptyResult);

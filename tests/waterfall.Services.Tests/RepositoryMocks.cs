@@ -213,12 +213,19 @@ public sealed class FakeSavedVacancyRepository : ISavedVacancyRepository
 
     public Task<SavedVacancyDB?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
-        SavedVacancyDB? match = SavedVacancies.FirstOrDefault(s => (s.Id == id || s.VacancyId == id) && s.UserId == userId);
+        SavedVacancyDB? match = SavedVacancies.FirstOrDefault(s => s.VacancyId == id && s.UserId == userId);
         return Task.FromResult(match);
     }
 
     public Task<SavedVacancyDB> SaveAsync(SavedVacancyDB entity, CancellationToken ct = default)
     {
+        if (SavedVacancies.Any(s => s.UserId == entity.UserId && s.VacancyId == entity.VacancyId))
+        {
+            throw new Microsoft.EntityFrameworkCore.DbUpdateException(
+                "Duplicate saved vacancy",
+                new InvalidOperationException("UNIQUE constraint failed: SavedVacancies.UserId, SavedVacancies.VacancyId"));
+        }
+
         SavedVacancies.Add(entity);
         return Task.FromResult(entity);
     }
@@ -226,7 +233,7 @@ public sealed class FakeSavedVacancyRepository : ISavedVacancyRepository
     public Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         DeleteCalls.Add(id);
-        int removed = SavedVacancies.RemoveAll(s => (s.Id == id || s.VacancyId == id) && s.UserId == userId);
+        int removed = SavedVacancies.RemoveAll(s => s.VacancyId == id && s.UserId == userId);
         return Task.FromResult(removed > 0);
     }
 

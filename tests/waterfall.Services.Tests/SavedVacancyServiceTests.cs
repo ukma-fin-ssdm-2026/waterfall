@@ -1,8 +1,9 @@
 // AI: модульні тести сервісу закладок (SavedVacancyService, інвалідація кешу, Lab 06); перевірено: запуск dotnet test, самоперевірка автора (Денис Сидоренко, §8)
 
+using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Entities;
+using Waterfall.Services.Exceptions;
 using Waterfall.Services.Models.SavedVacancies;
-using Waterfall.Services.Models.Vacancies;
 
 namespace Waterfall.Services.Tests;
 
@@ -10,7 +11,7 @@ namespace Waterfall.Services.Tests;
 /// Модульні тести для SavedVacancyService:
 /// - Управління закладками користувача («лайки»)
 /// - Автоматична інвалідація кешу вакансії при додаванні/видаленні закладок
-/// - Мапінг сутностей у SavedVacancyDto
+/// - Мапінг сутностей у SavedVacancyDto (Id == VacancyId) та перетворення дублікатів на DuplicateSavedVacancyException
 /// </summary>
 public sealed class SavedVacancyServiceTests
 {
@@ -48,14 +49,13 @@ public sealed class SavedVacancyServiceTests
     }
 
     [Fact]
-    public async Task GetAllAsync_ReturnsMappedDtosWithNestedVacancy()
+    public async Task GetAllAsync_ReturnsMappedDtosWithNestedVacancyAndVacancyIdAsId()
     {
         // Arrange
         Guid userId = Guid.NewGuid();
         VacancyDB vac = CreateVacancy("Cloud Architect");
         SavedVacancyDB entity = new()
         {
-            Id = Guid.NewGuid(),
             UserId = userId,
             VacancyId = vac.Id,
             Vacancy = vac,
@@ -70,7 +70,7 @@ public sealed class SavedVacancyServiceTests
 
         // Assert
         Assert.Single(results);
-        Assert.Equal(entity.Id, results[0].Id);
+        Assert.Equal(vac.Id, results[0].Id);
         Assert.Equal(vac.Id, results[0].VacancyId);
         Assert.Equal("Important note", results[0].Notes);
         Assert.NotNull(results[0].Vacancy);
@@ -79,32 +79,32 @@ public sealed class SavedVacancyServiceTests
     }
 
     [Fact]
-    public async Task GetByIdAsync_Found_ReturnsMappedDto()
+    public async Task GetByIdAsync_Found_ReturnsMappedDtoWithVacancyIdAsId()
     {
         // Arrange
         Guid userId = Guid.NewGuid();
-        Guid savedId = Guid.NewGuid();
+        Guid vacancyId = Guid.NewGuid();
         SavedVacancyDB entity = new()
         {
-            Id = savedId,
             UserId = userId,
-            VacancyId = Guid.NewGuid(),
+            VacancyId = vacancyId,
             Notes = "Interview scheduled",
             SavedAt = DateTimeOffset.UtcNow
         };
         _savedRepo.SavedVacancies.Add(entity);
 
         // Act
-        SavedVacancyDto? result = await _service.GetByIdAsync(savedId, userId);
+        SavedVacancyDto? result = await _service.GetByIdAsync(vacancyId, userId);
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal(savedId, result.Id);
+        Assert.Equal(vacancyId, result.Id);
+        Assert.Equal(vacancyId, result.VacancyId);
         Assert.Equal("Interview scheduled", result.Notes);
     }
 
     [Fact]
-    public async Task SaveAsync_SavesRecord_InvalidatesVacancyCache_AndReturnsDto()
+    public async Task SaveAsync_SavesRecord_InvalidatesVacancyCache_AndReturnsDtoWithVacancyId()
     {
         // Arrange
         Guid userId = Guid.NewGuid();
@@ -119,7 +119,7 @@ public sealed class SavedVacancyServiceTests
         SavedVacancyDto result = await _service.SaveAsync(request, userId);
 
         // Assert
-        Assert.NotEqual(Guid.Empty, result.Id);
+        Assert.Equal(vacancyId, result.Id);
         Assert.Equal(vacancyId, result.VacancyId);
         Assert.Equal("Follow up next Monday", result.Notes);
         Assert.Single(_savedRepo.SavedVacancies);
@@ -129,27 +129,56 @@ public sealed class SavedVacancyServiceTests
     }
 
     [Fact]
+    public async Task SaveAsync_WhenDuplicateBookmarkExists_ThrowsDuplicateSavedVacancyException()
+    {
+        // Arrange
+        Guid userId = Guid.NewGuid();
+        Guid vacancyId = Guid.NewGuid();
+        SaveVacancyRequest request = new() { VacancyId = vacancyId };
+        await _service.SaveAsync(request, userId);
+
+        // Act & Assert
+        DuplicateSavedVacancyException ex = await Assert.ThrowsAsync<DuplicateSavedVacancyException>(
+            () => _service.SaveAsync(request, userId));
+
+        Assert.Equal(vacancyId, ex.VacancyId);
+        Assert.Single(_savedRepo.SavedVacancies);
+    }
+
+    [Fact]
+    public async Task SaveAsync_WhenNonDuplicateDbUpdateExceptionOccurs_RethrowsDbUpdateException()
+    {
+        // Arrange
+        Guid userId = Guid.NewGuid();
+        Guid vacancyId = Guid.NewGuid();
+        var repo = new ForeignKeyFailingSavedVacancyRepository();
+        var service = new SavedVacancyService(repo, _cacheService, _logger);
+
+        // Act & Assert
+        await Assert.ThrowsAsync<DbUpdateException>(
+            () => service.SaveAsync(new SaveVacancyRequest { VacancyId = vacancyId }, userId));
+    }
+
+    [Fact]
     public async Task DeleteAsync_Existing_RemovesRecord_InvalidatesVacancyCache_AndReturnsTrue()
     {
         // Arrange
         Guid userId = Guid.NewGuid();
-        Guid savedId = Guid.NewGuid();
         Guid vacancyId = Guid.NewGuid();
 
         SavedVacancyDB entity = new()
         {
-            Id = savedId,
             UserId = userId,
             VacancyId = vacancyId
         };
         _savedRepo.SavedVacancies.Add(entity);
 
         // Act
-        bool result = await _service.DeleteAsync(savedId, userId);
+        bool result = await _service.DeleteAsync(vacancyId, userId);
 
         // Assert
         Assert.True(result);
-        Assert.Contains(savedId, _savedRepo.DeleteCalls);
+        Assert.Empty(_savedRepo.SavedVacancies);
         Assert.Contains(vacancyId, _cacheService.InvalidateVacancyCalls);
     }
 
@@ -185,5 +214,26 @@ public sealed class SavedVacancyServiceTests
     {
         await Assert.ThrowsAsync<ArgumentException>(() => _service.DeleteAsync(Guid.Empty, Guid.NewGuid()));
         await Assert.ThrowsAsync<ArgumentException>(() => _service.DeleteAsync(Guid.NewGuid(), Guid.Empty));
+    }
+
+    private sealed class ForeignKeyFailingSavedVacancyRepository : Waterfall.Repository.Interfaces.ISavedVacancyRepository
+    {
+        public Task<IReadOnlyList<SavedVacancyDB>> GetAllAsync(Guid userId, bool onlyActive = true, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<SavedVacancyDB>>([]);
+
+        public Task<SavedVacancyDB?> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult<SavedVacancyDB?>(null);
+
+        public Task<SavedVacancyDB> SaveAsync(SavedVacancyDB entity, CancellationToken ct = default) =>
+            throw new DbUpdateException("FK error", new InvalidOperationException("FOREIGN KEY constraint failed"));
+
+        public Task<bool> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(false);
+
+        public Task<bool> ExistsForVacancyAsync(Guid vacancyId, Guid? userId, CancellationToken ct = default) =>
+            Task.FromResult(false);
+
+        public Task<HashSet<Guid>> GetSavedVacancyIdsAsync(IEnumerable<Guid> vacancyIds, Guid userId, CancellationToken ct = default) =>
+            Task.FromResult(new HashSet<Guid>());
     }
 }

@@ -23,4 +23,7 @@ public class UserPersonalDataDB
     public string? Address { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    [ForeignKey(nameof(UserId))]
+    public UserDB User { get; set; } = null!;
 }

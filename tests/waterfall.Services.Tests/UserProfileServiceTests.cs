@@ -3,6 +3,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Waterfall.Repository.Data;
+using Waterfall.Repository.Entities;
 using Waterfall.Services;
 
 namespace Waterfall.Services.Tests;
@@ -36,12 +37,27 @@ public class UserProfileServiceTests : IDisposable
         Assert.Null(address);
     }
 
+    private static async Task<Guid> SeedUserAsync(WaterfallDbContext db)
+    {
+        Guid userId = Guid.NewGuid();
+        db.Users.Add(new UserDB
+        {
+            Id = userId,
+            Email = $"user-{userId:N}@waterfall.test",
+            PasswordHash = "hash",
+            Role = "JobSeeker"
+        });
+        await db.SaveChangesAsync();
+        return userId;
+    }
+
     [Fact]
     public async Task SaveUserAddressAsync_CreatesNewRecord_WhenNoneExists()
     {
-        Guid userId = Guid.NewGuid();
+        Guid userId;
         using (WaterfallDbContext db = new(_options))
         {
+            userId = await SeedUserAsync(db);
             UserProfileService service = new(db);
             await service.SaveUserAddressAsync(userId, "  Київ, вул. Мечникова, 2  ");
         }
@@ -57,9 +73,10 @@ public class UserProfileServiceTests : IDisposable
     [Fact]
     public async Task SaveUserAddressAsync_UpdatesExistingRecord()
     {
-        Guid userId = Guid.NewGuid();
+        Guid userId;
         using (WaterfallDbContext db = new(_options))
         {
+            userId = await SeedUserAsync(db);
             UserProfileService service = new(db);
             await service.SaveUserAddressAsync(userId, "Київ, вул. Мечникова, 2");
         }

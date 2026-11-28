@@ -10,6 +10,7 @@ namespace Waterfall.Repository.Tests;
 public sealed class WaterfallMigrationsTests
 {
     private const string InitialMigrationId = "20261127000001_InitialSchema";
+    private const string SavedIntegrityMigrationId = "20261127215638_RestoreSavedVacanciesIntegrity";
 
     [Fact]
     public async Task MigrateAsync_OnEmptySqliteDatabase_CreatesSchemaAndRecordsInitialMigrationHistory()
@@ -29,7 +30,7 @@ public sealed class WaterfallMigrationsTests
         // Assert
         List<string> applied = (await db.Database.GetAppliedMigrationsAsync()).ToList();
         List<string> pending = (await db.Database.GetPendingMigrationsAsync()).ToList();
-        Assert.Equal([InitialMigrationId], applied);
+        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId], applied);
         Assert.Empty(pending);
         Assert.Equal(0, await db.Vacancies.CountAsync());
         Assert.Equal(0, await db.SiteSearchCache.CountAsync());
@@ -179,6 +180,57 @@ public sealed class WaterfallMigrationsTests
         Assert.Equal(WorkFormat.None, preserved.WorkFormat);
         Assert.Equal(0, await db.SiteSearchCache.CountAsync());
         Assert.Equal(0, await db.ChatSessions.CountAsync());
-        Assert.Equal([InitialMigrationId], await db.Database.GetAppliedMigrationsAsync());
+        Assert.Equal([InitialMigrationId, SavedIntegrityMigrationId], await db.Database.GetAppliedMigrationsAsync());
+    }
+
+    [Fact]
+    public async Task MigrateAsync_FromInitialSchema_DeduplicatesSavedVacanciesAndEnforcesCompositeKey()
+    {
+        // Arrange: мігруємо до InitialSchema та вставляємо дубль, null UserId і "висячий" рядок
+        await using SqliteConnection connection = new("DataSource=:memory:");
+        await connection.OpenAsync();
+        DbContextOptions<WaterfallDbContext> options = new DbContextOptionsBuilder<WaterfallDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        Guid userId = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        Guid vacancyId = Guid.Parse("22222222-2222-2222-2222-222222222222");
+
+        await using (WaterfallDbContext initialDb = new(options))
+        {
+            await initialDb.GetService<IMigrator>().MigrateAsync(InitialMigrationId);
+            Microsoft.EntityFrameworkCore.Storage.ValueConversion.DateTimeOffsetToBinaryConverter converter = new();
+            long t100 = (long)converter.ConvertToProvider(new DateTimeOffset(2026, 11, 20, 0, 0, 0, TimeSpan.Zero))!;
+            long t200 = (long)converter.ConvertToProvider(new DateTimeOffset(2026, 11, 27, 0, 0, 0, TimeSpan.Zero))!;
+            long t300 = (long)converter.ConvertToProvider(new DateTimeOffset(2026, 11, 28, 0, 0, 0, TimeSpan.Zero))!;
+            await initialDb.Database.ExecuteSqlInterpolatedAsync(
+                $"""
+                INSERT INTO "Users" ("Id", "Email", "PasswordHash", "Role", "CreatedAt")
+                VALUES ('11111111-1111-1111-1111-111111111111', 'u@test.local', 'hash', 'JobSeeker', {t100});
+                INSERT INTO "Vacancies" ("Id", "Title", "Company", "Description", "Category", "Location", "WorkFormat", "Currency", "Source", "SourceUrl", "SkillsJson", "SearchText", "PublishedAt", "FirstSeenAt", "LastSeenAt", "IsActive")
+                VALUES ('22222222-2222-2222-2222-222222222222', 'Dev', 'Co', 'Desc', '.NET', 'Київ', 0, 'USD', 'Djinni', 'https://djinni.co/1', '[]', 'dev', {t100}, {t100}, {t100}, 1);
+                INSERT INTO "SavedVacancies" ("Id", "VacancyId", "UserId", "Notes", "SavedAt")
+                VALUES
+                    ('aaaa0001-0000-0000-0000-000000000001', '22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'older note', {t100}),
+                    ('aaaa0002-0000-0000-0000-000000000002', '22222222-2222-2222-2222-222222222222', '11111111-1111-1111-1111-111111111111', 'newest note', {t200}),
+                    ('aaaa0003-0000-0000-0000-000000000003', '22222222-2222-2222-2222-222222222222', NULL, 'orphan null user', {t300});
+                INSERT INTO "UserPersonalData" ("Id", "UserId", "Address", "UpdatedAt")
+                VALUES ('bbbb0001-0000-0000-0000-000000000001', '99999999-9999-9999-9999-999999999999', 'Ghost street', {t100});
+                """);
+        }
+
+        // Act
+        await using (WaterfallDbContext migratedDb = new(options))
+        {
+            await migratedDb.Database.MigrateAsync();
+
+            // Assert
+            List<SavedVacancyDB> rows = await migratedDb.SavedVacancies.AsNoTracking().ToListAsync();
+            Assert.Single(rows);
+            Assert.Equal(userId, rows[0].UserId);
+            Assert.Equal(vacancyId, rows[0].VacancyId);
+            Assert.Equal("newest note", rows[0].Notes);
+            Assert.Equal(0, await migratedDb.UserPersonalData.CountAsync());
+        }
     }
 }

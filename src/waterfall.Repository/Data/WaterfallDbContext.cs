@@ -75,6 +75,28 @@ public class WaterfallDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
+        // Складений ключ (UserId, VacancyId) не дає зберегти ту саму вакансію двічі для одного користувача
+        modelBuilder.Entity<SavedVacancyDB>()
+            .HasKey(s => new { s.UserId, s.VacancyId });
+
+        modelBuilder.Entity<SavedVacancyDB>()
+            .HasOne(s => s.User)
+            .WithMany()
+            .HasForeignKey(s => s.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<SavedVacancyDB>()
+            .HasOne(s => s.Vacancy)
+            .WithMany()
+            .HasForeignKey(s => s.VacancyId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<UserPersonalDataDB>()
+            .HasOne(p => p.User)
+            .WithMany()
+            .HasForeignKey(p => p.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         // Складений ключ (message_id, vacancy_id) не дає зберегти ту саму вакансію в одній відповіді двічі
         modelBuilder.Entity<ChatMessageVacancyDB>()
             .HasKey(link => new { link.MessageId, link.VacancyId });
