@@ -31,6 +31,7 @@ public partial class VacancyItemViewModel : ObservableObject
     private readonly IUrlLauncher _urlLauncher;
     private readonly IDistanceCalculatorService? _distanceService;
     private readonly Action<Guid, double?>? _onDistanceCalculated;
+    private readonly VacancySelectionState? _selectionState;
 
     private bool _distanceLoadAttempted;
     private string? _distanceLoadedForAddress;
@@ -50,6 +51,7 @@ public partial class VacancyItemViewModel : ObservableObject
     /// <param name="notes">Нотатка користувача до збереженої вакансії (FR-005, лише читання).</param>
     /// <param name="canSave">Чи дозволено зберігати вакансію в «Обране» (лише авторизований JobSeeker за FR-005/FR-008).</param>
     /// <param name="canUseAi">Чи дозволено надсилати вакансію ШІ-консультанту (лише JobSeeker).</param>
+    /// <param name="selectionState">Стан групового вибору для ШІ-аналізу в межах списку.</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
@@ -62,7 +64,8 @@ public partial class VacancyItemViewModel : ObservableObject
         bool canMarkViewed = true,
         string? notes = null,
         bool canSave = true,
-        bool canUseAi = true)
+        bool canUseAi = true,
+        VacancySelectionState? selectionState = null)
     {
         Vacancy = vacancy;
         Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
@@ -72,12 +75,13 @@ public partial class VacancyItemViewModel : ObservableObject
         _urlLauncher = urlLauncher ?? new Waterfall.Client.Services.DefaultUrlLauncher();
         _distanceService = distanceService;
         _onDistanceCalculated = onDistanceCalculated;
+        _selectionState = selectionState;
         IsSaved = canSave && vacancy.IsSaved;
         CanMarkViewed = canMarkViewed;
         CanSave = canSave;
         CanUseAi = canUseAi;
         IsViewed = canMarkViewed && vacancy.IsViewed;
-        VacancySelectionState.Register(this);
+        _selectionState?.Register(this);
         Category = string.IsNullOrWhiteSpace(vacancy.Category) ? "Інше" : vacancy.Category;
         CategoryGroup = !string.IsNullOrWhiteSpace(vacancy.CategoryGroup)
             ? vacancy.CategoryGroup
@@ -638,30 +642,25 @@ public partial class VacancyItemViewModel : ObservableObject
     public string ViewedButtonText => IsViewed ? "Зняти позначку переглянуто" : "Позначити як переглянуто";
 
     /// <summary>
-    /// Відписує картку від messenger, коли сторінка списку її відпускає (лінива матеріалізація).
-    /// </summary>
-    internal void Detach() => _messenger.UnregisterAll(this);
-
-    /// <summary>
     /// Чи позначено картку для групового ШІ-аналізу (FR-010, до 3 вакансій).
     /// </summary>
-    public bool IsSelected => VacancySelectionState.Contains(Id);
+    public bool IsSelected => _selectionState?.Contains(Id) == true;
 
     /// <summary>
     /// Скільки вакансій уже вибрано; у режимі вибору показується в кнопці ШІ-аналізу.
     /// </summary>
-    public int SelectedCount => VacancySelectionState.Count;
+    public int SelectedCount => _selectionState?.Count ?? 0;
 
     /// <summary>
     /// Ліміт вибору досягнуто, а ця картка ще не вибрана — чекбокс неактивний.
     /// </summary>
-    public bool IsSelectionLocked => !IsSelected && VacancySelectionState.Count >= VacancySelectionState.MaxSelected;
+    public bool IsSelectionLocked => !IsSelected && (_selectionState?.Count ?? 0) >= VacancySelectionState.MaxSelected;
 
     /// <summary>
     /// Текст кнопки ШІ-аналізу: для вибраної картки показує розмір групи.
     /// </summary>
-    public string SelectionBadgeText => IsSelected && VacancySelectionState.Count > 1
-        ? $"ШІ-аналіз ({VacancySelectionState.Count})"
+    public string SelectionBadgeText => IsSelected && (_selectionState?.Count ?? 0) > 1
+        ? $"ШІ-аналіз ({_selectionState!.Count})"
         : "ШІ-аналіз";
 
     public string SelectionHintText => IsSelected
@@ -679,7 +678,12 @@ public partial class VacancyItemViewModel : ObservableObject
     [RelayCommand]
     private void ToggleSelection()
     {
-        if (!VacancySelectionState.Toggle(Vacancy))
+        if (!CanUseAi || _selectionState is null)
+        {
+            return;
+        }
+
+        if (!_selectionState.Toggle(Vacancy))
         {
             SelectionLimitReached?.Invoke(this, EventArgs.Empty);
         }
@@ -753,13 +757,18 @@ public partial class VacancyItemViewModel : ObservableObject
     [RelayCommand]
     private void AnalyzeWithAi()
     {
-        bool isSelected = VacancySelectionState.Contains(Id);
-        bool isGroup = isSelected && VacancySelectionState.Count > 1;
-        IReadOnlyList<VacancyDto> batch = isGroup ? VacancySelectionState.Snapshot() : [Vacancy];
+        if (!CanUseAi)
+        {
+            return;
+        }
+
+        bool isSelected = _selectionState?.Contains(Id) == true;
+        bool isGroup = isSelected && _selectionState!.Count > 1;
+        IReadOnlyList<VacancyDto> batch = isGroup ? _selectionState!.Snapshot() : [Vacancy];
         if (isSelected)
         {
             // Після запуску аналізу режим вибору скидається, щоб старі позначки не потрапили в наступний запит.
-            VacancySelectionState.Clear();
+            _selectionState!.Clear();
         }
 
         if (isGroup)
@@ -803,6 +812,11 @@ public partial class VacancyItemViewModel : ObservableObject
     [RelayCommand]
     private async Task ToggleSaveAsync()
     {
+        if (!CanSave)
+        {
+            return;
+        }
+
         bool target = !IsSaved;
         try
         {
@@ -842,58 +856,58 @@ public partial class VacancyItemViewModel : ObservableObject
 }
 
 /// <summary>
-/// Спільний для всіх вкладок стан вибору вакансій для ШІ-аналізу (FR-010).
+/// Стан вибору вакансій у межах списку для групового ШІ-аналізу (FR-010).
 /// Сервер приймає 1–3 вакансії за один запит, тож четверту позначку картка просто ігнорує.
 /// </summary>
-public static class VacancySelectionState
+public sealed class VacancySelectionState
 {
     public const int MaxSelected = 3;
 
-    private static readonly List<VacancyDto> s_selected = [];
-    private static readonly List<WeakReference<VacancyItemViewModel>> s_listeners = [];
-    private static readonly object s_sync = new();
+    private readonly List<VacancyDto> _selected = [];
+    private readonly List<WeakReference<VacancyItemViewModel>> _listeners = [];
+    private readonly object _sync = new();
 
     /// <summary>Сповіщає сторінки про зміну вибору (лічильник і панель дій).</summary>
-    public static event Action? Changed;
+    public event Action? Changed;
 
-    public static int Count
+    public int Count
     {
         get
         {
-            lock (s_sync)
+            lock (_sync)
             {
-                return s_selected.Count;
+                return _selected.Count;
             }
         }
     }
 
-    public static bool Contains(Guid vacancyId)
+    public bool Contains(Guid vacancyId)
     {
-        lock (s_sync)
+        lock (_sync)
         {
-            return s_selected.Any(v => v.Id == vacancyId);
+            return _selected.Any(v => v.Id == vacancyId);
         }
     }
 
     /// <summary>
     /// Додає або прибирає вакансію. Повертає false, якщо ліміт у 3 вакансії вже вичерпано.
     /// </summary>
-    public static bool Toggle(VacancyDto vacancy)
+    public bool Toggle(VacancyDto vacancy)
     {
-        lock (s_sync)
+        lock (_sync)
         {
-            int index = s_selected.FindIndex(v => v.Id == vacancy.Id);
+            int index = _selected.FindIndex(v => v.Id == vacancy.Id);
             if (index >= 0)
             {
-                s_selected.RemoveAt(index);
+                _selected.RemoveAt(index);
             }
-            else if (s_selected.Count >= MaxSelected)
+            else if (_selected.Count >= MaxSelected)
             {
                 return false;
             }
             else
             {
-                s_selected.Add(vacancy);
+                _selected.Add(vacancy);
             }
         }
 
@@ -901,45 +915,45 @@ public static class VacancySelectionState
         return true;
     }
 
-    public static IReadOnlyList<VacancyDto> Snapshot()
+    public IReadOnlyList<VacancyDto> Snapshot()
     {
-        lock (s_sync)
+        lock (_sync)
         {
-            return s_selected.ToArray();
+            return _selected.ToArray();
         }
     }
 
-    public static void Clear()
+    public void Clear()
     {
-        lock (s_sync)
+        lock (_sync)
         {
-            if (s_selected.Count == 0)
+            if (_selected.Count == 0)
             {
                 return;
             }
 
-            s_selected.Clear();
+            _selected.Clear();
         }
 
         NotifyListeners();
     }
 
-    internal static void Register(VacancyItemViewModel viewModel)
+    internal void Register(VacancyItemViewModel viewModel)
     {
-        lock (s_sync)
+        lock (_sync)
         {
             PruneDeadListeners();
-            s_listeners.Add(new WeakReference<VacancyItemViewModel>(viewModel));
+            _listeners.Add(new WeakReference<VacancyItemViewModel>(viewModel));
         }
     }
 
-    private static void NotifyListeners()
+    private void NotifyListeners()
     {
         List<VacancyItemViewModel> listeners = [];
-        lock (s_sync)
+        lock (_sync)
         {
             PruneDeadListeners();
-            foreach (WeakReference<VacancyItemViewModel> reference in s_listeners)
+            foreach (WeakReference<VacancyItemViewModel> reference in _listeners)
             {
                 if (reference.TryGetTarget(out VacancyItemViewModel? viewModel))
                 {
@@ -956,13 +970,13 @@ public static class VacancySelectionState
         Changed?.Invoke();
     }
 
-    private static void PruneDeadListeners()
+    private void PruneDeadListeners()
     {
-        for (int i = s_listeners.Count - 1; i >= 0; i--)
+        for (int i = _listeners.Count - 1; i >= 0; i--)
         {
-            if (!s_listeners[i].TryGetTarget(out _))
+            if (!_listeners[i].TryGetTarget(out _))
             {
-                s_listeners.RemoveAt(i);
+                _listeners.RemoveAt(i);
             }
         }
     }

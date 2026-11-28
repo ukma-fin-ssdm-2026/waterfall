@@ -689,6 +689,106 @@ public class VacancyItemViewModelTests
         Assert.Equal("4.1 км від вас", item.DistanceText);
     }
 
+    [Theory]
+    [InlineData(null, false, null)]
+    [InlineData("   ", false, null)]
+    [InlineData("  Перевірити команду  ", true, "Нотатка: Перевірити команду")]
+    public void NotesDisplay_TrimsAndHidesEmptyValues(string? rawNotes, bool expectedHasNotes, string? expectedDisplay)
+    {
+        VacancyItemViewModel item = new(
+            new VacancyDto { Id = Guid.NewGuid(), Title = "Backend", Description = "Desc" },
+            _gateway,
+            _messenger,
+            _errors.Add,
+            notes: rawNotes);
+
+        Assert.Equal(expectedHasNotes, item.HasNotes);
+        Assert.Equal(expectedDisplay, item.NotesDisplay);
+    }
+
+    [Fact]
+    public async Task CanSaveFalse_SuppressesInitialSavedStateAndBlocksToggle()
+    {
+        VacancyItemViewModel item = new(
+            new VacancyDto { Id = Guid.NewGuid(), Title = "Backend", Description = "Desc", IsSaved = true },
+            _gateway,
+            _messenger,
+            _errors.Add,
+            canSave: false);
+
+        Assert.False(item.CanSave);
+        Assert.False(item.IsSaved);
+
+        await item.ToggleSaveCommand.ExecuteAsync(null);
+
+        Assert.Empty(_gateway.ToggleCalls);
+        Assert.Empty(_sent);
+    }
+
+    [Fact]
+    public void CanUseAiFalse_BlocksAnalyzeAndSelection()
+    {
+        VacancySelectionState selection = new();
+        List<AnalyzeVacancyRequestedMessage> aiRequests = [];
+        _messenger.Register<AnalyzeVacancyRequestedMessage>(this, (_, m) => aiRequests.Add(m));
+
+        VacancyItemViewModel item = new(
+            new VacancyDto { Id = Guid.NewGuid(), Title = "Backend", Description = "Desc" },
+            _gateway,
+            _messenger,
+            _errors.Add,
+            canUseAi: false,
+            selectionState: selection);
+
+        item.ToggleSelectionCommand.Execute(null);
+        item.AnalyzeWithAiCommand.Execute(null);
+
+        Assert.Equal(0, selection.Count);
+        Assert.False(item.IsSelected);
+        Assert.Empty(aiRequests);
+    }
+
+    [Fact]
+    public void VacancySelectionState_CapsAtThree_RaisesLimitEvent_AndSendsGroupMessage()
+    {
+        VacancySelectionState selection = new();
+        List<AnalyzeVacanciesRequestedMessage> groupMessages = [];
+        _messenger.Register<AnalyzeVacanciesRequestedMessage>(this, (_, m) => groupMessages.Add(m));
+
+        VacancyItemViewModel CreateCard(string title) => new(
+            new VacancyDto { Id = Guid.NewGuid(), Title = title, Description = "Desc" },
+            _gateway,
+            _messenger,
+            _errors.Add,
+            selectionState: selection);
+
+        VacancyItemViewModel c1 = CreateCard("V1");
+        VacancyItemViewModel c2 = CreateCard("V2");
+        VacancyItemViewModel c3 = CreateCard("V3");
+        VacancyItemViewModel c4 = CreateCard("V4");
+        int limitHits = 0;
+        c4.SelectionLimitReached += (_, _) => limitHits++;
+
+        c1.ToggleSelectionCommand.Execute(null);
+        c2.ToggleSelectionCommand.Execute(null);
+        c3.ToggleSelectionCommand.Execute(null);
+        c4.ToggleSelectionCommand.Execute(null);
+
+        Assert.Equal(3, selection.Count);
+        Assert.True(c1.IsSelected);
+        Assert.False(c4.IsSelected);
+        Assert.True(c4.IsSelectionLocked);
+        Assert.Equal(1, limitHits);
+        Assert.Equal("ШІ-аналіз (3)", c1.SelectionBadgeText);
+
+        c1.AnalyzeWithAiCommand.Execute(null);
+
+        AnalyzeVacanciesRequestedMessage sent = Assert.Single(groupMessages);
+        Assert.Equal(["V1", "V2", "V3"], sent.Vacancies.Select(v => v.Title));
+        Assert.Equal(0, selection.Count);
+        Assert.False(c2.IsSelected);
+    }
+
     private sealed class FakeDistanceService : IDistanceCalculatorService
     {
         public string? UserAddress { get; set; } = "вул. Хрещатик, 22, Київ";

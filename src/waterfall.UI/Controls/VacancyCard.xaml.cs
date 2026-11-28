@@ -242,6 +242,7 @@ public partial class VacancyCard : ContentView
             ViewedIconLabel.Text = Icons.Eye;
             ViewedIconLabel.TextColor = p.TextMuted;
             DetailsChevronLabel.TextColor = p.TextMuted;
+            SelectBorder.IsVisible = false;
             SelectBorder.Stroke = s_heartMutedBrush;
             SelectBorder.BackgroundColor = Colors.Transparent;
             SelectBorder.Opacity = 1.0;
@@ -357,6 +358,7 @@ public partial class VacancyCard : ContentView
         DescriptionLabel.Text = string.Empty;
         NotesLabel.Text = string.Empty;
         NotesLabel.IsVisible = false;
+        SelectBorder.IsVisible = false;
         SelectBorder.Stroke = s_heartMutedBrush;
         SelectBorder.BackgroundColor = Colors.Transparent;
         SelectBorder.Opacity = 1.0;

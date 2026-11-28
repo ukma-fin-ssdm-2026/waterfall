@@ -98,10 +98,6 @@ public sealed class PhoneHostPage : ContentPage, IAppNavigationHost
             {
                 _ = host.RefreshRoleAsync();
             });
-            messenger.Register<PhoneHostPage, NavigateToRouteMessage>(this, static (host, message) =>
-            {
-                _ = host.NavigateToAsync(message.Route);
-            });
         }
 
         _ = NavigateToAsync("catalog");

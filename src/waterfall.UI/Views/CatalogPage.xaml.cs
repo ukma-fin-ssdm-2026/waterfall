@@ -186,6 +186,15 @@ public partial class CatalogPage : ContentPage, IHostedPage
         }
     }
 
+    private void OnToggleSelectionModeTapped(object? sender, TappedEventArgs e)
+    {
+        OverflowMenuLayer.IsVisible = false;
+        if (_viewModel.ToggleSelectionModeCommand.CanExecute(null))
+        {
+            _viewModel.ToggleSelectionModeCommand.Execute(null);
+        }
+    }
+
     private void OnToggleWorkUaSpheresClicked(object? sender, EventArgs e) => ToggleWorkUaSpheres();
 
     private void OnToggleWorkUaSpheresTapped(object? sender, TappedEventArgs e) => ToggleWorkUaSpheres();

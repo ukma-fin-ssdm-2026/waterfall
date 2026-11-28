@@ -156,4 +156,25 @@ public class FavoritesViewModelTests
         await _vm.EnsureLoadedCommand.ExecuteAsync(null);
         Assert.Equal(3, _gateway.SavedCalls);
     }
+
+    [Fact]
+    public async Task Load_PropagatesNotesToVacancyCard()
+    {
+        _gateway.Saved = () =>
+        [
+            new SavedVacancyDto
+            {
+                Id = Guid.NewGuid(),
+                SavedAt = T0,
+                Notes = "  Цікавий проєкт з AI  ",
+                Vacancy = new VacancyDto { Id = Guid.NewGuid(), Title = "ML Engineer" }
+            }
+        ];
+
+        await _vm.LoadCommand.ExecuteAsync(null);
+
+        VacancyItemViewModel card = Assert.Single(_vm.Vacancies);
+        Assert.True(card.HasNotes);
+        Assert.Equal("Нотатка: Цікавий проєкт з AI", card.NotesDisplay);
+    }
 }

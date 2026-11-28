@@ -169,7 +169,6 @@ public partial class SystemSettingsPage : ContentPage, IHostedPage
 
     private void OnDismissStatusClicked(object? sender, EventArgs e)
     {
-        // Закриття банера лише ховає повідомлення; скидання налаштувань — окрема кнопка «Скинути».
-        _viewModel.DismissStatus();
+        _viewModel.StatusMessage = string.Empty;
     }
 }

@@ -539,6 +539,20 @@
                 <Border StrokeShape="RoundRectangle 8"
                         StrokeThickness="0"
                         BackgroundColor="Transparent"
+                        Padding="10,9"
+                        IsVisible="{Binding CanTrackViews}">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnToggleSelectionModeTapped" />
+                    </Border.GestureRecognizers>
+                    <HorizontalStackLayout Spacing="10" VerticalOptions="Center">
+                        <Label Text="{x:Static res:Icons.Sparkles}" FontFamily="Lucide" FontSize="14" TextColor="{DynamicResource Primary}" VerticalOptions="Center" />
+                        <Label Text="Обрати для ШІ" FontSize="13" TextColor="{DynamicResource White}" VerticalOptions="Center" />
+                    </HorizontalStackLayout>
+                </Border>
+
+                <Border StrokeShape="RoundRectangle 8"
+                        StrokeThickness="0"
+                        BackgroundColor="Transparent"
                         Padding="10,9">
                     <Border.GestureRecognizers>
                         <TapGestureRecognizer Tapped="OnImportJsonTapped" />

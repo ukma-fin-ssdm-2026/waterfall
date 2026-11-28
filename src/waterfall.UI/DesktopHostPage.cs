@@ -85,10 +85,6 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
             {
                 _ = host.RefreshRoleAsync();
             });
-            messenger.Register<DesktopHostPage, NavigateToRouteMessage>(this, static (host, message) =>
-            {
-                _ = host.NavigateToAsync(message.Route);
-            });
         }
 
         _ = NavigateToAsync("catalog");

@@ -38,6 +38,7 @@
                                    Spacing="2"
                                    VerticalOptions="Start">
                 <Border x:Name="SelectBorder"
+                        IsVisible="False"
                         WidthRequest="34"
                         HeightRequest="34"
                         StrokeShape="RoundRectangle 9"
