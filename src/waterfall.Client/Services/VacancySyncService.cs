@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.Net;
 using CommunityToolkit.Mvvm.Messaging;
 using Waterfall.Client.Entities;
 using Waterfall.Client.Interfaces;
@@ -20,6 +21,7 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
     private readonly IHttpGatewayService _gateway;
     private readonly ILocalVacancyStore _localStore;
     private readonly IMessenger? _messenger;
+    private readonly IAuthTokenStore? _tokenStore;
     private readonly SemaphoreSlim _syncLock = new(1, 1);
     private volatile bool _isSyncing;
     private bool? _clientVacanciesAccepted;
@@ -27,11 +29,13 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
     public VacancySyncService(
         IHttpGatewayService gateway,
         ILocalVacancyStore localStore,
-        IMessenger? messenger = null)
+        IMessenger? messenger = null,
+        IAuthTokenStore? tokenStore = null)
     {
         _gateway = gateway;
         _localStore = localStore;
         _messenger = messenger;
+        _tokenStore = tokenStore;
     }
 
     public bool IsSyncing => _isSyncing;
@@ -44,6 +48,12 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
         _isSyncing = true;
         try
         {
+            if (_tokenStore is not null && string.IsNullOrWhiteSpace(await _tokenStore.GetTokenAsync(ct)))
+            {
+                LocalVacancyStats guestStats = await SafeGetStatsAsync();
+                return CreateUnauthorizedResult(guestStats, "Потрібно увійти в обліковий запис.");
+            }
+
             IReadOnlyList<ClientVacancyDB> unsynced = await _localStore.GetUnsyncedAsync(ct);
             DateTimeOffset? lastSyncedAt = fullSync ? null : await _localStore.GetLastSyncedAtAsync(ct);
 
@@ -141,6 +151,11 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
         {
             throw;
         }
+        catch (ApiException ex) when (ex.StatusCode == HttpStatusCode.Unauthorized)
+        {
+            LocalVacancyStats stats = await SafeGetStatsAsync();
+            return CreateUnauthorizedResult(stats, ex.Message);
+        }
         catch (Exception ex)
         {
             LocalVacancyStats stats = await SafeGetStatsAsync();
@@ -160,11 +175,21 @@ public sealed class VacancySyncService : IVacancySyncService, IDisposable
         }
     }
 
+    private VacancySyncResult CreateUnauthorizedResult(LocalVacancyStats stats, string errorMessage) => new()
+    {
+        Succeeded = false,
+        IsUnauthorized = true,
+        TotalLocalVacancies = stats.TotalCount,
+        SyncedAt = stats.LastSyncedAt,
+        ClientVacanciesAccepted = _clientVacanciesAccepted,
+        ErrorMessage = errorMessage
+    };
+
     private async Task<LocalVacancyStats> SafeGetStatsAsync()
     {
         try
         {
-            return await _localStore.GetStatsAsync();
+            return await _localStore.GetStatsAsync(CancellationToken.None);
         }
         catch
         {

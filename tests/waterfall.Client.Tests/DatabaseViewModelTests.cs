@@ -563,6 +563,55 @@ public sealed class DatabaseViewModelTests : IDisposable
         Assert.False(vm.IsCustomSortActive);
     }
 
+    [Fact]
+    public async Task SyncDatabase_WhenServerReturns401_DoesNotShowErrorBannerOrSwitchOffline()
+    {
+        VacancyDto localOffline = SampleFourSiteVacancies()[0] with { Title = "Guest Local Vacancy" };
+        await _localStore.SaveVacanciesAsync([localOffline], isSynced: false, CancellationToken.None);
+
+        _gateway.VacancySyncError = new ApiException(
+            System.Net.HttpStatusCode.Unauthorized,
+            null,
+            "Потрібно увійти в обліковий запис.");
+        VacancySyncService syncService = new(_gateway, _localStore, _messenger);
+        DatabaseViewModel vm = new(_gateway, _messenger, _time, localStore: _localStore, syncService: syncService);
+
+        await vm.SyncDatabaseCommand.ExecuteAsync(null);
+
+        Assert.False(vm.HasError);
+        Assert.Null(vm.ErrorMessage);
+        Assert.False(vm.HasStatusBanner);
+        Assert.Null(vm.StatusBannerText);
+        Assert.False(vm.IsOfflineMode);
+        Assert.Equal(1, vm.UnsyncedCount);
+    }
+
+    [Fact]
+    public async Task EnsureLoaded_WhenGuestHasUnsyncedVacancies_SkipsSyncAndLoadsServerCatalog()
+    {
+        VacancyDto localOffline = SampleFourSiteVacancies()[0] with { Title = "Guest Local Vacancy" };
+        await _localStore.SaveVacanciesAsync([localOffline], isSynced: false, CancellationToken.None);
+
+        SetupPagedServer(SampleFourSiteVacancies(), pageSize: 10);
+        InMemoryTokenStore guestTokenStore = new();
+        VacancySyncService syncService = new(_gateway, _localStore, _messenger, guestTokenStore);
+        DatabaseViewModel vm = new(
+            _gateway,
+            _messenger,
+            _time,
+            localStore: _localStore,
+            syncService: syncService,
+            tokenStore: guestTokenStore);
+
+        await vm.EnsureLoadedCommand.ExecuteAsync(null);
+
+        Assert.Empty(_gateway.VacancySyncRequests);
+        Assert.False(vm.HasError);
+        Assert.Null(vm.ErrorMessage);
+        Assert.Equal(4, vm.TotalInDatabase);
+        Assert.Equal(1, vm.UnsyncedCount);
+    }
+
     private sealed class StubDistanceService : IDistanceCalculatorService
     {
         public string? UserAddress { get; set; }

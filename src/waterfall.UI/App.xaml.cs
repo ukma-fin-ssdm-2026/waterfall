@@ -146,14 +146,22 @@ public partial class App : Application
     {
         try
         {
+            string? token = _tokenStore is null
+                ? null
+                : await _tokenStore.GetTokenAsync(CancellationToken.None);
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                return;
+            }
+
             if (_vacancySyncService is not null)
             {
-                await _vacancySyncService.SyncWithServerAsync(fullSync: false);
+                await _vacancySyncService.SyncWithServerAsync(fullSync: false, CancellationToken.None);
             }
 
             if (_distanceService is GeoDistanceService geoService)
             {
-                await geoService.SyncWithServerAsync();
+                await geoService.SyncWithServerAsync(CancellationToken.None);
             }
         }
         catch

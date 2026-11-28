@@ -685,11 +685,13 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         try
         {
             // Якщо є несинхронізовані офлайн-вакансії і сервер доступний — спочатку обмінюємося даними.
-            // Коли сервер не приймає вакансії клієнта, вивантаження не дасть нічого, тож його пропускаємо.
+            // Коли сервер не приймає вакансії клієнта або користувач у гостьовому режимі, вивантаження пропускаємо.
             if (_syncService is not null && _localStore is not null)
             {
+                bool hasAuthToken = _tokenStore is null
+                    || !string.IsNullOrWhiteSpace(await _tokenStore.GetTokenAsync(cts.Token));
                 LocalVacancyStats preStats = await _localStore.GetStatsAsync(cts.Token);
-                if (preStats.UnsyncedCount > 0 && ClientUploadsAccepted)
+                if (hasAuthToken && preStats.UnsyncedCount > 0 && ClientUploadsAccepted)
                 {
                     VacancySyncResult autoSync = await _syncService.SyncWithServerAsync(fullSync: false, cts.Token);
                     if (autoSync.Succeeded)
@@ -721,14 +723,17 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
         {
             // Скасовано новим оновленням
         }
-        catch (ApiException ex) when (ex.StatusCode is null && _localStore is not null)
+        catch (ApiException ex) when (ex.StatusCode is (null or System.Net.HttpStatusCode.Unauthorized) && _localStore is not null)
         {
-            // Офлайн-режим: завантажуємо повну локальну базу SQLite клієнта
+            // Офлайн або гостьовий режим: завантажуємо повну локальну базу SQLite клієнта без помилкового банера
             IReadOnlyList<VacancyDto> local = await _localStore.GetAllAsync(CancellationToken.None);
-            IsOfflineMode = true;
+            IsOfflineMode = ex.StatusCode is null;
             await SetDatabaseVacanciesAsync(local.ToList());
             await RefreshLocalStatsAsync(CancellationToken.None);
-            StatusBannerText = $"Офлайн-режим: відкрито локальну базу ({local.Count} вакансій)";
+            if (ex.StatusCode is null)
+            {
+                StatusBannerText = $"Офлайн-режим: відкрито локальну базу ({local.Count} вакансій)";
+            }
         }
         catch (ApiException ex)
         {
@@ -821,6 +826,12 @@ public partial class DatabaseViewModel : ObservableObject, IDisposable
                     ? $"Синхронізація завершена: надіслано {result.UploadedToServer}, отримано {result.DownloadedFromServer} (нових: {result.AddedLocally})"
                     : $"Каталог оновлено: отримано {result.DownloadedFromServer} (нових: {result.AddedLocally}); локальні вакансії лишилися на пристрої";
                 await LoadDatabaseAsync();
+            }
+            else if (result.IsUnauthorized)
+            {
+                // Гостьовий / неавтентифікований режим: локальна база лишається доступною без банера помилки
+                ErrorMessage = null;
+                StatusBannerText = null;
             }
             else
             {

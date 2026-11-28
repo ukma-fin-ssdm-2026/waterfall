@@ -1,5 +1,6 @@
 // Код згенеровано за допомогою ШІ-асистента, перевірено та відредаговано вручну (включаючи коментарі).
 
+using System.ComponentModel.DataAnnotations;
 using Waterfall.Repository.Entities;
 
 namespace Waterfall.Services.Models.Vacancies;
@@ -40,7 +41,10 @@ public sealed record VacancySyncItemDto
 /// </summary>
 public sealed record VacancySyncRequestDto
 {
-    /// <summary>Вакансії, зібрані або змінені клієнтом локально (офлайн).</summary>
+    public const int MaxClientVacanciesPerRequest = 500;
+
+    /// <summary>Вакансії, зібрані або змінені клієнтом локально (офлайн). До 500 записів за один запит.</summary>
+    [MaxLength(MaxClientVacanciesPerRequest, ErrorMessage = "За один запит синхронізації дозволено не більше 500 вакансій.")]
     public List<VacancySyncItemDto> ClientVacancies { get; init; } = [];
 
     /// <summary>Момент останньої успішної синхронізації клієнта (UTC); null — повернути всю базу сервера.</summary>

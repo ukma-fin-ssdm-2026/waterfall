@@ -1,5 +1,6 @@
 // AI: модульні тести контролера вакансій (VacanciesController, HTTP-статуси 200/201/204/400/404, Lab 06); перевірено: запуск dotnet test, самоперевірка автора (Денис Сидоренко, §8)
 
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Mvc;
 using Waterfall.Api.Controllers;
 using Waterfall.Api.Models.Common;
@@ -173,6 +174,49 @@ public sealed class VacanciesControllerTests
     {
         ActionResult<VacancySyncResponseDto> result = await _controller.Sync(null, CancellationToken.None);
         Assert.IsType<BadRequestObjectResult>(result.Result);
+    }
+
+    [Fact]
+    public async Task Sync_With500ClientVacancies_ReturnsOkAndPassesAllToService()
+    {
+        List<VacancySyncItemDto> items = Enumerable.Range(1, 500)
+            .Select(i => new VacancySyncItemDto { Title = $"Dev {i}", Company = "LocalCo", Source = JobSource.Dou })
+            .ToList();
+        VacancySyncRequestDto req = new() { ClientVacancies = items, FullSync = true };
+        _vacancyService.NextSyncResponse = new VacancySyncResponseDto
+        {
+            ReceivedFromClient = 500,
+            CreatedOnServer = 500,
+            TotalServerVacancies = 500
+        };
+
+        ActionResult<VacancySyncResponseDto> result = await _controller.Sync(req, CancellationToken.None);
+
+        OkObjectResult ok = Assert.IsType<OkObjectResult>(result.Result);
+        VacancySyncResponseDto payload = Assert.IsType<VacancySyncResponseDto>(ok.Value);
+        Assert.Equal(500, payload.ReceivedFromClient);
+        Assert.Equal(500, Assert.Single(_vacancyService.SyncCalls).ClientVacancies.Count);
+    }
+
+    [Fact]
+    public async Task Sync_With501ClientVacancies_Returns400AndFailsDataAnnotationsValidation()
+    {
+        List<VacancySyncItemDto> items = Enumerable.Range(1, 501)
+            .Select(i => new VacancySyncItemDto { Title = $"Dev {i}", Company = "LocalCo", Source = JobSource.Dou })
+            .ToList();
+        VacancySyncRequestDto req = new() { ClientVacancies = items, FullSync = true };
+
+        ActionResult<VacancySyncResponseDto> result = await _controller.Sync(req, CancellationToken.None);
+
+        BadRequestObjectResult badRequest = Assert.IsType<BadRequestObjectResult>(result.Result);
+        ApiErrorResponse error = Assert.IsType<ApiErrorResponse>(badRequest.Value);
+        Assert.Equal("VALIDATION_ERROR", error.Error.Code);
+        Assert.Empty(_vacancyService.SyncCalls);
+
+        List<ValidationResult> validationResults = [];
+        bool isModelValid = Validator.TryValidateObject(req, new ValidationContext(req), validationResults, validateAllProperties: true);
+        Assert.False(isModelValid);
+        Assert.Contains(validationResults, r => r.MemberNames.Contains(nameof(VacancySyncRequestDto.ClientVacancies)));
     }
 
     private sealed class FakeRecommendationService : IRecommendationService
