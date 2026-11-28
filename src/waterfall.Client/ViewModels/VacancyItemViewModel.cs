@@ -47,6 +47,7 @@ public partial class VacancyItemViewModel : ObservableObject
     /// <param name="onDistanceCalculated">Зворотний виклик при завершенні розрахунку відстані (id, km).</param>
     /// <param name="initialDistanceKm">Попередньо розрахована відстань у км (якщо доступна з кешу).</param>
     /// <param name="canMarkViewed">Чи дозволено відстежувати перегляд вакансії (лише роль JobSeeker за data-model.md §6).</param>
+    /// <param name="notes">Нотатка користувача до збереженої вакансії (FR-005, лише читання).</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
@@ -56,9 +57,11 @@ public partial class VacancyItemViewModel : ObservableObject
         IDistanceCalculatorService? distanceService = null,
         Action<Guid, double?>? onDistanceCalculated = null,
         double? initialDistanceKm = null,
-        bool canMarkViewed = true)
+        bool canMarkViewed = true,
+        string? notes = null)
     {
         Vacancy = vacancy;
+        Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
         _gateway = gateway;
         _messenger = messenger;
         _reportError = reportError;
@@ -68,6 +71,7 @@ public partial class VacancyItemViewModel : ObservableObject
         IsSaved = vacancy.IsSaved;
         CanMarkViewed = canMarkViewed;
         IsViewed = canMarkViewed && vacancy.IsViewed;
+        VacancySelectionState.Register(this);
         Category = string.IsNullOrWhiteSpace(vacancy.Category) ? "Інше" : vacancy.Category;
         CategoryGroup = !string.IsNullOrWhiteSpace(vacancy.CategoryGroup)
             ? vacancy.CategoryGroup
@@ -113,6 +117,18 @@ public partial class VacancyItemViewModel : ObservableObject
     public string Description => Vacancy.Description;
     public IReadOnlyList<string> Skills => Vacancy.Skills;
     public bool IsActive => Vacancy.IsActive;
+
+    /// <summary>
+    /// Нотатка користувача до збереженої вакансії (FR-005); null — нотатки немає.
+    /// </summary>
+    public string? Notes { get; }
+
+    public bool HasNotes => !string.IsNullOrEmpty(Notes);
+
+    /// <summary>
+    /// Готовий до показу рядок нотатки на картці (FR-005).
+    /// </summary>
+    public string? NotesDisplay => HasNotes ? $"Нотатка: {Notes}" : null;
 
     /// <summary>
     /// «Компанія · Локація» (локація може бути порожньою).
@@ -602,6 +618,53 @@ public partial class VacancyItemViewModel : ObservableObject
     /// </summary>
     internal void Detach() => _messenger.UnregisterAll(this);
 
+    /// <summary>
+    /// Чи позначено картку для групового ШІ-аналізу (FR-010, до 3 вакансій).
+    /// </summary>
+    public bool IsSelected => VacancySelectionState.Contains(Id);
+
+    /// <summary>
+    /// Скільки вакансій уже вибрано; у режимі вибору показується в кнопці ШІ-аналізу.
+    /// </summary>
+    public int SelectedCount => VacancySelectionState.Count;
+
+    /// <summary>
+    /// Ліміт вибору досягнуто, а ця картка ще не вибрана — чекбокс неактивний.
+    /// </summary>
+    public bool IsSelectionLocked => !IsSelected && VacancySelectionState.Count >= VacancySelectionState.MaxSelected;
+
+    /// <summary>
+    /// Текст кнопки ШІ-аналізу: для вибраної картки показує розмір групи.
+    /// </summary>
+    public string SelectionBadgeText => IsSelected && VacancySelectionState.Count > 1
+        ? $"ШІ-аналіз ({VacancySelectionState.Count})"
+        : "ШІ-аналіз";
+
+    public string SelectionHintText => IsSelected
+        ? "Зняти вибір вакансії для ШІ-аналізу"
+        : "Вибрати вакансію для групового ШІ-аналізу (до 3)";
+
+    /// <summary>
+    /// Позначає / знімає позначку вибору картки. Понад три вакансії вибрати не можна (FR-010).
+    /// </summary>
+    [RelayCommand]
+    private void ToggleSelection()
+    {
+        if (!VacancySelectionState.Toggle(Vacancy))
+        {
+            _reportError($"Для ШІ-аналізу можна вибрати не більше {VacancySelectionState.MaxSelected} вакансій.");
+        }
+    }
+
+    internal void NotifySelectionChanged()
+    {
+        OnPropertyChanged(nameof(IsSelected));
+        OnPropertyChanged(nameof(SelectedCount));
+        OnPropertyChanged(nameof(IsSelectionLocked));
+        OnPropertyChanged(nameof(SelectionBadgeText));
+        OnPropertyChanged(nameof(SelectionHintText));
+    }
+
     [RelayCommand]
     private async Task ToggleViewedAsync()
     {
@@ -651,9 +714,25 @@ public partial class VacancyItemViewModel : ObservableObject
 
     /// <summary>
     /// Передає вакансію ШІ-консультанту (FR-010): вкладка ШІ відкриється й покаже аналіз.
+    /// Якщо картка входить до групи вибраних (2–3 вакансії), надсилається вся група.
     /// </summary>
     [RelayCommand]
-    private void AnalyzeWithAi() => _messenger.Send(new AnalyzeVacancyRequestedMessage(Vacancy));
+    private void AnalyzeWithAi()
+    {
+        bool isSelected = VacancySelectionState.Contains(Id);
+        bool isGroup = isSelected && VacancySelectionState.Count > 1;
+        IReadOnlyList<VacancyDto> batch = isGroup ? VacancySelectionState.Snapshot() : [Vacancy];
+        if (isSelected)
+        {
+            // Після запуску аналізу режим вибору скидається, щоб старі позначки не потрапили в наступний запит.
+            VacancySelectionState.Clear();
+        }
+
+        if (isGroup)
+            _messenger.Send(new AnalyzeVacanciesRequestedMessage(batch));
+        else
+            _messenger.Send(new AnalyzeVacancyRequestedMessage(Vacancy));
+    }
 
     public string? SourceText => Vacancy.Source switch
     {
@@ -727,3 +806,131 @@ public partial class VacancyItemViewModel : ObservableObject
         .Distinct(StringComparer.OrdinalIgnoreCase)
         .ToList();
 }
+
+/// <summary>
+/// Спільний для всіх вкладок стан вибору вакансій для ШІ-аналізу (FR-010).
+/// Сервер приймає 1–3 вакансії за один запит, тож четверту позначку картка просто ігнорує.
+/// </summary>
+public static class VacancySelectionState
+{
+    public const int MaxSelected = 3;
+
+    private static readonly List<VacancyDto> s_selected = [];
+    private static readonly List<WeakReference<VacancyItemViewModel>> s_listeners = [];
+    private static readonly object s_sync = new();
+
+    public static int Count
+    {
+        get
+        {
+            lock (s_sync)
+            {
+                return s_selected.Count;
+            }
+        }
+    }
+
+    public static bool Contains(Guid vacancyId)
+    {
+        lock (s_sync)
+        {
+            return s_selected.Any(v => v.Id == vacancyId);
+        }
+    }
+
+    /// <summary>
+    /// Додає або прибирає вакансію. Повертає false, якщо ліміт у 3 вакансії вже вичерпано.
+    /// </summary>
+    public static bool Toggle(VacancyDto vacancy)
+    {
+        lock (s_sync)
+        {
+            int index = s_selected.FindIndex(v => v.Id == vacancy.Id);
+            if (index >= 0)
+            {
+                s_selected.RemoveAt(index);
+            }
+            else if (s_selected.Count >= MaxSelected)
+            {
+                return false;
+            }
+            else
+            {
+                s_selected.Add(vacancy);
+            }
+        }
+
+        NotifyListeners();
+        return true;
+    }
+
+    public static IReadOnlyList<VacancyDto> Snapshot()
+    {
+        lock (s_sync)
+        {
+            return s_selected.ToArray();
+        }
+    }
+
+    public static void Clear()
+    {
+        lock (s_sync)
+        {
+            if (s_selected.Count == 0)
+            {
+                return;
+            }
+
+            s_selected.Clear();
+        }
+
+        NotifyListeners();
+    }
+
+    internal static void Register(VacancyItemViewModel viewModel)
+    {
+        lock (s_sync)
+        {
+            PruneDeadListeners();
+            s_listeners.Add(new WeakReference<VacancyItemViewModel>(viewModel));
+        }
+    }
+
+    private static void NotifyListeners()
+    {
+        List<VacancyItemViewModel> listeners = [];
+        lock (s_sync)
+        {
+            PruneDeadListeners();
+            foreach (WeakReference<VacancyItemViewModel> reference in s_listeners)
+            {
+                if (reference.TryGetTarget(out VacancyItemViewModel? viewModel))
+                {
+                    listeners.Add(viewModel);
+                }
+            }
+        }
+
+        foreach (VacancyItemViewModel viewModel in listeners)
+        {
+            viewModel.NotifySelectionChanged();
+        }
+    }
+
+    private static void PruneDeadListeners()
+    {
+        for (int i = s_listeners.Count - 1; i >= 0; i--)
+        {
+            if (!s_listeners[i].TryGetTarget(out _))
+            {
+                s_listeners.RemoveAt(i);
+            }
+        }
+    }
+}
+
+/// <summary>
+/// Картка передає ШІ-консультанту групу вибраних вакансій (2–3, FR-010).
+/// </summary>
+/// <param name="Vacancies">Вибрані вакансії; сервер приймає 1–3.</param>
+public sealed record AnalyzeVacanciesRequestedMessage(IReadOnlyList<VacancyDto> Vacancies);

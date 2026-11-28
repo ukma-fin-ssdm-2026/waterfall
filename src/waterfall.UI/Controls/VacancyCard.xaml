@@ -16,7 +16,7 @@
             <TapGestureRecognizer Tapped="OnToggleDetailsTapped" />
         </Border.GestureRecognizers>
 
-        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto"
               ColumnDefinitions="*,Auto"
               ColumnSpacing="10"
               RowSpacing="0">
@@ -37,6 +37,31 @@
                                    Grid.Column="1"
                                    Spacing="2"
                                    VerticalOptions="Start">
+                <Border x:Name="SelectBorder"
+                        WidthRequest="34"
+                        HeightRequest="34"
+                        StrokeShape="RoundRectangle 9"
+                        StrokeThickness="1"
+                        Stroke="#2D2A26"
+                        BackgroundColor="Transparent"
+                        VerticalOptions="Center"
+                        SemanticProperties.Hint="Вибрати вакансію для групового ШІ-аналізу (до 3)">
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnToggleSelectionTapped" />
+                    </Border.GestureRecognizers>
+                    <Label x:Name="SelectIconLabel"
+                           Text="{x:Static res:Icons.Check}"
+                           FontFamily="Lucide"
+                           FontSize="15"
+                           IsVisible="False"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"
+                           HorizontalTextAlignment="Center"
+                           VerticalTextAlignment="Center"
+                           BackgroundColor="Transparent"
+                           TextColor="#D4745E" />
+                </Border>
+
                 <Border x:Name="ViewedBorder"
                         WidthRequest="34"
                         HeightRequest="34"
@@ -214,9 +239,23 @@
                    BackgroundColor="Transparent"
                    TextColor="#ABA49A" />
 
-            <!-- Рядок 8: Тональні безрамкові теги навичок в один рядок -->
+            <!-- Рядок 8: Нотатка користувача до збереженої вакансії (FR-005) -->
+            <Label x:Name="NotesLabel"
+                   Grid.Row="8"
+                   Grid.ColumnSpan="2"
+                   Margin="0,6,0,0"
+                   FontFamily="OpenSansRegular"
+                   FontSize="11.5"
+                   FontAttributes="Italic"
+                   LineBreakMode="WordWrap"
+                   MaxLines="3"
+                   IsVisible="False"
+                   BackgroundColor="Transparent"
+                   TextColor="#767068" />
+
+            <!-- Рядок 9: Тональні безрамкові теги навичок в один рядок -->
             <HorizontalStackLayout x:Name="SkillsRow"
-                                   Grid.Row="8"
+                                   Grid.Row="9"
                                    Grid.ColumnSpan="2"
                                    Margin="0,6,0,0"
                                    Spacing="5"
@@ -282,17 +321,17 @@
                 </Border>
             </HorizontalStackLayout>
 
-            <!-- Рядок 9: Розділювач -->
+            <!-- Рядок 10: Розділювач -->
             <BoxView x:Name="DividerBox"
-                     Grid.Row="9"
+                     Grid.Row="10"
                      Grid.ColumnSpan="2"
                      Margin="0,7,0,6"
                      HeightRequest="1"
                      BackgroundColor="Transparent"
                      Color="#2E2B27" />
 
-            <!-- Рядок 10: Тихий нижній футер -->
-            <Grid Grid.Row="10"
+            <!-- Рядок 11: Тихий нижній футер -->
+            <Grid Grid.Row="11"
                   Grid.ColumnSpan="2"
                   ColumnDefinitions="Auto,*,Auto"
                   ColumnSpacing="8"
@@ -370,9 +409,9 @@
                 </HorizontalStackLayout>
             </Grid>
 
-            <!-- Рядок 11: Лінивий розгорнутий опис (наповнюється лише при натисканні на картку) -->
+            <!-- Рядок 12: Лінивий розгорнутий опис (наповнюється лише при натисканні на картку) -->
             <ContentView x:Name="DetailsHost"
-                         Grid.Row="11"
+                         Grid.Row="12"
                          Grid.ColumnSpan="2"
                          Margin="0,8,0,0"
                          IsVisible="False" />

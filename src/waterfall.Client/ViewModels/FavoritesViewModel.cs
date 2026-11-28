@@ -139,7 +139,8 @@ public partial class FavoritesViewModel : ObservableObject
                 .Where(s => s.Vacancy is not null)
                 .OrderByDescending(s => s.SavedAt)
                 .Select(entry => new VacancyItemViewModel(
-                    entry.Vacancy! with { IsSaved = true }, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher, _distanceService))
+                    entry.Vacancy! with { IsSaved = true }, _gateway, _messenger, message => ErrorMessage = message, _urlLauncher, _distanceService,
+                    notes: entry.Notes))
                 .ToList();
             foreach (VacancyItemViewModel previous in _vacancies)
             {

@@ -196,6 +196,7 @@ public partial class VacancyCard : ContentView
         AddressLabel.TextColor = p.TextSecondary;
         MapToggleLabel.TextColor = p.Primary;
         DescriptionLabel.TextColor = p.TextSecondary;
+        NotesLabel.TextColor = p.TextMuted;
 
         SkillChip0.BackgroundColor = p.TonalSurface;
         SkillLabel0.TextColor = p.TextSecondary;
@@ -218,6 +219,7 @@ public partial class VacancyCard : ContentView
             ApplySalaryState(_currentViewModel);
             ApplySavedState(_currentViewModel);
             ApplyViewedState(_currentViewModel);
+            ApplySelectionState(_currentViewModel);
             UpdateMetaRow(_currentViewModel);
             UpdateDetailsToggle(_currentViewModel);
             if (_currentViewModel.IsMapExpanded)
@@ -240,6 +242,11 @@ public partial class VacancyCard : ContentView
             ViewedIconLabel.Text = Icons.Eye;
             ViewedIconLabel.TextColor = p.TextMuted;
             DetailsChevronLabel.TextColor = p.TextMuted;
+            SelectBorder.Stroke = s_heartMutedBrush;
+            SelectBorder.BackgroundColor = Colors.Transparent;
+            SelectBorder.Opacity = 1.0;
+            SelectIconLabel.IsVisible = false;
+            AiTextLabel.Text = "ШІ-аналіз";
         }
     }
 
@@ -290,6 +297,7 @@ public partial class VacancyCard : ContentView
         ApplySalaryState(vm);
         ApplySavedState(vm);
         ApplyViewedState(vm);
+        ApplySelectionState(vm);
 
         CompanyLabel.Text = vm.Company;
         UpdateMetaRow(vm);
@@ -316,6 +324,8 @@ public partial class VacancyCard : ContentView
         }
 
         DescriptionLabel.Text = vm.Description;
+        NotesLabel.Text = vm.NotesDisplay ?? string.Empty;
+        NotesLabel.IsVisible = vm.HasNotes;
         UpdateSkillChips(vm);
         UpdateSourceRow(vm);
         UpdateDetailsToggle(vm);
@@ -342,6 +352,13 @@ public partial class VacancyCard : ContentView
         AddressRow.IsVisible = false;
         MapToggleLabel.IsVisible = false;
         DescriptionLabel.Text = string.Empty;
+        NotesLabel.Text = string.Empty;
+        NotesLabel.IsVisible = false;
+        SelectBorder.Stroke = s_heartMutedBrush;
+        SelectBorder.BackgroundColor = Colors.Transparent;
+        SelectBorder.Opacity = 1.0;
+        SelectIconLabel.IsVisible = false;
+        AiTextLabel.Text = "ШІ-аналіз";
         SkillsRow.IsVisible = false;
         SkillChip0.IsVisible = false;
         SkillChip1.IsVisible = false;
@@ -379,6 +396,18 @@ public partial class VacancyCard : ContentView
             SalaryLabel.FontFamily = "OpenSansRegular";
             SalaryLabel.FontSize = 12;
         }
+    }
+
+    private void ApplySelectionState(VacancyItemViewModel vm)
+    {
+        CardPalette p = s_palette;
+        bool selected = vm.IsSelected;
+        SelectBorder.Stroke = selected ? s_heartPrimaryBrush : s_heartMutedBrush;
+        SelectBorder.BackgroundColor = selected ? p.PrimarySurface : Colors.Transparent;
+        SelectBorder.Opacity = vm.IsSelectionLocked ? 0.4 : 1.0;
+        SelectIconLabel.IsVisible = selected;
+        AiTextLabel.Text = vm.SelectionBadgeText;
+        SemanticProperties.SetDescription(SelectBorder, vm.SelectionHintText);
     }
 
     private void ApplySavedState(VacancyItemViewModel vm)
@@ -609,6 +638,15 @@ public partial class VacancyCard : ContentView
         {
             case nameof(VacancyItemViewModel.IsSaved):
                 ApplySavedState(_currentViewModel);
+                break;
+            case nameof(VacancyItemViewModel.IsSelected):
+            case nameof(VacancyItemViewModel.IsSelectionLocked):
+            case nameof(VacancyItemViewModel.SelectionBadgeText):
+                ApplySelectionState(_currentViewModel);
+                break;
+            case nameof(VacancyItemViewModel.Notes):
+                NotesLabel.Text = _currentViewModel.NotesDisplay ?? string.Empty;
+                NotesLabel.IsVisible = _currentViewModel.HasNotes;
                 break;
             case nameof(VacancyItemViewModel.CanMarkViewed):
                 ApplyViewedState(_currentViewModel);
@@ -1025,6 +1063,14 @@ public partial class VacancyCard : ContentView
     private void OnToggleViewedTapped(object? sender, TappedEventArgs e)
     {
         if (_currentViewModel is { ToggleViewedCommand: { } cmd } && cmd.CanExecute(null))
+        {
+            cmd.Execute(null);
+        }
+    }
+
+    private void OnToggleSelectionTapped(object? sender, TappedEventArgs e)
+    {
+        if (_currentViewModel is { ToggleSelectionCommand: { } cmd } && cmd.CanExecute(null))
         {
             cmd.Execute(null);
         }

@@ -203,20 +203,41 @@
                 Stroke="{DynamicResource DividerColor}"
                 BackgroundColor="{DynamicResource DarkBg1}"
                 Padding="12,10">
-            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
-                <Border Style="{StaticResource CompactFieldBorder}"
-                        StrokeShape="RoundRectangle 20">
-                    <Entry Style="{StaticResource CompactEntry}"
-                           Text="{Binding InputText}"
-                           Placeholder="Запитайте про вакансії..."
-                           ReturnCommand="{Binding SendMessageCommand}" />
+            <VerticalStackLayout Spacing="7">
+                <!-- THR-06: попередження про персональні дані -->
+                <Border StrokeShape="RoundRectangle 7"
+                        StrokeThickness="0"
+                        BackgroundColor="{DynamicResource TonalSurface}"
+                        Padding="8,4"
+                        HorizontalOptions="Start">
+                    <HorizontalStackLayout Spacing="5" VerticalOptions="Center">
+                        <Label Text="{x:Static res:Icons.TriangleAlert}"
+                               FontFamily="Lucide"
+                               FontSize="11"
+                               TextColor="{DynamicResource Primary}"
+                               VerticalOptions="Center" />
+                        <Label Text="Не вводьте персональні дані"
+                               Style="{StaticResource MutedLabel}"
+                               FontSize="11"
+                               VerticalOptions="Center" />
+                    </HorizontalStackLayout>
                 </Border>
-                <Button Grid.Column="1"
-                        Text="Надіслати"
-                        Command="{Binding SendMessageCommand}"
-                        CornerRadius="20"
-                        Style="{StaticResource CardActionPrimary}" />
-            </Grid>
+
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                    <Border Style="{StaticResource CompactFieldBorder}"
+                            StrokeShape="RoundRectangle 20">
+                        <Entry Style="{StaticResource CompactEntry}"
+                               Text="{Binding InputText}"
+                               Placeholder="Запитайте про вакансії..."
+                               ReturnCommand="{Binding SendMessageCommand}" />
+                    </Border>
+                    <Button Grid.Column="1"
+                            Text="Надіслати"
+                            Command="{Binding SendMessageCommand}"
+                            CornerRadius="20"
+                            Style="{StaticResource CardActionPrimary}" />
+                </Grid>
+            </VerticalStackLayout>
         </Border>
 
     </Grid>
