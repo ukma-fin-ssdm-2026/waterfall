@@ -412,6 +412,7 @@ public partial class VacancyCard : ContentView
 
     private void ApplySavedState(VacancyItemViewModel vm)
     {
+        HeartBorder.IsVisible = vm.CanSave;
         if (vm.IsSaved)
         {
             HeartPath.Fill = s_heartPrimaryBrush;
@@ -637,6 +638,9 @@ public partial class VacancyCard : ContentView
         switch (propertyName)
         {
             case nameof(VacancyItemViewModel.IsSaved):
+                ApplySavedState(_currentViewModel);
+                break;
+            case nameof(VacancyItemViewModel.CanSave):
                 ApplySavedState(_currentViewModel);
                 break;
             case nameof(VacancyItemViewModel.IsSelected):

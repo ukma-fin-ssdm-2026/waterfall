@@ -331,9 +331,11 @@ public partial class CatalogViewModel : ObservableObject
         foreach (VacancyItemViewModel item in Vacancies)
         {
             item.CanMarkViewed = canTrack;
+            item.CanSave = canTrack;
             if (!canTrack)
             {
                 item.IsViewed = false;
+                item.IsSaved = false;
             }
         }
     }
@@ -2927,7 +2929,8 @@ public partial class CatalogViewModel : ObservableObject
             _distanceService,
             onDistanceCalculated: (id, dist) => _distanceCache[id] = dist,
             initialDistanceKm: cachedKm,
-            canMarkViewed: CanTrackViews);
+            canMarkViewed: CanTrackViews,
+            canSave: CanTrackViews);
     }
 
     private async Task ExecuteLocalFilterAndSortAsync(bool updateBanner)

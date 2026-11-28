@@ -48,6 +48,7 @@ public partial class VacancyItemViewModel : ObservableObject
     /// <param name="initialDistanceKm">Попередньо розрахована відстань у км (якщо доступна з кешу).</param>
     /// <param name="canMarkViewed">Чи дозволено відстежувати перегляд вакансії (лише роль JobSeeker за data-model.md §6).</param>
     /// <param name="notes">Нотатка користувача до збереженої вакансії (FR-005, лише читання).</param>
+    /// <param name="canSave">Чи дозволено зберігати вакансію в «Обране» (лише авторизований JobSeeker за FR-005/FR-008).</param>
     public VacancyItemViewModel(
         VacancyDto vacancy,
         IHttpGatewayService gateway,
@@ -58,7 +59,8 @@ public partial class VacancyItemViewModel : ObservableObject
         Action<Guid, double?>? onDistanceCalculated = null,
         double? initialDistanceKm = null,
         bool canMarkViewed = true,
-        string? notes = null)
+        string? notes = null,
+        bool canSave = true)
     {
         Vacancy = vacancy;
         Notes = string.IsNullOrWhiteSpace(notes) ? null : notes.Trim();
@@ -68,8 +70,9 @@ public partial class VacancyItemViewModel : ObservableObject
         _urlLauncher = urlLauncher ?? new Waterfall.Client.Services.DefaultUrlLauncher();
         _distanceService = distanceService;
         _onDistanceCalculated = onDistanceCalculated;
-        IsSaved = vacancy.IsSaved;
+        IsSaved = canSave && vacancy.IsSaved;
         CanMarkViewed = canMarkViewed;
+        CanSave = canSave;
         IsViewed = canMarkViewed && vacancy.IsViewed;
         VacancySelectionState.Register(this);
         Category = string.IsNullOrWhiteSpace(vacancy.Category) ? "Інше" : vacancy.Category;
@@ -600,6 +603,12 @@ public partial class VacancyItemViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     public partial bool CanMarkViewed { get; set; } = true;
+
+    /// <summary>
+    /// Чи дозволено зберігати вакансію в «Обране» (лише авторизований JobSeeker за FR-005/FR-008).
+    /// </summary>
+    [ObservableProperty]
+    public partial bool CanSave { get; set; } = true;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ViewedButtonText))]
