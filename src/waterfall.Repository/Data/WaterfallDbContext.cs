@@ -4,6 +4,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Waterfall.Repository.Entities;
 using Waterfall.Repository.Normalization;
@@ -114,6 +115,22 @@ public class WaterfallDbContext : DbContext
             .Property(message => message.Author)
             .HasConversion<string>()
             .HasMaxLength(20);
+
+        IndexBuilder<VacancyDB> externalIdIndex = modelBuilder.Entity<VacancyDB>()
+            .HasIndex(v => new { v.Source, v.ExternalId })
+            .IsUnique();
+
+        if (Database.IsSqlite())
+        {
+            externalIdIndex.HasFilter("\"ExternalId\" IS NOT NULL");
+        }
+        else if (Database.IsSqlServer())
+        {
+            externalIdIndex.HasFilter("[ExternalId] IS NOT NULL");
+        }
+
+        modelBuilder.Entity<VacancyDB>()
+            .HasIndex(v => v.SourceUrl);
 
         if (Database.ProviderName == "Microsoft.EntityFrameworkCore.Sqlite")
         {

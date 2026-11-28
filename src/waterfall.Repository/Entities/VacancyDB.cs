@@ -78,7 +78,7 @@ public class VacancyDB
     public string Source { get; set; } = string.Empty;
 
     [Required]
-    [MaxLength(1000)]
+    [MaxLength(450)]
     public string SourceUrl { get; set; } = string.Empty;
 
     public string SkillsJson { get; set; } = "[]";

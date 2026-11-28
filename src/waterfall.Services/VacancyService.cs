@@ -298,7 +298,7 @@ public class VacancyService : IVacancyService
         string description = string.IsNullOrWhiteSpace(item.Description) ? title : item.Description.Trim();
         string category = Cut(string.IsNullOrWhiteSpace(item.Category) ? "Інше" : item.Category.Trim(), 100);
         string location = Cut(string.IsNullOrWhiteSpace(item.Location) ? "Не вказано" : item.Location.Trim(), 200);
-        string sourceUrl = Cut((item.SourceUrl ?? string.Empty).Trim(), 1000);
+        string sourceUrl = Cut((item.SourceUrl ?? string.Empty).Trim(), 450);
         string? experience = string.IsNullOrWhiteSpace(item.Experience) ? null : Cut(item.Experience.Trim(), 100);
         string currency = Cut(string.IsNullOrWhiteSpace(item.Currency) ? "UAH" : item.Currency.Trim().ToUpperInvariant(), 10);
         string? externalId = string.IsNullOrWhiteSpace(item.ExternalId) ? null : Cut(item.ExternalId.Trim(), 100);

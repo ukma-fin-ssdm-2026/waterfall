@@ -502,4 +502,34 @@ public sealed class VacancyServiceTests
         Assert.Empty(_vacancyRepo.Vacancies);
         Assert.Equal(0, _cacheService.InvalidateCatalogCallCount);
     }
+
+    [Fact]
+    public async Task SyncVacanciesAsync_TruncatesOverlongSourceUrlTo450Chars()
+    {
+        VacancyService acceptingService = new(_vacancyRepo, _savedRepo, _cacheService, _logger,
+            syncOptions: Options.Create(new VacancySyncOptions { AcceptClientVacancies = true }));
+        string overlongUrl = "https://djinni.co/jobs/" + new string('x', 500);
+
+        VacancySyncRequestDto request = new()
+        {
+            FullSync = true,
+            ClientVacancies =
+            [
+                new VacancySyncItemDto
+                {
+                    Id = Guid.NewGuid(),
+                    ExternalId = "dj-long-url",
+                    Title = "Long URL Vacancy",
+                    Source = JobSource.Djinni,
+                    SourceUrl = overlongUrl
+                }
+            ]
+        };
+
+        await acceptingService.SyncVacanciesAsync(request);
+
+        VacancyDB stored = Assert.Single(_vacancyRepo.Vacancies);
+        Assert.Equal(450, stored.SourceUrl.Length);
+        Assert.Equal(overlongUrl[..450], stored.SourceUrl);
+    }
 }

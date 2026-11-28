@@ -7,6 +7,7 @@ using Waterfall.Client.Entities;
 using Waterfall.Client.Interfaces;
 using Waterfall.Client.Models.Vacancies;
 using Waterfall.Repository.Normalization;
+using Waterfall.Repository.Repositories;
 
 namespace Waterfall.Client.Services;
 
@@ -17,6 +18,7 @@ namespace Waterfall.Client.Services;
 public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
 {
     private const string VacancySyncStateKey = "vacancies";
+    private const int MaxSourceUrlLength = 450;
 
     private readonly IDbContextFactory<ClientWaterfallDbContext>? _contextFactory;
     private readonly DbContextOptions<ClientWaterfallDbContext>? _options;
@@ -97,18 +99,26 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
         {
             await EnsureInitializedAsync(ct).ConfigureAwait(false);
             await using ClientWaterfallDbContext context = CreateContext();
-            List<ClientVacancyDB> existing = await context.Vacancies.ToListAsync(ct).ConfigureAwait(false);
+            List<ClientVacancyDB> candidates = await VacancyCandidateLookup.LoadAsync(
+                context.Vacancies,
+                list.Select(d => d.Id),
+                list.Where(d => !string.IsNullOrWhiteSpace(d.ExternalId)).Select(d => (d.Source.ToString(), d.ExternalId!)),
+                list.Select(d => NormalizeSourceUrl(d.SourceUrl)),
+                ct).ConfigureAwait(false);
+            VacancyMatchIndex<ClientVacancyDB> index = new(candidates);
             DateTimeOffset now = DateTimeOffset.UtcNow;
             int affected = 0;
 
             foreach (VacancyDto dto in list)
             {
-                ClientVacancyDB? match = FindMatch(existing, dto.Id, dto.Source.ToString(), dto.ExternalId, dto.SourceUrl);
+                string source = dto.Source.ToString();
+                string sourceUrl = NormalizeSourceUrl(dto.SourceUrl);
+                ClientVacancyDB? match = index.FindMatch(dto.Id, source, dto.ExternalId, sourceUrl);
                 if (match is null)
                 {
                     ClientVacancyDB entity = MapFromDto(dto, isSynced, now);
                     context.Vacancies.Add(entity);
-                    existing.Add(entity);
+                    index.Add(entity);
                     affected++;
                     continue;
                 }
@@ -119,7 +129,13 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
                     continue;
                 }
 
+                string? previousExternalId = match.ExternalId;
                 ApplyDtoToEntity(match, dto, isSynced, now);
+                if (string.IsNullOrWhiteSpace(previousExternalId) && !string.IsNullOrWhiteSpace(match.ExternalId))
+                {
+                    index.IndexExternalId(match);
+                }
+
                 affected++;
             }
 
@@ -183,7 +199,13 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
         {
             await EnsureInitializedAsync(ct).ConfigureAwait(false);
             await using ClientWaterfallDbContext context = CreateContext();
-            List<ClientVacancyDB> existing = await context.Vacancies.ToListAsync(ct).ConfigureAwait(false);
+            List<ClientVacancyDB> candidates = await VacancyCandidateLookup.LoadAsync(
+                context.Vacancies,
+                items.Select(i => i.Id),
+                items.Where(i => !string.IsNullOrWhiteSpace(i.ExternalId)).Select(i => (i.Source.ToString(), i.ExternalId!)),
+                items.Select(i => NormalizeSourceUrl(i.SourceUrl)),
+                ct).ConfigureAwait(false);
+            VacancyMatchIndex<ClientVacancyDB> index = new(candidates);
 
             int added = 0;
             int updated = 0;
@@ -191,25 +213,32 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
 
             foreach (VacancySyncItemDto item in items)
             {
-                ClientVacancyDB? match = FindMatch(existing, item.Id, item.Source.ToString(), item.ExternalId, item.SourceUrl);
+                string source = item.Source.ToString();
+                string sourceUrl = NormalizeSourceUrl(item.SourceUrl);
+                ClientVacancyDB? match = index.FindMatch(item.Id, source, item.ExternalId, sourceUrl);
                 if (match is null)
                 {
                     ClientVacancyDB entity = MapFromSyncItem(item, now);
                     context.Vacancies.Add(entity);
-                    existing.Add(entity);
+                    index.Add(entity);
                     added++;
                     continue;
                 }
 
                 // Якщо серверний запис має інший канонічний Id, але той самий (Source, ExternalId) або SourceUrl —
                 // вирівнюємо ідентифікатор, щоб надалі Id клієнта та сервера збігалися.
-                if (match.Id != item.Id && item.Id != Guid.Empty && !existing.Any(e => e.Id == item.Id))
+                if (match.Id != item.Id && item.Id != Guid.Empty && !index.ContainsId(item.Id))
                 {
                     context.Vacancies.Remove(match);
-                    existing.Remove(match);
+                    index.Remove(match);
                     ClientVacancyDB replaced = MapFromSyncItem(item, now);
+                    replaced.ExternalId ??= match.ExternalId;
+                    replaced.FullAddress ??= match.FullAddress;
+                    replaced.Schedule ??= match.Schedule;
+                    replaced.Experience ??= match.Experience;
+                    replaced.ExperienceMonths ??= match.ExperienceMonths;
                     context.Vacancies.Add(replaced);
-                    existing.Add(replaced);
+                    index.Add(replaced);
                     updated++;
                     continue;
                 }
@@ -220,7 +249,19 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
                     continue;
                 }
 
+                string? previousExternalId = match.ExternalId;
+                string previousSourceUrl = match.SourceUrl;
                 ApplySyncItemToEntity(match, item, now);
+                if (!string.Equals(previousExternalId, match.ExternalId, StringComparison.Ordinal))
+                {
+                    index.IndexExternalId(match);
+                }
+
+                if (!string.Equals(previousSourceUrl, match.SourceUrl, StringComparison.OrdinalIgnoreCase))
+                {
+                    index.IndexSourceUrl(match);
+                }
+
                 updated++;
             }
 
@@ -363,7 +404,7 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
             SalaryMax = dto.SalaryMax,
             Currency = string.IsNullOrWhiteSpace(dto.Currency) ? "UAH" : dto.Currency.Trim().ToUpperInvariant(),
             Source = dto.Source.ToString(),
-            SourceUrl = dto.SourceUrl ?? string.Empty,
+            SourceUrl = NormalizeSourceUrl(dto.SourceUrl),
             SkillsJson = SerializeSkills(dto.Skills),
             PublishedAt = dto.PublishedAt == default ? now : dto.PublishedAt,
             FirstSeenAt = dto.FirstSeenAt == default ? now : dto.FirstSeenAt,
@@ -444,7 +485,7 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
             SalaryMax = item.SalaryMax,
             Currency = string.IsNullOrWhiteSpace(item.Currency) ? "UAH" : item.Currency.Trim().ToUpperInvariant(),
             Source = item.Source.ToString(),
-            SourceUrl = item.SourceUrl ?? string.Empty,
+            SourceUrl = NormalizeSourceUrl(item.SourceUrl),
             SkillsJson = SerializeSkills(item.Skills),
             PublishedAt = item.PublishedAt == default ? now : item.PublishedAt,
             FirstSeenAt = item.FirstSeenAt == default ? now : item.FirstSeenAt,
@@ -475,7 +516,7 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
         entity.SalaryMin = item.SalaryMin;
         entity.SalaryMax = item.SalaryMax;
         if (!string.IsNullOrWhiteSpace(item.Currency)) entity.Currency = item.Currency.Trim().ToUpperInvariant();
-        if (!string.IsNullOrWhiteSpace(item.SourceUrl)) entity.SourceUrl = item.SourceUrl;
+        if (!string.IsNullOrWhiteSpace(item.SourceUrl)) entity.SourceUrl = NormalizeSourceUrl(item.SourceUrl);
         entity.SkillsJson = SerializeSkills(item.Skills);
         if (item.PublishedAt != default) entity.PublishedAt = item.PublishedAt;
         if (item.FirstSeenAt != default) entity.FirstSeenAt = item.FirstSeenAt;
@@ -485,44 +526,10 @@ public sealed class EfLocalVacancyStore : ILocalVacancyStore, IDisposable
         entity.LocalUpdatedAt = entity.LastSeenAt;
     }
 
-    private static ClientVacancyDB? FindMatch(
-        List<ClientVacancyDB> existing,
-        Guid id,
-        string source,
-        string? externalId,
-        string? sourceUrl)
+    private static string NormalizeSourceUrl(string? sourceUrl)
     {
-        if (!string.IsNullOrWhiteSpace(externalId))
-        {
-            ClientVacancyDB? byExternal = existing.FirstOrDefault(v =>
-                string.Equals(v.Source, source, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(v.ExternalId, externalId, StringComparison.Ordinal));
-            if (byExternal is not null)
-            {
-                return byExternal;
-            }
-        }
-
-        if (id != Guid.Empty)
-        {
-            ClientVacancyDB? byId = existing.FirstOrDefault(v => v.Id == id);
-            if (byId is not null)
-            {
-                return byId;
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(sourceUrl))
-        {
-            return existing.FirstOrDefault(v =>
-                string.Equals(v.SourceUrl, sourceUrl, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(v.Source, source, StringComparison.OrdinalIgnoreCase)
-                && (string.IsNullOrWhiteSpace(externalId)
-                    || string.IsNullOrWhiteSpace(v.ExternalId)
-                    || string.Equals(v.ExternalId, externalId, StringComparison.Ordinal)));
-        }
-
-        return null;
+        string trimmed = (sourceUrl ?? string.Empty).Trim();
+        return trimmed.Length <= MaxSourceUrlLength ? trimmed : trimmed[..MaxSourceUrlLength];
     }
 
     // AOT-безпечна серіалізація списку навичок через згенерований ClientJsonContext

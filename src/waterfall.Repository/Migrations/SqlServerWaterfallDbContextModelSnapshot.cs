@@ -335,8 +335,8 @@ namespace waterfall.Repository.Migrations
 
                     b.Property<string>("SourceUrl")
                         .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("nvarchar(1000)");
+                        .HasMaxLength(450)
+                        .HasColumnType("nvarchar(450)");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -357,6 +357,12 @@ namespace waterfall.Repository.Migrations
                     b.HasIndex("PublishedAt");
 
                     b.HasIndex("Source");
+
+                    b.HasIndex("SourceUrl");
+
+                    b.HasIndex("Source", "ExternalId")
+                        .IsUnique()
+                        .HasFilter("[ExternalId] IS NOT NULL");
 
                     b.ToTable("Vacancies");
                 });
