@@ -5,6 +5,7 @@ using waterfall.UI.Resources;
 using waterfall.UI.Services;
 using waterfall.UI.Views;
 using Waterfall.Client.Interfaces;
+using Waterfall.Client.Models.Auth;
 using Waterfall.Client.ViewModels;
 
 namespace waterfall.UI;
@@ -37,7 +38,7 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
 
     private string _activeRoute = string.Empty;
     private string? _hoveredRoute;
-    private bool _isAnalyst;
+    private UserRole? _role;
 
     public DesktopHostPage(
         IServiceProvider services,
@@ -74,7 +75,7 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
         _contentHost = new Grid();
 
         Content = BuildLayout();
-        RebuildRail(isAnalyst: false);
+        RebuildRail(role: null);
 
         _themeService.ThemeChanged += (_, _) => MainThread.BeginInvokeOnMainThread(UpdateRailSelectionVisuals);
 
@@ -186,9 +187,9 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
         };
     }
 
-    private void RebuildRail(bool isAnalyst)
+    private void RebuildRail(UserRole? role)
     {
-        _isAnalyst = isAnalyst;
+        _role = role;
         _entries.Clear();
         _railRows.Clear();
         _visibleRoutes.Clear();
@@ -211,19 +212,25 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
 
         // US-006 AC-3: шукач роботи не бачить «Аналітику». «Рекомендації», «ШІ-чат» і
         // «Обране» — розділи шукача, тому аналітику вони не показуються.
-        _visibleRoutes.Add("catalog");
-        _visibleRoutes.Add("database");
         _visibleRoutes.Add("login");
         _visibleRoutes.Add("systemsettings");
-        if (isAnalyst)
+        switch (role)
         {
-            _visibleRoutes.Add("analytics");
-        }
-        else
-        {
-            _visibleRoutes.Add("aiconsultant");
-            _visibleRoutes.Add("favorites");
-            _visibleRoutes.Add("recommendations");
+            case UserRole.Analyst:
+                _visibleRoutes.Add("catalog");
+                _visibleRoutes.Add("database");
+                _visibleRoutes.Add("analytics");
+                break;
+            case UserRole.Admin:
+                // Адміністратор обслуговує лише системні налаштування.
+                break;
+            default:
+                _visibleRoutes.Add("catalog");
+                _visibleRoutes.Add("database");
+                _visibleRoutes.Add("aiconsultant");
+                _visibleRoutes.Add("favorites");
+                _visibleRoutes.Add("recommendations");
+                break;
         }
 
         foreach (NavEntry entry in allEntries)
@@ -401,15 +408,15 @@ public sealed class DesktopHostPage : ContentPage, IAppNavigationHost
 
     private async Task RefreshRoleAsync()
     {
-        (_, bool isAnalyst, string roleLabel) = await MountedPageHelper.ResolveRoleAsync(_tokens);
+        (_, UserRole? role, string roleLabel) = await MountedPageHelper.ResolveRoleAsync(_tokens);
 
         bool railRebuilt = false;
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
             _roleBadgeLabel.Text = roleLabel;
-            if (isAnalyst != _isAnalyst)
+            if (role != _role)
             {
-                RebuildRail(isAnalyst);
+                RebuildRail(role);
                 railRebuilt = true;
             }
         });

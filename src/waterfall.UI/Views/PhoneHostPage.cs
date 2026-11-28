@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.Messaging;
 using waterfall.UI.Resources;
 using waterfall.UI.Services;
 using Waterfall.Client.Interfaces;
+using Waterfall.Client.Models.Auth;
 using Waterfall.Client.ViewModels;
 
 namespace waterfall.UI.Views;
@@ -325,7 +326,8 @@ public sealed class PhoneHostPage : ContentPage, IAppNavigationHost
 
     private async Task RefreshRoleAsync()
     {
-        (_, bool isAnalyst, _) = await MountedPageHelper.ResolveRoleAsync(_tokens);
+        (_, UserRole? role, _) = await MountedPageHelper.ResolveRoleAsync(_tokens);
+        bool isAnalyst = role == UserRole.Analyst;
 
         await MainThread.InvokeOnMainThreadAsync(async () =>
         {
